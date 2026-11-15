@@ -91,6 +91,10 @@ static volatile LONG g_bv_n_runs, g_bv_n_cells, g_bv_n_rev;
 typedef struct { WORD piece, base; BYTE side; } BvX;
 static BvX g_bv_x[BV_XMAX];
 static int g_bv_nx, g_bv_xing = -1;
+/* task orthfix BVOBOX (2026-11-15, xsect 39, owner "Yes, all three"): the opening box, see bv_obox. `bvo <0|1> <9 ids>`:
+   0 = the avenue leaving the boulevard's +w side going +s (cell k * 3 + j = row w0 + k, j-th band cell from low s),
+   1 = its mirror (going -s). Pieces from re/tools/netmod/bvdiag_build.py (package boulevard_diagonal). */
+static WORD g_bv_ob[2][9];
 /* task orthfix BVCORNER (xsect 26 / 37): a run may end in a corner box, the crossing avenue / boulevard on ONE side of
    it only (bv_run1 used to refuse "an end on a corner", leaving the corner and its columns stock). The box is a T box
    whose side without an arm is closed too (bvx_boxes reads 'C' there); its cells come from the bvxc table (bvlanes.py
@@ -136,6 +140,19 @@ static void bv_line(const char *path, const char *line) {
     unsigned long v[10];
     int k;
     if (!strncmp(line, "bvs ", 4)) { bvs_line(path, line); return; }                  /* task avslope */
+    if (!strncmp(line, "bvo ", 4)) {                                                  /* task orthfix BVOBOX */
+        unsigned long ch, q[9];
+        if (sscanf(line + 4, "%lu %lu %lu %lu %lu %lu %lu %lu %lu %lu", &ch, &q[0], &q[1], &q[2], &q[3], &q[4], &q[5],
+                   &q[6], &q[7], &q[8]) != 10 || ch > 1) {
+            logf("### bv: %s: bad opening box line '%s'", path, line);
+            return;
+        }
+        for (k = 0; k < 9; k++)
+            if (!bv_variant(q[k])) { logf("### bv: %s: opening box piece %lu is not a variant", path, q[k]); return; }
+        for (k = 0; k < 9; k++) g_bv_ob[ch][k] = (WORD)q[k];
+        logf("bv: %s: opening box %s = pieces %lu..%lu", path, ch ? "(mirror)" : "", q[0], q[8]);
+        return;
+    }
     if (!strncmp(line, "bvr ", 4)) {                                                  /* task orthfix BVXING */
         if (sscanf(line + 4, "%lu %lu %lu", &v[0], &v[1], &v[2]) != 3 || !bv_variant(v[0]) || g_base[v[0]] != v[1] ||
             v[2] > 4 || g_bv_nx >= BV_XMAX) {
@@ -258,6 +275,7 @@ static int bv_is_piece(WORD id) {
     if (bvx_is_piece(id)) return 1;                       /* task bvx */
     if (bvs_is_piece(id)) return 1;                       /* task avslope: the sloped outer / middle */
     if (bv_x_is_piece(id)) return 1;                      /* task orthfix BVXING: the crossing twins */
+    for (k = 0; k < 2; k++) for (j = 0; j < 9; j++) if (g_bv_ob[k][j] == id) return 1;   /* task orthfix BVOBOX */
     return 0;
 }
 
@@ -525,6 +543,74 @@ static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
     p->n++;
 }
 
+/* task orthfix BVOBOX: a diagonal avenue that leaves the run through one side while the boulevard goes on (xsect 39):
+   the avenue's three cells in the row just outside the run (we), its band going on outward (row we + side shifted
+   one cell, d = +1 / -1 along s), and nothing of it on the run's other side (a crossing box is DAV's). The band's nine
+   cells in the run's rows become the opening box (all BV's: DAV keeps off BV pieces, DAVBVBEND); the middle-row cells
+   beside it lose their nose (the box art draws it). Mapping: side +w, d +1 = set 0 as painted; side +w, d -1 = set 1;
+   side -w = the same sets turned half a circle (row k -> 2 - k, j -> 2 - j, state 2), set 0 when d == side.
+   Off: SC3NETMOD_BVOBOX=0. -> boxes written into p->cell */
+static int g_bv_obox = -1;
+static int bv_obox_on(void) {
+    if (g_bv_obox < 0) {
+        g_bv_obox = !env_off("SC3NETMOD_BVOBOX");
+        logf("bv: opening box where a diagonal avenue leaves a boulevard (orthfix BVOBOX) %s",
+             g_bv_obox ? (g_bv_ob[0][0] ? "on" : "on, but no bvo lines (package boulevard_diagonal)") :
+                         "off (SC3NETMOD_BVOBOX=0)");
+    }
+    return g_bv_obox && g_bv_ob[0][0] && g_bv_ob[1][0];
+}
+static int bv_hdg(BvPass *p, int s, int w) {                             /* a diagonal band's own cell, no cut */
+    int x = bv_rx(p->axis, s, w), z = bv_rz(p->axis, s, w);
+    return bv_dgcell(rb_at(&p->b, x, z), x, z);
+}
+static void bv_cellput(BvPass *p, int s, int w, WORD piece, int st) {   /* replace this cell's want, or add it */
+    int k, x = bv_rx(p->axis, s, w), z = bv_rz(p->axis, s, w);
+    DWORD want = ((DWORD)piece << 8) | (DWORD)((st + p->axis) & 3);
+    for (k = 0; k < p->n; k++)
+        if (p->cell[k].x == x && p->cell[k].z == z) { p->cell[k].want = want; return; }
+    bv_put(p, s, w, piece, st);
+}
+static int bv_obox(BvPass *p, int sa, int sb, int w0) {
+    int side, a, d, m, j, nbox = 0;
+    if (!bv_diag_on() || !bv_obox_on()) return 0;
+    for (side = 1; side >= -1; side -= 2) {
+        int we = side > 0 ? w0 + 3 : w0 - 1, wn = we + side;
+        for (a = sa - 3; a <= sb + 1; a++) {
+            int ok = 1, ch, rot;
+            if (!(bv_hdg(p, a, we) && bv_hdg(p, a + 1, we) && bv_hdg(p, a + 2, we))) continue;
+            if (bv_hdg(p, a - 1, we) || bv_hdg(p, a + 3, we)) continue;          /* exactly 3 wide: a DA */
+            d = (bv_hdg(p, a + 1, wn) && bv_hdg(p, a + 2, wn) && bv_hdg(p, a + 3, wn)) ? 1 :
+                (bv_hdg(p, a - 1, wn) && bv_hdg(p, a, wn) && bv_hdg(p, a + 1, wn)) ? -1 : 0;
+            if (!d) continue;
+            for (j = 0; j < 3; j++)                       /* the run's other side: no band there (a crossing) */
+                if (bv_hdg(p, a - 4 * d + j, we - 4 * side)) ok = 0;
+            for (m = 1; m <= 3 && ok; m++)                /* the band's cells in the rows: road, inside the run */
+                for (j = 0; j < 3; j++) {
+                    int sc = a - d * m + j;
+                    if (!bv_rraw(p, sc, we - side * m) || sc < sa - 2 || sc > sb + 2) ok = 0;
+                }
+            if (!ok) continue;
+            ch = d == side ? 0 : 1;
+            rot = side > 0 ? 0 : 2;
+            for (m = 1; m <= 3; m++) {
+                int w = we - side * m, ka = w - w0;
+                for (j = 0; j < 3; j++) {
+                    int kc = rot ? 2 - ka : ka, jc = rot ? 2 - j : j;
+                    bv_cellput(p, a - d * m + j, w, g_bv_ob[ch][kc * 3 + jc], rot);
+                }
+                if (ka == 1) {                            /* the median beside the box: plain, the box draws the nose */
+                    bv_cellput(p, a - d * m - 1, w, g_bv_p[BV_MIDDLE], 0);
+                    bv_cellput(p, a - d * m + 3, w, g_bv_p[BV_MIDDLE], 0);
+                }
+            }
+            nbox++;
+            a += 2;
+        }
+    }
+    return nbox;
+}
+
 /* one run starting at column sa, rows w0..w0+2. -> 1 accepted (cells in p->cell), 0 refused (*why; *bad_e = the end
    the refusal is about, 0 +s / 1 -s, or -1). Task avx32: cut_hi / cut_lo > 0 = a RAGGED end: that many columns at the
    +s / -s end stay with the stock tiler and the run ends on a plain column there, its median in a nose (end type 7) */
@@ -605,6 +691,9 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         if (!kind[s - sa] && !bv_full(p, s, w0) && bv_xcol(p, s, w0)) kind[s - sa] = 8;
     for (s = sa; s <= sb && bv_diag_on(); s++)          /* task orthfix BVDIAG: diagonal span columns */
         if (!kind[s - sa] && (bv_dg(p, s, w0) || bv_dg(p, s, w0 + 1) || bv_dg(p, s, w0 + 2))) kind[s - sa] = 16;
+    if (shortrun == 2)                                   /* a short stem on a diagonal has nothing beside it: a 3 x 3 */
+        for (s = sa; s <= sb; s++)                       /* block with road beside lies inside another boulevard */
+            if (kind[s - sa] & 7) { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
     /* ends: e 0 = the +s end (column sb), e 1 = the -s end (column sa) */
     for (e = 0; e < 2; e++) {
         int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1, nclm = 0, graw = 0;
@@ -799,6 +888,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
                    endtyp[0] == 6 ? 1 + endkeep[0] : 0))                  /* task bvx, avx32 */
         { *why = corner_e >= 0 ? "a corner box with no declared piece" : "a box cell with no declared piece";
           *bad_e = corner_e; return 0; }                                 /* task orthfix BVCORNER: that end stock */
+    bv_obox(p, sa, sb, w0);                                              /* task orthfix BVOBOX */
     return 1;
 }
 
