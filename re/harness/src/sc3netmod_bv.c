@@ -270,6 +270,8 @@ typedef struct {
     int n;
     int natt, att[8][5];        /* task bvlanes: (boulevard end cell, attached avenue cell, side) of the run decided */
     int bja, bjb;               /* task avx32 (img16 split): columns of the bad arm bv_run1 refused, -1 none */
+    BYTE *xd;                   /* task orthfix BVDIAG: road cells a diagonal band passes through (window), NULL none */
+    int dn[2][3];               /* task orthfix BVDIAG: a diagonal end's extra cells per row at the +s / -s end */
 } BvPass;
 static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why, int *bad_e);  /* task bvx */
 static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee, int lo_av,
@@ -279,7 +281,68 @@ static int bvx_cells_on(void);                                     /* task avx32
 /* axis space -> real */
 static int bv_rx(int axis, int s, int w) { return axis ? -w : s; }
 static int bv_rz(int axis, int s, int w) { return axis ? s : w; }
-static int bv_road(BvPass *p, int s, int w) { return rb_at(&p->b, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)) != 0; }
+/* task orthfix BVDIAG (2026-11-15, diagfix asks for xsect 38 / 39 / 40 / 42 / 44): a boulevard meeting a diagonal
+   avenue or boulevard. The diagonal band's own cells (DAV pieces, DBV's claimed cells) and the road cells a diagonal
+   band passes through (xd, bv_xd_build: road between two diagonal cells on one 45-degree line, at most 3 apart) are
+   not BV's: bv_road does not see them, so they are neither boulevard cells nor "road beside the run" (an arm read
+   "shorter than 2" before), and the junction cells stay with DAV / DBV. A run that meets a diagonal band ends there
+   (end type 8, bv_dend): each row goes on 0..2 cells to the band's stair, those cells take the plain boulevard
+   pieces, the median ends in a nose on its last cell, no cap. Bends (the diagonal ends at the boulevard: no diagonal
+   cell on the far side) keep the old reading. Off: SC3NETMOD_BVDIAG=0. */
+static int g_bv_diag = -1;
+static int bv_diag_on(void) {
+    if (g_bv_diag < 0) {
+        g_bv_diag = !env_off("SC3NETMOD_BVDIAG");
+        logf("bv: boulevard meeting a diagonal avenue / boulevard (orthfix BVDIAG) %s",
+             g_bv_diag ? "on" : "off (SC3NETMOD_BVDIAG=0)");
+    }
+    return g_bv_diag;
+}
+static int dav_is_mid(WORD id);                                          /* sc3netmod_dav.c */
+static WORD dav_twin_piece(WORD id);
+static int bv_dgcell(DWORD v, int x, int z) {                            /* a diagonal band's own cell */
+    WORD id = (WORD)(v & 0xffff);
+    return v && (dbv_claimed(x, z) || dav_is_mid(id) || dav_twin_piece(id) != 0);
+}
+static int bv_dgr(BvPass *p, int x, int z) {
+    DWORD v;
+    int i, j;
+    if (!bv_diag_on()) return 0;
+    v = rb_at(&p->b, x, z);
+    if (!v) return 0;
+    if (bv_dgcell(v, x, z)) return 1;
+    i = x - p->b.x0; j = z - p->b.z0;
+    return p->xd && i >= 0 && j >= 0 && i < p->b.w && j < p->b.h && p->xd[j * p->b.w + i];
+}
+static int bv_dg(BvPass *p, int s, int w) { return bv_dgr(p, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)); }
+static int bv_rraw(BvPass *p, int s, int w) { return rb_at(&p->b, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)) != 0; }
+static int bv_road(BvPass *p, int s, int w) { return bv_rraw(p, s, w) && !bv_dg(p, s, w); }
+/* the xd mask of the pass window: walk from every diagonal cell along both 45-degree lines; road cells (not
+   diagonal) followed, within 4 steps, by another diagonal cell are on a band that passes through them */
+static void bv_xd_build(BvPass *P) {
+    static const int DX[4] = { 1, 1, -1, -1 }, DZ[4] = { 1, -1, 1, -1 };
+    int x, z, d, j, k, w = P->b.w, h = P->b.h;
+    if (!P->xd || !bv_diag_on()) return;
+    ZeroMemory(P->xd, (SIZE_T)w * h);
+    for (z = 0; z < h; z++)
+        for (x = 0; x < w; x++) {
+            int X = P->b.x0 + x, Z = P->b.z0 + z;
+            if (!bv_dgcell(P->b.c[z * w + x], X, Z)) continue;
+            for (d = 0; d < 4; d++) {
+                for (j = 1; j <= 4; j++) {
+                    DWORD v = rb_at(&P->b, X + DX[d] * j, Z + DZ[d] * j);
+                    if (!v) break;
+                    if (bv_dgcell(v, X + DX[d] * j, Z + DZ[d] * j)) {
+                        for (k = 1; k < j; k++) {
+                            int cx = x + DX[d] * k, cz = z + DZ[d] * k;
+                            if (cx >= 0 && cz >= 0 && cx < w && cz < h) P->xd[cz * w + cx] = 1;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+}
 static int bv_cl(BvPass *p, int s, int w) { return dbv_claimed(bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)); } /* task diagbv */
 /* task avx32 (img16): a ROAD piece the game keeps out of re-tiling (ROAD_GRND_Protected: level crossings 67 / 69,
    road x highway 11258, tunnel mouths 63 / 64, bridges 81.. / 11265..; netpack variants inherit their base's
@@ -337,6 +400,50 @@ static int bv_xspan(BvPass *p, int s, int w, int dir) {
     return n && bv_full(p, s + dir * n, w) ? n : 0;
 }
 
+/* task orthfix BVDIAG: a diagonal band crossing the run or leaving through one side while the boulevard goes on (xsect
+   38 / 39): the columns from s on (dir) whose cells are diagonal or plain road (no road beside a plain outer cell), at
+   most BV_XSPAN, followed by a full boulevard column. -> their number, 0 none. Such columns are kind 16: BV writes its
+   plain cells (outer rows, the middle with a nose against the band), the diagonal cells stay DAV's / DBV's */
+static int bv_dspan(BvPass *p, int s, int w, int dir) {
+    int n, k;
+    if (!bv_diag_on()) return 0;
+    for (n = 0; n < BV_XSPAN; n++) {
+        int c = s + dir * n, dg = 0, ok = 1;
+        for (k = 0; k < 3; k++) {
+            if (bv_dg(p, c, w + k)) dg++;
+            else if (!bv_road(p, c, w + k) || bv_prot(p, c, w + k) || bv_cl(p, c, w + k)) ok = 0;
+        }
+        if (ok && !bv_dg(p, c, w) && bv_road(p, c, w - 1)) ok = 0;
+        if (ok && !bv_dg(p, c, w + 2) && bv_road(p, c, w + 3)) ok = 0;
+        if (!ok || !dg) break;
+    }
+    return n && bv_full(p, s + dir * n, w) ? n : 0;
+}
+
+/* task orthfix BVDIAG: does the run end at column se (going on in direction st) against a diagonal band? Each row k
+   goes on n[k] = 0..2 plain road cells (no road beside them) and then meets a diagonal cell; adjacent rows differ by
+   at most one (the band's 45-degree stair). -> the most extra cells of a row (0..2), -1 not such an end */
+static int bv_dend(BvPass *p, int se, int st, int w0, int *n) {
+    int k, j, mx = 0;
+    if (!bv_diag_on()) return -1;
+    for (k = 0; k < 3; k++) {
+        for (j = 1; j <= 3; j++) {
+            int s = se + st * j;
+            if (bv_dg(p, s, w0 + k)) break;
+            if (!bv_road(p, s, w0 + k) || bv_prot(p, s, w0 + k) || bv_cl(p, s, w0 + k)) return -1;
+        }
+        if (j > 3) return -1;
+        n[k] = j - 1;
+        if (n[k] > mx) mx = n[k];
+    }
+    if (n[0] - n[1] > 1 || n[1] - n[0] > 1 || n[1] - n[2] > 1 || n[2] - n[1] > 1) return -1;
+    for (j = 1; j <= n[0]; j++) if (bv_road(p, se + st * j, w0 - 1)) return -1;
+    for (j = 1; j <= n[2]; j++) if (bv_road(p, se + st * j, w0 + 3)) return -1;
+    for (k = 0; k < 3; k++)                                  /* nothing past a row's last extra cell but the band */
+        if (n[k] && bv_road(p, se + st * (n[k] + 1), w0 + k)) return -1;
+    return mx;
+}
+
 static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
     if (p->n >= DAV_MAX_CELLS) return;
     p->cell[p->n].x = bv_rx(p->axis, s, w);
@@ -362,6 +469,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         if (sb - sa >= BV_MAX_RUN - 1 - BV_XSPAN) break;
         if (bv_full(p, sb + 1, w0)) sb++;
         else if ((nx = bv_xspan(p, sb + 1, w0, 1)) > 0) sb += nx;
+        else if ((nx = bv_dspan(p, sb + 1, w0, 1)) > 0) sb += nx;            /* task orthfix BVDIAG */
         else break;
     }
     *psb = sb;
@@ -374,11 +482,15 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         int bend = 0;
         for (e = 0; e < 2 && n == BV_TAPER && bvshort_on() && !cut_hi && !cut_lo; e++) {
             int se = e ? sa - 1 : sb + 1, g = 0, c = 0;
-            for (k = 0; k < 3; k++) { g += bv_road(p, se, w0 + k); c += bv_road(p, se, w0 + k) && bv_cl(p, se, w0 + k); }
+            for (k = 0; k < 3; k++) { g += bv_rraw(p, se, w0 + k); c += bv_rraw(p, se, w0 + k) && bv_cl(p, se, w0 + k); }
             if (g && c == g) bend = 1;
         }
+        for (e = 0; e < 2 && n == BV_TAPER && !bend && !cut_hi && !cut_lo; e++) {   /* task orthfix BVDIAG */
+            int dnx[3];
+            if (bv_dend(p, e ? sa : sb, e ? -1 : 1, w0, dnx) >= 0) bend = 2;
+        }
         if (!bend) { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
-        shortrun = 1;
+        shortrun = bend;
     }
     g_bvnt_skip[0] = g_bvnt_skip[1] = -0x7fffffff;                        /* task avends F3 */
     /* task avx32 (img16): a ragged end on a column with road beside it is refused before the spans, so bv_run_fb
@@ -404,17 +516,21 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     }
     for (s = sa; s <= sb && bv_xing_on(); s++)          /* task orthfix BVXING: crossing columns (no road beside) */
         if (!kind[s - sa] && !bv_full(p, s, w0) && bv_xcol(p, s, w0)) kind[s - sa] = 8;
+    for (s = sa; s <= sb && bv_diag_on(); s++)          /* task orthfix BVDIAG: diagonal span columns */
+        if (!kind[s - sa] && (bv_dg(p, s, w0) || bv_dg(p, s, w0 + 1) || bv_dg(p, s, w0 + 2))) kind[s - sa] = 16;
     /* ends: e 0 = the +s end (column sb), e 1 = the -s end (column sa) */
     for (e = 0; e < 2; e++) {
-        int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1, nclm = 0;
+        int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1, nclm = 0, graw = 0;
         for (k = 0; k < 3; k++) if (bv_road(p, se + st, w0 + k)) { got++; row = k; if (first < 0) first = k; }
-        for (k = 0; k < 3; k++) nclm += bv_road(p, se + st, w0 + k) && bv_cl(p, se + st, w0 + k);   /* task diagbv */
+        for (k = 0; k < 3; k++) nclm += bv_rraw(p, se + st, w0 + k) && bv_cl(p, se + st, w0 + k);   /* task diagbv */
+        for (k = 0; k < 3; k++) graw += bv_rraw(p, se + st, w0 + k);           /* orthfix BVDIAG: DBV cells are hidden */
         if (e ? cut_lo : cut_hi) {                                        /* task avx32: ragged end */
             if (kind[se - sa]) { *why = "ragged end on a junction column"; *bad_e = e; return 0; }
             endtyp[e] = 7; endkeep[e] = -1;
             continue;
         }
-        if (got && nclm == got) { endtyp[e] = 5; endkeep[e] = -1; continue; }   /* task diagbv: 5 = bends into a DBV */
+        if (graw && nclm == graw) { endtyp[e] = 5; endkeep[e] = -1; continue; }  /* task diagbv: 5 = bends into a DBV */
+        if (bv_dend(p, se, st, w0, p->dn[e]) >= 0) { endtyp[e] = 8; endkeep[e] = -1; continue; }   /* orthfix BVDIAG */
         if (!got && (kind[se - sa] & 4)) {                 /* task bvx: the run ends on an avenue / boulevard (T) */
             if ((kind[se - sa] & 3) != 3) {
                 if (!bv_corner_on() || !bvx_cells_on())
@@ -473,7 +589,9 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             p->natt++;
         }
     }
-    if (shortrun && !((endtyp[0] == 3 && endtyp[1] == 5) || (endtyp[1] == 3 && endtyp[0] == 5)))   /* avends F2b */
+    if (shortrun == 2 && endtyp[0] != 8 && endtyp[1] != 8)                 /* orthfix BVDIAG: 3 columns + a diagonal end */
+        { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
+    if (shortrun == 1 && !((endtyp[0] == 3 && endtyp[1] == 5) || (endtyp[1] == 3 && endtyp[0] == 5)))   /* avends F2b */
         { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
     for (e = 0; e < 2; e++) {                                            /* task avends F3: a T on the narrowing */
         int c1 = e ? sa : sb - 1, c2 = e ? sa + 1 : sb, ci = e ? sa + 2 : sb - 2, want;
@@ -520,13 +638,26 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
                  (s == sb + 1 && endtyp[0] >= 2 && (k == endkeep[0] || ((endtyp[0] == 3 || endtyp[0] == 6) && k == endkeep[0] + 1))) ||
                  (s == sa - 1 && endtyp[1] >= 2 && (k == endkeep[1] || ((endtyp[1] == 3 || endtyp[1] == 6) && k == endkeep[1] + 1))) ||
                  bv_cl(p, s, w0 + k) ||                              /* task diagbv */
-                 (s == sb + 1 && endtyp[0] == 7) || (s == sa - 1 && endtyp[1] == 7);   /* task avx32: the stock rest */
+                 (s == sb + 1 && endtyp[0] == 7) || (s == sa - 1 && endtyp[1] == 7) ||  /* task avx32: the stock rest */
+                 (s == sb + 1 && endtyp[0] == 8 && k >= 0 && k <= 2 && p->dn[0][k] >= 1) ||   /* orthfix BVDIAG */
+                 (s == sa - 1 && endtyp[1] == 8 && k >= 0 && k <= 2 && p->dn[1][k] >= 1);
             if (!ok) { *why = "touches road"; return 0; }
         }
     /* pieces */
     p->n = 0;
     for (e = 0; e < 2; e++) {
         int col, row;
+        if (endtyp[e] == 8) {                                /* orthfix BVDIAG: the extra cells up to the band */
+            int j;
+            for (row = 0; row < 3; row++)
+                for (j = 1; j <= p->dn[e][row]; j++) {
+                    int sc = e ? sa - j : sb + j;
+                    if (row != 1) bv_put(p, sc, w0 + row, g_bv_p[BV_OUTER], row ? 0 : 2);
+                    else if (j < p->dn[e][1]) bv_put(p, sc, w0 + 1, g_bv_p[BV_MIDDLE], 0);
+                    else bv_put(p, sc, w0 + 1, g_bv_p[BV_NOSE], e ? 2 : 0);
+                }
+            continue;
+        }
         if (endtyp[e] >= 4) continue;  /* task bvx: the T's box comes with bvx_boxes; diagbv: DBV; avx32: box + avenue */
         if (endtyp[e] == 1) {
             for (row = 0; row < 3; row++)
@@ -545,12 +676,20 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         int kd = kind[s - sa];
         if (!kd) {
             /* the median ends in a nose next to a junction, a cap or a taper; it goes on into an avenue narrowing */
-            int hi = (s == normhi && endtyp[0] != 3 && endtyp[0] != 5) || (s < sb && kind[s + 1 - sa]),
-                lo = (s == normlo && endtyp[1] != 3 && endtyp[1] != 5) || (s > sa && kind[s - 1 - sa]);   /* task diagbv */
+            int hi = (s == normhi && endtyp[0] != 3 && endtyp[0] != 5 && !(endtyp[0] == 8 && p->dn[0][1])) ||
+                     (s < sb && kind[s + 1 - sa] && !((kind[s + 1 - sa] & 16) && !bv_dg(p, s + 1, w0 + 1))),
+                lo = (s == normlo && endtyp[1] != 3 && endtyp[1] != 5 && !(endtyp[1] == 8 && p->dn[1][1])) ||
+                     (s > sa && kind[s - 1 - sa] && !((kind[s - 1 - sa] & 16) && !bv_dg(p, s - 1, w0 + 1)));   /* task diagbv; orthfix BVDIAG: the nose on the extra cells */
             bv_put(p, s, w0, g_bv_p[BV_OUTER], 2);
             bv_put(p, s, w0 + 2, g_bv_p[BV_OUTER], 0);
             bv_put(p, s, w0 + 1, g_bv_p[hi && lo ? BV_NOSE2 : hi || lo ? BV_NOSE : BV_MIDDLE], lo && !hi ? 2 : 0);
         } else if (kd & 4) {                                /* task bvx: the box, below */
+        } else if (kd & 16) {                               /* task orthfix BVDIAG: the plain cells of a diagonal span */
+            int ph = bv_dg(p, s + 1, w0 + 1), pl = bv_dg(p, s - 1, w0 + 1);
+            if (!bv_dg(p, s, w0)) bv_put(p, s, w0, g_bv_p[BV_OUTER], 2);
+            if (!bv_dg(p, s, w0 + 2)) bv_put(p, s, w0 + 2, g_bv_p[BV_OUTER], 0);
+            if (!bv_dg(p, s, w0 + 1))
+                bv_put(p, s, w0 + 1, g_bv_p[ph && pl ? BV_NOSE2 : ph || pl ? BV_NOSE : BV_MIDDLE], pl && !ph ? 2 : 0);
         } else if (kd & 8) {                                /* task orthfix BVXING: the crossing twins */
             DWORD v = rb_at(&p->b, bv_rx(p->axis, s, w0), bv_rz(p->axis, s, w0));
             WORD id = (WORD)(v & 0xffff), b = id < 20000 ? id : g_base[id];
@@ -688,6 +827,7 @@ static int bv_takes(BYTE *mgr, int x, int z) {
                 if (s - sa >= BV_MAX_RUN - 1 - BV_XSPAN) break;
                 if (bv_full(&P, sa - 1, w0)) sa--;
                 else if ((nx = bv_xspan(&P, sa - 1, w0, -1)) > 0) sa -= nx;
+                else if ((nx = bv_dspan(&P, sa - 1, w0, -1)) > 0) sa -= nx;   /* task orthfix BVDIAG */
                 else break;
             }
             T.x = x; T.z = z; T.hit = 0;
@@ -853,6 +993,7 @@ static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, in
                 int sb;
                 if (!bv_full(P, s, w) || bv_full(P, s - 1, w)) continue;
                 if (bv_xspan(P, s - 1, w, -1)) continue;     /* task orthfix BVXING: the run began before a crossing */
+                if (bv_dspan(P, s - 1, w, -1)) continue;     /* task orthfix BVDIAG: ... or before a diagonal band */
                 if (!bv_parts(P, s, w, &sb, &why, kind, bv_decide_part, &d)) {   /* task avx32: + ragged ends, splits */
                     if (!write && sb > s) {              /* task avslow: a refused run holding our pieces, cut */
                         int c, r, sd = 0, ours = 0;
@@ -894,12 +1035,14 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
     int x, z, border, nruns = 0, nwall = 0, nrev = 0;
     P.b.x0 = x0; P.b.z0 = z0; P.b.w = x1 - x0 + 1; P.b.h = z1 - z0 + 1;
     nbuf = (SIZE_T)P.b.w * P.b.h;
-    mem = (BYTE *)VirtualAlloc(NULL, nbuf * 4 + DAV_MAX_CELLS * sizeof(BvCell), MEM_COMMIT, PAGE_READWRITE);
+    mem = (BYTE *)VirtualAlloc(NULL, nbuf * 5 + DAV_MAX_CELLS * sizeof(BvCell), MEM_COMMIT, PAGE_READWRITE);
     if (!mem) return 0;
     P.b.c = (DWORD *)mem;
     P.cell = (BvCell *)(mem + nbuf * 4);
+    P.xd = mem + nbuf * 4 + DAV_MAX_CELLS * sizeof(BvCell);                   /* task orthfix BVDIAG */
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
+    bv_xd_build(&P);
     border = bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, keep, kind, 0, &nruns, &nwall, psides);
     if (psides && g_bv_grow) {                       /* task avslow: a cut run: no revert, no write, the caller grows */
         int sd;
@@ -943,9 +1086,11 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
                 bv_dirty(x, z);                                                         /* task bvlanes */
                 logf("bv: %s: (%d,%d) boulevard piece %lu no longer in a run -> stock retile", who, x, z, v & 0xffff);
             }
-    if (nrev)                                        /* task avx32: the retiles may have changed cells: read again */
+    if (nrev) {                                      /* task avx32: the retiles may have changed cells: read again */
         for (z = 0; z < P.b.h; z++)
             for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
+        bv_xd_build(&P);                                                         /* task orthfix BVDIAG */
+    }
     bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, NULL, kind, 1, &nruns, &nwall, NULL);
     VirtualFree(mem, 0, MEM_RELEASE);
     InterlockedExchangeAdd(&g_bv_n_runs, nruns);
@@ -963,6 +1108,7 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
    pass that writes sees every run touching the window whole, as the whole-map pass did. A refused cut run used to get
    its pieces reverted with no whole-map pass at all (avdiagbreak's DAV case, same code shape here).
    Off: SC3NETMOD_BVGROW=0 (old way). */
+static LONG g_bv_davmark;                         /* task orthfix BVDIAG: DAV's written + reverted cells after bv_run */
 static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full, sides = 0, step = 64;
     int round;
@@ -1002,6 +1148,7 @@ static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
                  x1, z1);
     }
     VirtualFree(keep, 0, MEM_RELEASE);
+    g_bv_davmark = g_dav_n_cells + g_dav_n_rev;                                    /* task orthfix BVDIAG */
 }
 
 /* task bvlanes: AVL_POST_BV (see bv_dirty above). -> 1 with rbox = the box AVL must re-decide */
@@ -1010,8 +1157,16 @@ static int bv_post_avl(BYTE *mgr, int x0, int z0, int x1, int z1, const char *wh
     void *lay = *(void **)(mgr + 0x3c);
     static int redo[BV_ATT_MAX][2];
     int nredo = 0;
-    (void)x0; (void)z0; (void)x1; (void)z1;
     if (!g_bv_p[0]) return 0;
+    /* task orthfix BVDIAG: DAV's post-AVL pass (slot AVL_POST_DAV, just before this one) wrote or reverted diagonal
+       cells after BV decided this edit (a diagonal it judges against AVL's band map, e.g. a band bending into or leaving
+       a boulevard): BV decides the window again, so a run that meets the diagonal sees its final cells */
+    if (bv_diag_on() && g_dav_n_cells + g_dav_n_rev != g_bv_davmark) {
+        static volatile LONG nlog;
+        if (InterlockedIncrement(&nlog) <= 20)
+            logf("bv: %s: diagonal cells changed after BV (DAV post-AVL pass) - boulevards re-decided (BVDIAG)", who);
+        bv_run(mgr, x0, z0, x1, z1, who);
+    }
     for (k = n0 - 1; k >= 0; k--) {                 /* only the entries there at entry (bv_run below adds new ones) */
         int *a = g_bv_att[k];
         DWORD v = rb_read(mgr, lay, a[0], a[1], W, H);
