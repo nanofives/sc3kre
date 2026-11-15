@@ -283,12 +283,35 @@ static int dbv_arms_of(int kind, int ax[4], int az[4], int *o) {
     return n;
 }
 
+/* task diagfix (round 2026-11-14b milestone 2, xsect cases 50 52 54 55): DBVCAPCLEAN. The axis-1 frame is the map
+   turned one state, so a band's rows there are real COLUMNS. A drag of 7 rows makes 7 full rows on axis 0 but only 4
+   on axis 1: the drags' flat ends (along x) are, in the turned frame, the cap-x4z3 / cap-x4z4 ends whose partial rows
+   hold the other 3. Each end then takes its row as an end row, and a 7-row diagonal boulevard on axis 1 had 2 clean
+   rows left of the 3 the anchor needs ("fewer than 3 clean rows": the stock 43 ladder, drawn as a chain of
+   roundabouts, wherever it meets anything). Now the end row of a cap end (square, part, x4z3, x4z4: their shape is
+   checked cell by cell) or of a ragged end (the rows past it stay stock; in the xsect sweep case 49's avenue touches
+   case 50's boulevard end, so that end is ragged there and a cap alone) counts as clean when nothing is beside it.
+   Off: SC3NETMOD_DBVCAPCLEAN=0. */
+static int g_dbv_capclean = -1;
+static int dbv_capclean_on(void) {
+    if (g_dbv_capclean < 0) {
+        g_dbv_capclean = !env_off("SC3NETMOD_DBVCAPCLEAN");
+        logf("dbv: DBVCAPCLEAN %s (a cap end's row counts as a clean row, SC3NETMOD_DBVCAPCLEAN)",
+             g_dbv_capclean ? "on" : "off");
+    }
+    return g_dbv_capclean;
+}
+static int dbv_is_cap(int kind) {
+    return kind == DK_CAP_SQ || kind == DK_CAP_PART || kind == DK_CAP_X4Z3 || kind == DK_CAP_X4Z4 || kind == DK_RAGGED;
+}
+
 /* the rule on one anchored chain (x0, z0, n rows), canonical; -> 1 accepted (cells in p->cell), 0 refused */
 static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     DbvUse use[DBV_MAX_USES];
     BYTE endrow[DBV_MAX_ROWS];
     int nu = 0, e, k, j, i, cx, cz, nclean = 0, armx[256], armz[256], armo[256], na = 0;
     int sw, se, na0, tbad = 0;                                           /* task dbvtouch */
+    int ekind[2] = { DK_NONE, DK_NONE };                                 /* task diagfix: DBVCAPCLEAN */
     *why = "";
     p->n = 0;
     p->ragged = 0;                                                       /* task avrbtfix */
@@ -309,6 +332,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     /* ---- ends */
     for (e = 1; e >= 0; e--) {
         int z_e = e ? z0 + n - 1 : z0, a_e = LEFT(z_e), kind = dbv_end_kind(p, z_e, a_e, e, n), sgn = e ? 1 : -1, dx, dz;
+        ekind[e] = kind;                                                 /* task diagfix: DBVCAPCLEAN */
         if (kind == DK_NONE) {
             *why = e ? "bottom end: the roads past the band are not an end this package knows"
                      : "top end: the roads past the band are not an end this package knows";
@@ -423,9 +447,22 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             if (use[i].kind == DK_JROW_BOTH || use[i].kind == DK_JROW_A) jr = use[i].rz == z;
             if (use[i].kind == DK_JCOL_BOTH || use[i].kind == DK_JCOL_A) jr = z >= use[i].rz - 3 && z <= use[i].rz;
         }
+        if (jr && endrow[k] && n > 1 && ((k == 0 && dbv_is_cap(ekind[0])) || (k == n - 1 && dbv_is_cap(ekind[1]))) &&
+            dbv_capclean_on())                                           /* task diagfix: DBVCAPCLEAN */
+            for (jr = 0, i = 0; i < nu && !jr; i++) {                    /* still a junction row: not clean */
+                if (use[i].kind == DK_JROW_BOTH || use[i].kind == DK_JROW_A) jr = use[i].rz == z;
+                if (use[i].kind == DK_JCOL_BOTH || use[i].kind == DK_JCOL_A) jr = z >= use[i].rz - 3 && z <= use[i].rz;
+            }
         if (!jr && !dbv_rd(p, a - 1, z) && !dbv_rd(p, a + 4, z)) nclean++;
     }
-    if (nclean < DBV_MIN_CLEAN) { *why = "fewer than 3 clean rows"; return 0; }
+    if (nclean < DBV_MIN_CLEAN) {                                        /* task diagfix: say what the rule saw */
+        static char wb[96];
+        _snprintf(wb, sizeof(wb), "fewer than 3 clean rows (%d clean, end kinds top %d bottom %d)", nclean, ekind[0],
+                  ekind[1]);
+        wb[sizeof(wb) - 1] = 0;
+        *why = wb;
+        return 0;
+    }
     /* ---- pieces: the band by d, the stamps, the arms */
     for (k = 0; k < n; k++) {
         int z = z0 + k, a = LEFT(z), d;
@@ -699,7 +736,10 @@ static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     BYTE *keep;
     if (!g_dbv_claim) g_dbv_claim = (DWORD *)VirtualAlloc(NULL, DBV_CLAIM * sizeof(DWORD), MEM_COMMIT, PAGE_READWRITE);
     if (g_dbv_claim) { ZeroMemory(g_dbv_claim, DBV_CLAIM * sizeof(DWORD)); g_dbv_nclaim = 0; }
-    if (!g_dbv_on || W < 4 || H < 4 || W > 4096 || H > 4096) return;
+    if (!g_dbv_on || W < 4 || H < 4 || W > 4096 || H > 4096) {
+        g_dbv_win[0] = g_dbv_win[1] = 0; g_dbv_win[2] = g_dbv_win[3] = 0x7fffffff;   /* task diagfix: nothing to claim */
+        return;
+    }
     if (g_dbv_grow < 0) {
         g_dbv_grow = !env_off("SC3NETMOD_DBVGROW");
         logf("dbv: DBVGROW %s (SC3NETMOD_DBVGROW)", g_dbv_grow ? "on" : "off");
@@ -734,6 +774,8 @@ static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
                  x1, z1);
     }
     VirtualFree(keep, 0, MEM_RELEASE);
+    g_dbv_win[0] = x0; g_dbv_win[1] = z0; g_dbv_win[2] = x1; g_dbv_win[3] = z1;   /* task diagfix: DAVDBVWIN */
+    if (full) { g_dbv_win[0] = g_dbv_win[1] = 0; g_dbv_win[2] = g_dbv_win[3] = 0x7fffffff; }
 }
 
 static void dbv_stats(void) {
