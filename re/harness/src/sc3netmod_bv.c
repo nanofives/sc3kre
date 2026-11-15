@@ -95,13 +95,12 @@ static int g_bv_nx, g_bv_xing = -1;
    it only (bv_run1 used to refuse "an end on a corner", leaving the corner and its columns stock). The box is a T box
    whose side without an arm is closed too (bvx_boxes reads 'C' there); its cells come from the bvxc table (bvlanes.py
    corner kinds BcB / BcAn / BcAs, pieces 22401..). A table without those lines refuses the corner as before, and the
-   ragged-end fallback leaves that end stock. Candidate look (owner call pending): on with SC3NETMOD_BVCORNER=1. */
+   ragged-end fallback leaves that end stock. Owner call 2026-11-14: "Square, as shown". Off: SC3NETMOD_BVCORNER=0. */
 static int g_bv_corner = -1;
 static int bv_corner_on(void) {
     if (g_bv_corner < 0) {
-        g_bv_corner = env_on("SC3NETMOD_BVCORNER");      /* candidate look: opt-in until the owner's call */
-        logf("bv: boulevard ending in a corner box (orthfix BVCORNER) %s", g_bv_corner ? "on (SC3NETMOD_BVCORNER=1)" :
-             "off (candidate, SC3NETMOD_BVCORNER=1 turns it on)");
+        g_bv_corner = !env_off("SC3NETMOD_BVCORNER");    /* owner 2026-11-14: "Square, as shown" -> default on */
+        logf("bv: boulevard ending in a corner box (orthfix BVCORNER) %s", g_bv_corner ? "on" : "off (SC3NETMOD_BVCORNER=0)");
     }
     return g_bv_corner;
 }
@@ -762,6 +761,81 @@ static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const in
     d->nw += nw;
 }
 
+/* task orthfix BVQUAD (2026-11-14, xsect case 63, owner call "option A"): four parallel straight roads side by side
+   are TWO avenues side by side, rows w / w+1 and w+2 / w+3, kerbs back to back in the middle. The stock tiler draws
+   them as an avenue's outer halves with a grid of crossing boxes between (39 / 43) and no BV run takes them (a
+   boulevard is three rows: "road more than 3 wide"). Rule: a run of at least BV_QUAD_MIN columns where exactly four
+   rows are road (none beside), no road anywhere round it (a clean end on both sides: every row stops), no cell claimed
+   by DBV or Protected. Pieces: the stock avenue, rows w / w+2 11204 state 2 and w+1 / w+3 state 0 (canonical, turned
+   with the axis), each end column the stock U-turn pair 11203 (+s end 0 / 1, -s end 3 / 2); AVL, which runs after BV,
+   then makes each a one-way avenue like any other. A cell already holding a variant of the wanted base at the wanted
+   state (AVL's 21700 / 21701) is left alone, so the two blocks do not undo each other. Junctions on such a run are
+   not handled: it stays with the stock tiler. Off: SC3NETMOD_BVQUAD=0. */
+#define BV_QUAD_MIN 5                    /* longer than wide, so a 4 x 4 block is not read as either axis */
+static int g_bv_quad = -1;
+static volatile LONG g_bv_n_quad;
+static int bv_quad_on(void) {
+    if (g_bv_quad < 0) {
+        g_bv_quad = !env_off("SC3NETMOD_BVQUAD");
+        logf("bv: four parallel roads as two avenues side by side (orthfix BVQUAD) %s",
+             g_bv_quad ? "on" : "off (SC3NETMOD_BVQUAD=0)");
+    }
+    return g_bv_quad;
+}
+static int bv_qcol(BvPass *p, int s, int w) {
+    int k;
+    for (k = 0; k < 4; k++) if (!bv_road(p, s, w + k) || bv_cl(p, s, w + k) || bv_prot(p, s, w + k)) return 0;
+    return !bv_road(p, s, w - 1) && !bv_road(p, s, w + 4);
+}
+static void bv_quads(BvPass *P, BvDecide *d, int axis) {
+    int s0 = axis ? d->z0 : d->x0, s1 = axis ? d->z1 : d->x1, wl = axis ? -d->x1 : d->z0, wh = axis ? -d->x0 : d->z1;
+    int s, w, sa, sb, k, c;
+    if (!bv_quad_on()) return;
+    P->axis = axis;
+    for (w = wl; w <= wh; w++)
+        for (s = s0; s <= s1; s++) {
+            int ok = 1, sd = 0, nw = 0;
+            if (!bv_qcol(P, s, w) || bv_qcol(P, s - 1, w)) continue;
+            for (sa = sb = s; bv_qcol(P, sb + 1, w) && sb - sa < BV_MAX_RUN; sb++) ;
+            s = sb;
+            if (sb - sa + 1 < BV_QUAD_MIN) continue;
+            for (c = sa; c <= sb; c++)                      /* a run at the read border: decided by a wider pass */
+                for (k = 0; k < 4; k++) sd |= bv_bside(d, bv_rx(axis, c, w + k), bv_rz(axis, c, w + k));
+            if (sd) { d->border = 1; d->sides |= sd; continue; }
+            for (k = -1; k <= 4 && ok; k++)                 /* both ends clean: every row stops, nothing beyond */
+                if (bv_road(P, sa - 1, w + k) || bv_road(P, sb + 1, w + k)) ok = 0;
+            if (!ok) {
+                if (d->write)
+                    logf("bv: %s: four parallel roads axis %d from (%d,%d), %d column(s) left to the stock tiler: an end "
+                         "that is not all four roads stopping (BVQUAD)", d->who, axis, bv_rx(axis, sa, w),
+                         bv_rz(axis, sa, w), sb - sa + 1);
+                continue;
+            }
+            if (!d->write) continue;
+            for (c = sa; c <= sb; c++)
+                for (k = 0; k < 4; k++) {
+                    int top = !(k & 1), st, cx = bv_rx(axis, c, w + k), cz = bv_rz(axis, c, w + k), pos[3];
+                    DWORD cur = rb_at(&P->b, cx, cz);
+                    WORD base, cid = (WORD)(cur & 0xffff);
+                    if (c == sb) { base = 11203; st = top ? 0 : 1; }
+                    else if (c == sa) { base = 11203; st = top ? 3 : 2; }
+                    else { base = 11204; st = top ? 2 : 0; }
+                    st = (st + axis) & 3;
+                    if ((cid == base || (cid >= 20000 && g_base[cid] == base)) && (int)((cur >> 16) & 3) == st) continue;
+                    pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
+                    ((PFN_Put)(g_rb_m + 0x8919))(d->mgr, 0, d->lay, pos, ((DWORD)base << 8) | (DWORD)st, -1, 8, 0);
+                    nw++;
+                    bv_dirty(cx, cz);
+                }
+            d->nruns++;
+            d->nw += nw;
+            InterlockedIncrement(&g_bv_n_quad);
+            if (nw || !strcmp(d->who, "load"))
+                logf("bv: %s: four parallel roads axis %d, columns %d..%d at row %d -> two avenues side by side "
+                     "(BVQUAD), %d written", d->who, axis, sa, sb, w, nw);
+        }
+}
+
 /* every run of the read window, decided; write = 0: only mark keep[] and find the border; write = 1: put the pieces
    (and log). -> 1 when an accepted run reached the read border (the caller re-runs over the whole map) */
 static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, int z1, int W, int H, const char *who,
@@ -798,6 +872,7 @@ static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, in
                              bv_rx(axis, s, w), bv_rz(axis, s, w), sb - s + 1, why);
                 }
             }
+        bv_quads(P, &d, axis);                                                   /* task orthfix BVQUAD */
     }
     *pnruns += d.nruns;
     *pnw += d.nw;
