@@ -617,7 +617,11 @@ def cmd_rebuild(a):
                 v["id"] = new
                 v["art"]["png_dir"] = "art/%d" % new
                 src, dst = os.path.join(pack, "art", str(pid)), os.path.join(pack, "art", str(new))
-                if os.path.isdir(src) and not os.path.isdir(dst):
+                if os.path.isdir(src):
+                    # task diagfix (2026-11-14): a free id's art folder can be left over from an earlier assignment;
+                    # keeping it gave 21917 / 21918 / 21919 the outer piece's art (verify/diagfix/fix_dbv_art.py)
+                    if os.path.isdir(dst):
+                        shutil.rmtree(dst)
                     shutil.copytree(src, dst)
                 var[new] = v
                 for cx in {tuple(x) for x in ctxs}:

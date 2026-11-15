@@ -220,6 +220,26 @@ static int dav_two_on(void) {
 static int dav_is_mid_or_twin(WORD id) { return dav_is_mid(id) || dav_twin_piece(id) != 0; }   /* the revert pass */
 
 
+/* task diagfix (round 2026-11-14b, xsect 27 / 28 yellow): DAVXAVL. A diagonal avenue crossing a straight avenue writes
+ * the crossing template, whose cells on the straight avenue beside the box are stock 11204 (davxw lines). AVL then turns
+ * that straight band one-way (21700 ...), and DAV's post-AVL pass, which runs after AVL, wrote the template's 11204 back
+ * over AVL's pieces: case 27 ended with x 118..120 one-way and 121..122 stock two-way, the yellow centre line up to the
+ * box. Now a template cell that wants 11204 keeps an AVL piece that is a variant of 11204 at the same state.
+ * Off: SC3NETMOD_DAVXAVL=0. */
+static int avl_own(WORD id);                                           /* sc3netmod_avl.c */
+static int g_dav_xavl = -1;
+static volatile LONG g_dav_n_xavl;
+static int dav_xavl_keep(DWORD want, DWORD cur) {
+    WORD id = (WORD)(cur & 0xffff);
+    if (!cur || (want >> 8) != 11204 || g_base[id] != 11204 || ((cur >> 16) & 3) != (want & 3)) return 0;
+    if (g_dav_xavl < 0) {
+        g_dav_xavl = !env_off("SC3NETMOD_DAVXAVL");
+        logf("dav: DAVXAVL %s (crossing cells keep AVL's one-way 11204 variants, SC3NETMOD_DAVXAVL)",
+             g_dav_xavl ? "on" : "off");
+    }
+    return g_dav_xavl && avl_own(id);
+}
+
 /* task diagfix (round 2026-11-14b fix 1, xsect cases 68 69 72 73 80): a diagonal avenue / boulevard drawn across a
  * rail line or under a highway holds, on the rail / highway rows, the game's shared crossing pieces (69 road x rail,
  * 15098 highway over road, 11258 road x highway, 67 power over road, ... and any ROAD piece the game keeps out of
@@ -1208,6 +1228,10 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                             keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
                         if (dbv_claimed(cx, cz)) continue;          /* task diagbv: DBV writes its own cells */
                         if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
+                        if ((k >= n + na || (dav_xm(&P, cx, cz) & 2)) && dav_xavl_keep(want, cur)) {   /* DAVXAVL */
+                            InterlockedIncrement(&g_dav_n_xavl);
+                            continue;
+                        }
                         cut_wrote(&cg, cx, cz, want);               /* task avdiagbreak */
                         if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
@@ -1427,6 +1451,8 @@ static void dav_stats(void) {
          "straight avenue=%ld, windows grown=%ld (to the whole map %ld), kept with touching road=%ld, stub arms=%ld",
          g_dav_n_bands, g_dav_n_cells, g_dav_n_rev, g_dav_n_x, g_dav_n_avl, g_dav_n_grow, g_dav_n_full, g_dav_n_touch,
          g_dav_n_stub);   /* task avdiag, task avdiagbreak, task davtouch */
+    if (g_dav_n_xavl)                                                  /* task diagfix: DAVXAVL */
+        logf("stats: dav crossing cells left with AVL's one-way piece (DAVXAVL)=%ld", g_dav_n_xavl);
     if (g_dav_n_dbvwin)                                                /* task diagfix: DAVDBVWIN */
         logf("stats: dav windows DBV judged first (DAVDBVWIN)=%ld", g_dav_n_dbvwin);
     if (g_dav_n_xnet)                                                  /* task diagfix: DAVXNET */
