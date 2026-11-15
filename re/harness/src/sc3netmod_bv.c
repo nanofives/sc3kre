@@ -431,14 +431,14 @@ static int bv_xspan(BvPass *p, int s, int w, int dir) {
    lines, walked out of the boulevard's rows over road, reaches a diagonal cell and the band goes on past it, while the
    line's other way out of the rows has no diagonal cell (a crossing band is bv_xd_build's). A run whose end region
    holds overlap cells ends before them, per row (a staircase, no cap, the median nose on its last cell: end type 8);
-   the overlap is DAV's / DBV's bend set. Opt-in (SC3NETMOD_BVBEND=1) until diagfix's bend sets exist: without them DAV
-   and DBV refuse the bend once BV leaves the overlap (41 / 45 fall back to the stock ladder). */
+   the overlap is DAV's / DBV's bend set. Default on since diagfix's bend sets (DAVBBEND 22370..22387 for a DA,
+   DBVBBEND 22388..22399 for a DB); off: SC3NETMOD_BVBEND=0. */
 static int g_bv_bend = -1;
 static int bv_bend_on(void) {
     if (g_bv_bend < 0) {
-        g_bv_bend = env_on("SC3NETMOD_BVBEND");          /* opt-in until DAV's / DBV's bend sets take the overlap */
+        g_bv_bend = !env_off("SC3NETMOD_BVBEND");        /* default on since diagfix's bend sets (DAVBBEND / DBVBBEND) */
         logf("bv: boulevard ending in a diagonal band's first rows (orthfix BVBEND) %s",
-             g_bv_bend ? "on (SC3NETMOD_BVBEND=1)" : "off (opt-in: SC3NETMOD_BVBEND=1, needs the bend sets)");
+             g_bv_bend ? "on" : "off (SC3NETMOD_BVBEND=0)");
     }
     return g_bv_bend;
 }
