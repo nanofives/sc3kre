@@ -304,7 +304,7 @@
           "stamps": {
             "type": "object",
             "additionalProperties": false,
-            "patternProperties": {"^(jrow-both|jrow-A|jrow-stem|jcol-both|jcol-A|narrow-C|narrow-A|taper-[012]s?|cap-square|cap-part|cap-x4z[34]|bend135m?|bendavm?|bendbv)$": {
+            "patternProperties": {"^(jrow-both|jrow-A|jrow-stem|jcol-both|jcol-A|narrow-C|narrow-A|taper-[012]s?|cap-square|cap-part|cap-x4z[34]|bend135m?|bendavm?|bendbv|jbv-(x|e|eo))$": {
               "type": "array", "maxItems": 40,
               "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}}},
             "description": "Per junction / end kind, the cells it writes: [dx, dz, piece, state] in its canonical frame (diagbv.py: row family relative to a band row's left cell, column family relative to the column road's d0 cell). Pieces are variants of this package, or 29 / 35."

@@ -34,7 +34,8 @@
  */
 
 #define DBV_MIN_CLEAN 3
-#define DBV_KINDS 23                         /* task diagfix: 18 BEND135, 19 BEND135M, 20 BENDAV, 21 BENDAVM, 22 BENDBV */
+#define DBV_KINDS 26                         /* task diagfix: 18 BEND135, 19 BEND135M, 20 BENDAV, 21 BENDAVM, 22 BENDBV,
+                                                23 JBVX, 24 JBVE, 25 JBVEO */
 #define DBV_MAX_STAMP 40
 #define DBV_MAX_USES 64
 #define DBV_MAX_ROWS 1024
@@ -45,7 +46,7 @@
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
-       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BENDAV, DK_BENDAVM, DK_BENDBV, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
+       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BENDAV, DK_BENDAVM, DK_BENDBV, DK_JBVX, DK_JBVE, DK_JBVEO, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
 static int dbv_b135_on(void);                /* task diagfix: DBVBEND135 (defined before dbv_band) */
 static int dbv_bbv_on(void);                 /* task diagfix: DBVBBEND */
 
@@ -375,6 +376,23 @@ static int dbv_bbv_on(void) {
     return g_dbv_bbv;
 }
 
+/* task diagfix (round 2026-11-15, xsect 42 / 44): DBVJBV. A straight BOULEVARD (BV, three rows) crossing a diagonal
+   boulevard (rows beside the band on both sides: stamp `jbv-x`) or ending against it (one side: `jbv-e`, the boulevard
+   on the band's +x side; DBV turns it half a circle for -x). Before, DBVBROW kept such rows from being junction arms
+   and the band's cells there were plain band pieces / end stamps (the boulevard ran into the band's kerb). Now the
+   band's cells in and beside the boulevard's rows are a paved junction box (the 38 / 40 look, orthfix's mockup scene,
+   verify/diagfix/dbbox_build.py) and the boulevard's cells are left to BV (orthfix BVDIAG stops BV at the band).
+   Off: SC3NETMOD_DBVJBV=0. */
+static int g_dbv_jbv = -1;
+static int dbv_jbv_on(void) {
+    if (g_dbv_jbv < 0) {
+        g_dbv_jbv = !env_off("SC3NETMOD_DBVJBV");
+        logf("dbv: DBVJBV %s (a boulevard crossing or ending against a diagonal boulevard: a paved junction box, "
+             "SC3NETMOD_DBVJBV)", g_dbv_jbv ? "on" : "off");
+    }
+    return g_dbv_jbv;
+}
+
 static int dbv_is_cap(int kind) {
     return kind == DK_CAP_SQ || kind == DK_CAP_PART || kind == DK_CAP_X4Z3 || kind == DK_CAP_X4Z4 || kind == DK_RAGGED;
 }
@@ -405,7 +423,7 @@ static int dbv_rd_any(DbvPass *p, int cx, int cz) {                /* task diagf
 /* the rule on one anchored chain (x0, z0, n rows), canonical; -> 1 accepted (cells in p->cell), 0 refused */
 static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     DbvUse use[DBV_MAX_USES];
-    BYTE endrow[DBV_MAX_ROWS];
+    BYTE endrow[DBV_MAX_ROWS], jbrow[DBV_MAX_ROWS];                      /* task diagfix: DBVJBV rows */
     int nu = 0, e, k, j, i, cx, cz, nclean = 0, armx[256], armz[256], armo[256], na = 0;
     int sw, se, na0, tbad = 0;                                           /* task dbvtouch */
     int ekind[2] = { DK_NONE, DK_NONE };                                 /* task diagfix: DBVCAPCLEAN */
@@ -414,6 +432,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     p->ragged = 0;                                                       /* task avrbtfix */
     p->nstub = 0;                                                        /* task dbvtouch */
     memset(endrow, 0, n);
+    memset(jbrow, 0, n);
 #define IN_CHAIN(z) ((z) >= z0 && (z) < z0 + n)
 #define LEFT(z) (x0 + (z) - z0)
 #define MARK(cx, cz) (*dbv_mk(p, p->mark, (cx), (cz)))
@@ -494,10 +513,44 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                     for (dx = 4 - j; dx < 512 && DBV_RDE(dx, -j); dx++) MARK(DBV_CELLX(dx, -j), DBV_CELLZ(dx, -j)) |= 2;
         }
     }
+    /* ---- task diagfix DBVJBV: a boulevard's three rows beside the band (one side or both), anchored on the middle row */
+    for (k = 1; k + 1 < n && g_dbv_nst[DK_JBVX] + g_dbv_nst[DK_JBVE] && dbv_jbv_on(); k++) {
+        int sd[2], s2, t2, kind2;
+        if (endrow[k - 1] || endrow[k] || endrow[k + 1]) continue;
+        for (s2 = 0; s2 < 2; s2++) {
+            int ok3 = 1, za = z0 + k - 2, zb = z0 + k + 2;
+            for (t2 = -1; t2 <= 1 && ok3; t2++) {
+                int z = z0 + k + t2, a = LEFT(z);
+                ok3 = s2 ? dbv_rd(p, a + 4, z) && dbv_rd(p, a + 5, z) : dbv_rd(p, a - 1, z) && dbv_rd(p, a - 2, z);
+            }
+            if (ok3 && (s2 ? dbv_rd(p, LEFT(za) + 4, za) || dbv_rd(p, LEFT(zb) + 4, zb)       /* exactly three rows */
+                           : dbv_rd(p, LEFT(za) - 1, za) || dbv_rd(p, LEFT(zb) - 1, zb)))
+                ok3 = 0;
+            sd[s2] = ok3;
+        }
+        if (!sd[0] && !sd[1]) continue;
+        kind2 = sd[0] && sd[1] ? DK_JBVX : DK_JBVE;
+        if (kind2 == DK_JBVE && g_dbv_nst[DK_JBVEO]) {          /* the drags' one-cell overshoot past the band's far */
+            int ax = LEFT(z0 + k) + (sd[1] ? 0 : 3), az = z0 + k + (sd[1] ? 1 : -1);      /* edge (xsect 44): drawn */
+            if (dbv_rd(p, ax, az) && !dbv_rd(p, sd[1] ? ax - 1 : ax + 1, az)) kind2 = DK_JBVEO;   /* by the box */
+        }
+        if (!g_dbv_nst[kind2]) continue;
+        ADDUSE(kind2, LEFT(z0 + k), z0 + k, sd[0] && !sd[1]);
+        for (t2 = -1; t2 <= 1; t2++) {
+            int z = z0 + k + t2, a = LEFT(z), j2;
+            jbrow[k + t2] = 1;
+            for (s2 = 0; s2 < 2; s2++)                         /* the boulevard's cells: BV's, path */
+                for (j2 = 1; j2 <= 3 && sd[s2]; j2++) {
+                    int cx2 = s2 ? a + 3 + j2 : a - j2;
+                    if (dbv_rd(p, cx2, z)) MARK(cx2, z) |= 2;
+                }
+        }
+        k += 2;
+    }
     /* ---- row roads (W / E arms) */
     for (k = 0; k < n; k++) {
         int z = z0 + k, a = LEFT(z), w, ea, rw, re;
-        if (endrow[k]) continue;
+        if (endrow[k] || jbrow[k]) continue;
         w = dbv_rd(p, a - 1, z); ea = dbv_rd(p, a + 4, z);
         rw = w && dbv_rd(p, a - 2, z) && !OUTSIDE(a - 1, z + 1) && !OUTSIDE(a - 2, z + 1) && !OUTSIDE(a - 2, z - 1);
         re = ea && dbv_rd(p, a + 5, z) && !OUTSIDE(a + 4, z - 1) && !OUTSIDE(a + 5, z - 1) && !OUTSIDE(a + 5, z + 1);
@@ -561,7 +614,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     }
     /* ---- clean rows besides junction and end rows */
     for (k = 0; k < n; k++) {
-        int z = z0 + k, a = LEFT(z), jr = endrow[k];
+        int z = z0 + k, a = LEFT(z), jr = endrow[k] || jbrow[k];        /* diagfix: DBVJBV rows */
         for (i = 0; i < nu && !jr; i++) {
             if (use[i].kind == DK_JROW_BOTH || use[i].kind == DK_JROW_A) jr = use[i].rz == z;
             if (use[i].kind == DK_JCOL_BOTH || use[i].kind == DK_JCOL_A) jr = z >= use[i].rz - 3 && z <= use[i].rz;

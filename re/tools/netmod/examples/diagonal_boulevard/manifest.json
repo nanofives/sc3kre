@@ -2555,6 +2555,300 @@
     "png_dir": "art/22469"
    },
    "trblkatt": "none"
+  },
+  {
+   "id": 22700,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22700"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22701,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22701"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22702,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22702"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22703,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22703"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22704,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22704"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22705,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22705"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22706,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22706"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22707,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22707"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22708,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22708"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22709,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22709"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22710,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22710"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22711,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22711"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22712,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22712"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22713,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22713"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22714,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22714"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22715,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22715"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22716,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22716"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22717,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22717"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22718,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22718"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22719,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22719"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22720,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22720"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -4331,6 +4625,234 @@
       3,
       0,
       22391,
+      0
+     ]
+    ],
+    "jbv-x": [
+     [
+      -1,
+      -1,
+      22700,
+      0
+     ],
+     [
+      0,
+      -1,
+      22701,
+      0
+     ],
+     [
+      1,
+      -1,
+      22702,
+      0
+     ],
+     [
+      2,
+      -1,
+      22703,
+      0
+     ],
+     [
+      0,
+      0,
+      22704,
+      0
+     ],
+     [
+      1,
+      0,
+      22705,
+      0
+     ],
+     [
+      2,
+      0,
+      22706,
+      0
+     ],
+     [
+      3,
+      0,
+      22707,
+      0
+     ],
+     [
+      1,
+      1,
+      22708,
+      0
+     ],
+     [
+      2,
+      1,
+      22709,
+      0
+     ],
+     [
+      3,
+      1,
+      22710,
+      0
+     ],
+     [
+      4,
+      1,
+      22711,
+      0
+     ]
+    ],
+    "jbv-e": [
+     [
+      -1,
+      -1,
+      22712,
+      0
+     ],
+     [
+      0,
+      -1,
+      22713,
+      0
+     ],
+     [
+      1,
+      -1,
+      22702,
+      0
+     ],
+     [
+      2,
+      -1,
+      22714,
+      0
+     ],
+     [
+      0,
+      0,
+      22715,
+      0
+     ],
+     [
+      1,
+      0,
+      22716,
+      0
+     ],
+     [
+      2,
+      0,
+      22706,
+      0
+     ],
+     [
+      3,
+      0,
+      22717,
+      0
+     ],
+     [
+      1,
+      1,
+      22718,
+      0
+     ],
+     [
+      2,
+      1,
+      22719,
+      0
+     ],
+     [
+      3,
+      1,
+      22710,
+      0
+     ],
+     [
+      4,
+      1,
+      22711,
+      0
+     ]
+    ],
+    "jbv-eo": [
+     [
+      -1,
+      -1,
+      22712,
+      0
+     ],
+     [
+      0,
+      -1,
+      22713,
+      0
+     ],
+     [
+      1,
+      -1,
+      22702,
+      0
+     ],
+     [
+      2,
+      -1,
+      22714,
+      0
+     ],
+     [
+      0,
+      0,
+      22715,
+      0
+     ],
+     [
+      1,
+      0,
+      22716,
+      0
+     ],
+     [
+      2,
+      0,
+      22706,
+      0
+     ],
+     [
+      3,
+      0,
+      22717,
+      0
+     ],
+     [
+      0,
+      1,
+      22720,
+      0
+     ],
+     [
+      1,
+      1,
+      22718,
+      0
+     ],
+     [
+      2,
+      1,
+      22719,
+      0
+     ],
+     [
+      3,
+      1,
+      22710,
+      0
+     ],
+     [
+      4,
+      1,
+      22711,
       0
      ]
     ]
