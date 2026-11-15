@@ -2849,6 +2849,916 @@
     "png_dir": "art/22720"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 22721,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22721"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22722,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22722"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22723,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22723"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22724,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22724"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22725,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22725"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22726,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22726"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22727,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22727"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22728,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22728"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22729,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22729"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22730,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22730"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22731,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22731"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22732,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22732"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22733,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22733"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22734,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22734"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22735,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22735"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22736,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22736"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22737,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22737"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22738,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22738"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22739,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22739"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22740,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22740"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22741,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22741"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22742,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22742"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22743,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22743"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22744,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22744"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22745,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22745"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22746,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22746"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22747,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22747"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22748,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22748"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22749,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22749"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22750,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22750"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22751,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22751"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22752,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22752"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22753,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22753"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22754,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22754"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22755,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22755"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22756,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22756"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22757,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22757"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22758,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22758"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22759,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22759"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22760,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22760"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22761,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22761"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22762,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22762"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22763,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22763"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22764,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22764"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22765,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22765"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22766,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22766"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22767,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22767"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22768,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22768"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22769,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22769"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22770,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22770"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22771,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22771"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22772,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22772"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22773,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22773"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22774,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22774"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22775,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22775"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22776,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22776"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22777,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22777"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22778,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22778"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22779,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22779"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22780,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22780"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22781,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22781"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22782,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22782"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22783,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22783"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22784,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22784"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22785,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard junction",
+    "ENGLISH": "Cruce de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22785"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -4856,7 +5766,1923 @@
       0
      ]
     ]
-   }
+   },
+   "crossing": [
+    {
+     "id": 1,
+     "x0": -1,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "-r.....rrrrr...rrrrrrr.rrr..rrrrrr....rrrr.....rrrrr...rrrrrrr.rrr..rrrrrr....rr-",
+     "writes": [
+      [
+       0,
+       -3,
+       20950,
+       0
+      ],
+      [
+       2,
+       1,
+       22723,
+       3
+      ],
+      [
+       2,
+       2,
+       22721,
+       3
+      ],
+      [
+       3,
+       0,
+       22726,
+       3
+      ],
+      [
+       3,
+       1,
+       22724,
+       3
+      ],
+      [
+       3,
+       2,
+       22722,
+       3
+      ],
+      [
+       4,
+       0,
+       22727,
+       3
+      ],
+      [
+       4,
+       1,
+       22725,
+       3
+      ]
+     ],
+     "_": "49 cross g0"
+    },
+    {
+     "id": 2,
+     "x0": -1,
+     "z0": -2,
+     "w": 9,
+     "h": 9,
+     "grid": "-rr....rrrrrr..rrr.rrrrrrr...rrrrr.....rrrr....rrrrrr..rrr.rrrrrrr...rrrrr.....r-",
+     "writes": [
+      [
+       2,
+       2,
+       22725,
+       1
+      ],
+      [
+       2,
+       3,
+       22727,
+       1
+      ],
+      [
+       3,
+       1,
+       22722,
+       1
+      ],
+      [
+       3,
+       2,
+       22724,
+       1
+      ],
+      [
+       3,
+       3,
+       22726,
+       1
+      ],
+      [
+       4,
+       1,
+       22721,
+       1
+      ],
+      [
+       4,
+       2,
+       22723,
+       1
+      ],
+      [
+       6,
+       6,
+       20950,
+       2
+      ]
+     ],
+     "_": "49 cross g1"
+    },
+    {
+     "id": 3,
+     "x0": -5,
+     "z0": -7,
+     "w": 9,
+     "h": 9,
+     "grid": "-......rr......rrr.....rrr.....rrr.....rrr.....rrrrr...rrr.rrr.rrr..rrrrrr....rr-",
+     "writes": [
+      [
+       -2,
+       -3,
+       22730,
+       3
+      ],
+      [
+       -2,
+       -2,
+       22728,
+       3
+      ],
+      [
+       -1,
+       -4,
+       22733,
+       3
+      ],
+      [
+       -1,
+       -3,
+       22731,
+       3
+      ],
+      [
+       -1,
+       -2,
+       22729,
+       3
+      ],
+      [
+       0,
+       -4,
+       22727,
+       3
+      ],
+      [
+       0,
+       -3,
+       22732,
+       3
+      ],
+      [
+       0,
+       -2,
+       20951,
+       0
+      ],
+      [
+       0,
+       -1,
+       20951,
+       2
+      ],
+      [
+       1,
+       -2,
+       20950,
+       0
+      ],
+      [
+       1,
+       -1,
+       20951,
+       0
+      ],
+      [
+       2,
+       -1,
+       20950,
+       0
+      ]
+     ],
+     "_": "50 T stem 1 edge 1 g0"
+    },
+    {
+     "id": 4,
+     "x0": 0,
+     "z0": -1,
+     "w": 9,
+     "h": 9,
+     "grid": "-rr....rrrrrr..rrr.rrr.rrr...rrrrr.....rrr.....rrr.....rrr.....rrr......rr......-",
+     "writes": [
+      [
+       1,
+       1,
+       20950,
+       2
+      ],
+      [
+       2,
+       1,
+       20951,
+       2
+      ],
+      [
+       2,
+       2,
+       20950,
+       2
+      ],
+      [
+       3,
+       1,
+       20951,
+       0
+      ],
+      [
+       3,
+       2,
+       20951,
+       2
+      ],
+      [
+       3,
+       3,
+       22732,
+       1
+      ],
+      [
+       3,
+       4,
+       22727,
+       1
+      ],
+      [
+       4,
+       2,
+       22729,
+       1
+      ],
+      [
+       4,
+       3,
+       22731,
+       1
+      ],
+      [
+       4,
+       4,
+       22733,
+       1
+      ],
+      [
+       5,
+       2,
+       22728,
+       1
+      ],
+      [
+       5,
+       3,
+       22730,
+       1
+      ]
+     ],
+     "_": "50 T stem 1 edge 1 g1"
+    },
+    {
+     "id": 5,
+     "x0": -7,
+     "z0": -7,
+     "w": 11,
+     "h": 11,
+     "grid": "---......r.--......rr.-......rrr.......rrr.......rrr.......rrrrr.....rrr.rrr...rrr..rrrr.rrr....rr-.rr......--.r......---",
+     "writes": [
+      [
+       -4,
+       -1,
+       22734,
+       3
+      ],
+      [
+       -4,
+       0,
+       22734,
+       3
+      ],
+      [
+       -3,
+       -2,
+       22734,
+       3
+      ],
+      [
+       -3,
+       -1,
+       22734,
+       3
+      ],
+      [
+       -3,
+       0,
+       22734,
+       3
+      ],
+      [
+       -2,
+       -3,
+       22737,
+       3
+      ],
+      [
+       -2,
+       -2,
+       22735,
+       3
+      ],
+      [
+       -2,
+       -1,
+       22734,
+       3
+      ],
+      [
+       -1,
+       -4,
+       22740,
+       3
+      ],
+      [
+       -1,
+       -3,
+       22738,
+       3
+      ],
+      [
+       -1,
+       -2,
+       22736,
+       3
+      ],
+      [
+       0,
+       -5,
+       22743,
+       3
+      ],
+      [
+       0,
+       -4,
+       22741,
+       3
+      ],
+      [
+       0,
+       -3,
+       22739,
+       3
+      ],
+      [
+       0,
+       -2,
+       20951,
+       0
+      ],
+      [
+       0,
+       -1,
+       20951,
+       2
+      ],
+      [
+       1,
+       -6,
+       22746,
+       3
+      ],
+      [
+       1,
+       -5,
+       22744,
+       3
+      ],
+      [
+       1,
+       -4,
+       22742,
+       3
+      ],
+      [
+       1,
+       -2,
+       20950,
+       0
+      ],
+      [
+       1,
+       -1,
+       20951,
+       0
+      ],
+      [
+       2,
+       -7,
+       22748,
+       3
+      ],
+      [
+       2,
+       -6,
+       22747,
+       3
+      ],
+      [
+       2,
+       -5,
+       22745,
+       3
+      ],
+      [
+       2,
+       -1,
+       20950,
+       0
+      ]
+     ],
+     "_": "52 L ends 0 1 g0"
+    },
+    {
+     "id": 6,
+     "x0": 0,
+     "z0": -3,
+     "w": 11,
+     "h": 11,
+     "grid": "---......r.--......rr.-rr....rrr.rrrr..rrr...rrr.rrr.....rrrrr.......rrr.......rrr.......rrr......-.rr......--.r......---",
+     "writes": [
+      [
+       1,
+       1,
+       20950,
+       2
+      ],
+      [
+       1,
+       5,
+       22745,
+       1
+      ],
+      [
+       1,
+       6,
+       22747,
+       1
+      ],
+      [
+       1,
+       7,
+       22748,
+       1
+      ],
+      [
+       2,
+       1,
+       20951,
+       2
+      ],
+      [
+       2,
+       2,
+       20950,
+       2
+      ],
+      [
+       2,
+       4,
+       22742,
+       1
+      ],
+      [
+       2,
+       5,
+       22744,
+       1
+      ],
+      [
+       2,
+       6,
+       22746,
+       1
+      ],
+      [
+       3,
+       1,
+       20951,
+       0
+      ],
+      [
+       3,
+       2,
+       20951,
+       2
+      ],
+      [
+       3,
+       3,
+       22739,
+       1
+      ],
+      [
+       3,
+       4,
+       22741,
+       1
+      ],
+      [
+       3,
+       5,
+       22743,
+       1
+      ],
+      [
+       4,
+       2,
+       22736,
+       1
+      ],
+      [
+       4,
+       3,
+       22738,
+       1
+      ],
+      [
+       4,
+       4,
+       22740,
+       1
+      ],
+      [
+       5,
+       1,
+       22734,
+       1
+      ],
+      [
+       5,
+       2,
+       22735,
+       1
+      ],
+      [
+       5,
+       3,
+       22737,
+       1
+      ],
+      [
+       6,
+       0,
+       22734,
+       1
+      ],
+      [
+       6,
+       1,
+       22734,
+       1
+      ],
+      [
+       6,
+       2,
+       22734,
+       1
+      ],
+      [
+       7,
+       0,
+       22734,
+       1
+      ],
+      [
+       7,
+       1,
+       22734,
+       1
+      ]
+     ],
+     "_": "52 L ends 0 1 g1"
+    },
+    {
+     "id": 7,
+     "x0": -3,
+     "z0": -3,
+     "w": 11,
+     "h": 11,
+     "grid": "---r.......--rrr...rrr-.rrrr.rrr....rrrrrr.......rrr.......rrr.......rrr.......rrr.......rrr......-rrr......--........---",
+     "writes": [
+      [
+       0,
+       3,
+       22734,
+       3
+      ],
+      [
+       0,
+       4,
+       22734,
+       3
+      ],
+      [
+       1,
+       2,
+       22734,
+       3
+      ],
+      [
+       1,
+       3,
+       22734,
+       3
+      ],
+      [
+       1,
+       4,
+       22734,
+       3
+      ],
+      [
+       2,
+       1,
+       22750,
+       3
+      ],
+      [
+       2,
+       2,
+       22749,
+       3
+      ],
+      [
+       2,
+       3,
+       22734,
+       3
+      ],
+      [
+       3,
+       0,
+       22753,
+       3
+      ],
+      [
+       3,
+       1,
+       22752,
+       3
+      ],
+      [
+       3,
+       2,
+       22751,
+       3
+      ],
+      [
+       4,
+       -1,
+       22756,
+       3
+      ],
+      [
+       4,
+       0,
+       22755,
+       3
+      ],
+      [
+       4,
+       1,
+       22754,
+       3
+      ],
+      [
+       5,
+       -2,
+       22759,
+       3
+      ],
+      [
+       5,
+       -1,
+       22758,
+       3
+      ],
+      [
+       5,
+       0,
+       22757,
+       3
+      ],
+      [
+       6,
+       -2,
+       22734,
+       3
+      ],
+      [
+       6,
+       -1,
+       22760,
+       3
+      ],
+      [
+       7,
+       -2,
+       22761,
+       3
+      ]
+     ],
+     "_": "52 L ends 0 1 g4"
+    },
+    {
+     "id": 8,
+     "x0": -4,
+     "z0": -7,
+     "w": 11,
+     "h": 11,
+     "grid": "---........--......rrr-......rrr.......rrr.......rrr.......rrr.......rrr.......rrrrrr....rrr.rrrr.-rrr...rrr--.......r---",
+     "writes": [
+      [
+       -4,
+       2,
+       22761,
+       1
+      ],
+      [
+       -3,
+       1,
+       22760,
+       1
+      ],
+      [
+       -3,
+       2,
+       22734,
+       1
+      ],
+      [
+       -2,
+       0,
+       22757,
+       1
+      ],
+      [
+       -2,
+       1,
+       22758,
+       1
+      ],
+      [
+       -2,
+       2,
+       22759,
+       1
+      ],
+      [
+       -1,
+       -1,
+       22754,
+       1
+      ],
+      [
+       -1,
+       0,
+       22755,
+       1
+      ],
+      [
+       -1,
+       1,
+       22756,
+       1
+      ],
+      [
+       0,
+       -2,
+       22751,
+       1
+      ],
+      [
+       0,
+       -1,
+       22752,
+       1
+      ],
+      [
+       0,
+       0,
+       22753,
+       1
+      ],
+      [
+       1,
+       -3,
+       22734,
+       1
+      ],
+      [
+       1,
+       -2,
+       22749,
+       1
+      ],
+      [
+       1,
+       -1,
+       22750,
+       1
+      ],
+      [
+       2,
+       -4,
+       22734,
+       1
+      ],
+      [
+       2,
+       -3,
+       22734,
+       1
+      ],
+      [
+       2,
+       -2,
+       22734,
+       1
+      ],
+      [
+       3,
+       -4,
+       22734,
+       1
+      ],
+      [
+       3,
+       -3,
+       22734,
+       1
+      ]
+     ],
+     "_": "52 L ends 0 1 g5"
+    },
+    {
+     "id": 9,
+     "x0": -1,
+     "z0": -3,
+     "w": 9,
+     "h": 10,
+     "grid": "-r.....r-rrr...rrrrrrr.rrrr.rrrrrrr...rrrrr....rrrrr...rrrrrrr.rrrr.rrrrrrr...rrr-r.....r-",
+     "writes": [
+      [
+       2,
+       1,
+       22762,
+       0
+      ],
+      [
+       2,
+       2,
+       22763,
+       0
+      ],
+      [
+       3,
+       0,
+       22764,
+       0
+      ],
+      [
+       3,
+       1,
+       22765,
+       0
+      ],
+      [
+       3,
+       2,
+       22766,
+       0
+      ],
+      [
+       3,
+       3,
+       22767,
+       0
+      ],
+      [
+       4,
+       1,
+       22768,
+       0
+      ],
+      [
+       4,
+       2,
+       22769,
+       0
+      ],
+      [
+       7,
+       -2,
+       20951,
+       1
+      ],
+      [
+       7,
+       -1,
+       20950,
+       1
+      ]
+     ],
+     "_": "53 cross g0"
+    },
+    {
+     "id": 10,
+     "x0": -1,
+     "z0": -2,
+     "w": 10,
+     "h": 9,
+     "grid": "-rr....rr-rrrr..rrrr.rrrrrrrr...rrrrrr.....rrrr.....rrrrrr...rrrrrrrr.rrrr..rrrr-rr....rr-",
+     "writes": [
+      [
+       0,
+       -2,
+       20951,
+       0
+      ],
+      [
+       1,
+       -2,
+       20950,
+       0
+      ],
+      [
+       2,
+       2,
+       22764,
+       3
+      ],
+      [
+       3,
+       1,
+       22768,
+       3
+      ],
+      [
+       3,
+       2,
+       22765,
+       3
+      ],
+      [
+       3,
+       3,
+       22762,
+       3
+      ],
+      [
+       4,
+       1,
+       22769,
+       3
+      ],
+      [
+       4,
+       2,
+       22766,
+       3
+      ],
+      [
+       4,
+       3,
+       22763,
+       3
+      ],
+      [
+       5,
+       2,
+       22767,
+       3
+      ]
+     ],
+     "_": "53 cross g0"
+    },
+    {
+     "id": 11,
+     "x0": -4,
+     "z0": -6,
+     "w": 9,
+     "h": 10,
+     "grid": "-r......-rrr......rrrr......rrrr......rrrr......rrrr...rrrrrrr.rrrr.rrrrrrr...rrr-r.....r-",
+     "writes": [
+      [
+       -2,
+       0,
+       20951,
+       3
+      ],
+      [
+       -2,
+       1,
+       20951,
+       1
+      ],
+      [
+       -2,
+       2,
+       20950,
+       1
+      ],
+      [
+       -1,
+       -2,
+       22770,
+       0
+      ],
+      [
+       -1,
+       -1,
+       22771,
+       0
+      ],
+      [
+       -1,
+       0,
+       20951,
+       1
+      ],
+      [
+       -1,
+       1,
+       20950,
+       1
+      ],
+      [
+       0,
+       -3,
+       22772,
+       0
+      ],
+      [
+       0,
+       -2,
+       22773,
+       0
+      ],
+      [
+       0,
+       -1,
+       22774,
+       0
+      ],
+      [
+       0,
+       0,
+       22775,
+       0
+      ],
+      [
+       1,
+       -2,
+       22776,
+       0
+      ],
+      [
+       1,
+       -1,
+       22777,
+       0
+      ]
+     ],
+     "_": "54 T stem 1 edge 1 g0"
+    },
+    {
+     "id": 12,
+     "x0": -6,
+     "z0": -7,
+     "w": 10,
+     "h": 9,
+     "grid": "-......rr-......rrrr.....rrrr.....rrrr.....rrrr.....rrrrrr...rrrr.rrr.rrrr..rrrr-rr....rr-",
+     "writes": [
+      [
+       -3,
+       -3,
+       22772,
+       3
+      ],
+      [
+       -2,
+       -4,
+       22776,
+       3
+      ],
+      [
+       -2,
+       -3,
+       22773,
+       3
+      ],
+      [
+       -2,
+       -2,
+       22770,
+       3
+      ],
+      [
+       -1,
+       -4,
+       22777,
+       3
+      ],
+      [
+       -1,
+       -3,
+       22774,
+       3
+      ],
+      [
+       -1,
+       -2,
+       22771,
+       3
+      ],
+      [
+       0,
+       -3,
+       22775,
+       3
+      ],
+      [
+       0,
+       -2,
+       20951,
+       0
+      ],
+      [
+       0,
+       -1,
+       20951,
+       2
+      ],
+      [
+       1,
+       -2,
+       20950,
+       0
+      ],
+      [
+       1,
+       -1,
+       20951,
+       0
+      ],
+      [
+       2,
+       -1,
+       20950,
+       0
+      ]
+     ],
+     "_": "54 T stem 1 edge 1 g0"
+    },
+    {
+     "id": 13,
+     "x0": 0,
+     "z0": -1,
+     "w": 10,
+     "h": 9,
+     "grid": "-rr....rr-rrrr..rrrr.rrr.rrrr...rrrrrr.....rrrr.....rrrr.....rrrr.....rrrr......-rr......-",
+     "writes": [
+      [
+       1,
+       1,
+       20950,
+       2
+      ],
+      [
+       2,
+       1,
+       20951,
+       2
+      ],
+      [
+       2,
+       2,
+       20950,
+       2
+      ],
+      [
+       3,
+       1,
+       20951,
+       0
+      ],
+      [
+       3,
+       2,
+       20951,
+       2
+      ],
+      [
+       3,
+       3,
+       22775,
+       1
+      ],
+      [
+       4,
+       2,
+       22771,
+       1
+      ],
+      [
+       4,
+       3,
+       22774,
+       1
+      ],
+      [
+       4,
+       4,
+       22777,
+       1
+      ],
+      [
+       5,
+       2,
+       22770,
+       1
+      ],
+      [
+       5,
+       3,
+       22773,
+       1
+      ],
+      [
+       5,
+       4,
+       22776,
+       1
+      ],
+      [
+       6,
+       3,
+       22772,
+       1
+      ]
+     ],
+     "_": "54 T stem 1 edge 1 g1"
+    },
+    {
+     "id": 14,
+     "x0": -1,
+     "z0": -3,
+     "w": 9,
+     "h": 10,
+     "grid": "-r.....r-rrr...rrrrrrr.rrrr.rrrrrrr...rrrr......rrrr......rrrr......rrrr......rrr-......r-",
+     "writes": [
+      [
+       2,
+       1,
+       22777,
+       2
+      ],
+      [
+       2,
+       2,
+       22776,
+       2
+      ],
+      [
+       3,
+       0,
+       22775,
+       2
+      ],
+      [
+       3,
+       1,
+       22774,
+       2
+      ],
+      [
+       3,
+       2,
+       22773,
+       2
+      ],
+      [
+       3,
+       3,
+       22772,
+       2
+      ],
+      [
+       4,
+       -1,
+       20950,
+       3
+      ],
+      [
+       4,
+       0,
+       20951,
+       3
+      ],
+      [
+       4,
+       1,
+       22771,
+       2
+      ],
+      [
+       4,
+       2,
+       22770,
+       2
+      ],
+      [
+       5,
+       -2,
+       20950,
+       3
+      ],
+      [
+       5,
+       -1,
+       20951,
+       3
+      ],
+      [
+       5,
+       0,
+       20951,
+       1
+      ]
+     ],
+     "_": "54 T stem 1 edge 1 g2"
+    },
+    {
+     "id": 15,
+     "x0": -6,
+     "z0": -8,
+     "w": 11,
+     "h": 12,
+     "grid": "-.......---.........--rrrr......-.rrrr........rrrr........rrrr........rrrr........rrrr.....rrrrrrr.-.rrrr.rrrr--rrr...rrr---r......-",
+     "writes": [
+      [
+       -3,
+       -4,
+       22734,
+       0
+      ],
+      [
+       -3,
+       -3,
+       22734,
+       0
+      ],
+      [
+       -2,
+       -5,
+       22734,
+       0
+      ],
+      [
+       -2,
+       -4,
+       22734,
+       0
+      ],
+      [
+       -2,
+       -3,
+       22734,
+       0
+      ],
+      [
+       -2,
+       -2,
+       22734,
+       0
+      ],
+      [
+       -2,
+       0,
+       20951,
+       3
+      ],
+      [
+       -2,
+       1,
+       20951,
+       1
+      ],
+      [
+       -2,
+       2,
+       20950,
+       1
+      ],
+      [
+       -1,
+       -4,
+       22734,
+       0
+      ],
+      [
+       -1,
+       -3,
+       22734,
+       0
+      ],
+      [
+       -1,
+       -2,
+       22778,
+       0
+      ],
+      [
+       -1,
+       -1,
+       22779,
+       0
+      ],
+      [
+       -1,
+       0,
+       20951,
+       1
+      ],
+      [
+       -1,
+       1,
+       20950,
+       1
+      ],
+      [
+       0,
+       -3,
+       22780,
+       0
+      ],
+      [
+       0,
+       -2,
+       22781,
+       0
+      ],
+      [
+       0,
+       -1,
+       22782,
+       0
+      ],
+      [
+       0,
+       0,
+       22783,
+       0
+      ],
+      [
+       1,
+       -2,
+       22784,
+       0
+      ],
+      [
+       1,
+       -1,
+       22785,
+       0
+      ]
+     ],
+     "_": "55 L ends 0 1 g0"
+    },
+    {
+     "id": 16,
+     "x0": -8,
+     "z0": -7,
+     "w": 12,
+     "h": 11,
+     "grid": "---......rr---......rrr.-......rrrr.......rrrr.......rrrr.......rrrrrr.....rrrr.rrr...rrrr..rrrr..rrr....rr-..rr......---.r......---",
+     "writes": [
+      [
+       -5,
+       -1,
+       22734,
+       3
+      ],
+      [
+       -4,
+       -2,
+       22734,
+       3
+      ],
+      [
+       -4,
+       -1,
+       22734,
+       3
+      ],
+      [
+       -4,
+       0,
+       22734,
+       3
+      ],
+      [
+       -3,
+       -3,
+       22780,
+       3
+      ],
+      [
+       -3,
+       -2,
+       22734,
+       3
+      ],
+      [
+       -3,
+       -1,
+       22734,
+       3
+      ],
+      [
+       -3,
+       0,
+       22734,
+       3
+      ],
+      [
+       -2,
+       -4,
+       22784,
+       3
+      ],
+      [
+       -2,
+       -3,
+       22781,
+       3
+      ],
+      [
+       -2,
+       -2,
+       22778,
+       3
+      ],
+      [
+       -2,
+       -1,
+       22734,
+       3
+      ],
+      [
+       -1,
+       -4,
+       22785,
+       3
+      ],
+      [
+       -1,
+       -3,
+       22782,
+       3
+      ],
+      [
+       -1,
+       -2,
+       22779,
+       3
+      ],
+      [
+       0,
+       -3,
+       22783,
+       3
+      ],
+      [
+       0,
+       -2,
+       20951,
+       0
+      ],
+      [
+       0,
+       -1,
+       20951,
+       2
+      ],
+      [
+       1,
+       -2,
+       20950,
+       0
+      ],
+      [
+       1,
+       -1,
+       20951,
+       0
+      ],
+      [
+       2,
+       -1,
+       20950,
+       0
+      ]
+     ],
+     "_": "55 L ends 0 1 g0"
+    },
+    {
+     "id": 17,
+     "x0": 0,
+     "z0": -3,
+     "w": 12,
+     "h": 11,
+     "grid": "---......r.---......rr..-rr....rrr..rrrr..rrrr...rrr.rrrr.....rrrrrr.......rrrr.......rrrr.......rrrr......-.rrr......---rr......---",
+     "writes": [
+      [
+       1,
+       1,
+       20950,
+       2
+      ],
+      [
+       2,
+       1,
+       20951,
+       2
+      ],
+      [
+       2,
+       2,
+       20950,
+       2
+      ],
+      [
+       3,
+       1,
+       20951,
+       0
+      ],
+      [
+       3,
+       2,
+       20951,
+       2
+      ],
+      [
+       3,
+       3,
+       22783,
+       1
+      ],
+      [
+       4,
+       2,
+       22779,
+       1
+      ],
+      [
+       4,
+       3,
+       22782,
+       1
+      ],
+      [
+       4,
+       4,
+       22785,
+       1
+      ],
+      [
+       5,
+       1,
+       22734,
+       1
+      ],
+      [
+       5,
+       2,
+       22778,
+       1
+      ],
+      [
+       5,
+       3,
+       22781,
+       1
+      ],
+      [
+       5,
+       4,
+       22784,
+       1
+      ],
+      [
+       6,
+       0,
+       22734,
+       1
+      ],
+      [
+       6,
+       1,
+       22734,
+       1
+      ],
+      [
+       6,
+       2,
+       22734,
+       1
+      ],
+      [
+       6,
+       3,
+       22780,
+       1
+      ],
+      [
+       7,
+       0,
+       22734,
+       1
+      ],
+      [
+       7,
+       1,
+       22734,
+       1
+      ],
+      [
+       7,
+       2,
+       22734,
+       1
+      ],
+      [
+       8,
+       1,
+       22734,
+       1
+      ]
+     ],
+     "_": "55 L ends 0 1 g1"
+    },
+    {
+     "id": 18,
+     "x0": -1,
+     "z0": -3,
+     "w": 11,
+     "h": 12,
+     "grid": "-......r---rrr...rrr--rrrr.rrrr.-.rrrrrrr.....rrrr........rrrr........rrrr........rrrr........rrrr.-......rrrr--.........---.......-",
+     "writes": [
+      [
+       2,
+       1,
+       22785,
+       2
+      ],
+      [
+       2,
+       2,
+       22784,
+       2
+      ],
+      [
+       3,
+       0,
+       22783,
+       2
+      ],
+      [
+       3,
+       1,
+       22782,
+       2
+      ],
+      [
+       3,
+       2,
+       22781,
+       2
+      ],
+      [
+       3,
+       3,
+       22780,
+       2
+      ],
+      [
+       4,
+       -1,
+       20950,
+       3
+      ],
+      [
+       4,
+       0,
+       20951,
+       3
+      ],
+      [
+       4,
+       1,
+       22779,
+       2
+      ],
+      [
+       4,
+       2,
+       22778,
+       2
+      ],
+      [
+       4,
+       3,
+       22734,
+       2
+      ],
+      [
+       4,
+       4,
+       22734,
+       2
+      ],
+      [
+       5,
+       -2,
+       20950,
+       3
+      ],
+      [
+       5,
+       -1,
+       20951,
+       3
+      ],
+      [
+       5,
+       0,
+       20951,
+       1
+      ],
+      [
+       5,
+       2,
+       22734,
+       2
+      ],
+      [
+       5,
+       3,
+       22734,
+       2
+      ],
+      [
+       5,
+       4,
+       22734,
+       2
+      ],
+      [
+       5,
+       5,
+       22734,
+       2
+      ],
+      [
+       6,
+       3,
+       22734,
+       2
+      ],
+      [
+       6,
+       4,
+       22734,
+       2
+      ]
+     ],
+     "_": "55 L ends 0 1 g2"
+    }
+   ]
   }
  ],
  "avenue_lines": [

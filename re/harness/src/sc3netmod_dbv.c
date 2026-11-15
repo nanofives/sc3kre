@@ -73,9 +73,81 @@ static DWORD *g_dbv_claim;                    /* claims of the current pass: (x 
 static int g_dbv_nclaim;
 static volatile LONG g_dbv_n_bands, g_dbv_n_cells, g_dbv_n_rev;
 
+/* task diagfix (round 2026-11-15, families c / d: xsect 49 50 52 53 54 55): DBVX, crossing templates. A diagonal
+   boulevard meeting a diagonal avenue or another diagonal boulevard (crossing, T, corner) is a paved junction box, the
+   owner's sheet_cd look. Templates are generated offline from that scene over the layout's symmetries, in DBV's
+   canonical frame (verify/diagfix/dbvx_build.py): `dbvx <id> <x0> <z0> <w> <h>` + `dbvxg <id> <row> <cells>` (window
+   from a band row's left cell: r road, . no road, - any) + `dbvxw <id> <dx> <dz> <piece> <state>` (cells to write,
+   canonical state). A band row with road beside it (or a chain end) whose window matches gets the writes; DBV claims
+   them, the diagonal avenue's cells too (DAV yields claimed cells and ends its band there). Off: SC3NETMOD_DBVX=0. */
+#define DBVX_MAX 192
+#define DBVX_MAX_GRID 1024
+#define DBVX_MAX_W 4096
+typedef struct { WORD id, w0, nw; signed char x0, z0; BYTE w, h, got; char grid[DBVX_MAX_GRID]; } DbvX;
+typedef struct { signed char dx, dz; WORD piece; BYTE state; } DbvXW;
+static DbvX g_dbvx[DBVX_MAX];
+static int g_dbvx_n;
+static DbvXW g_dbvxw[DBVX_MAX_W];
+static int g_dbvxw_n;
+static int g_dbvx_on = -1;
+static volatile LONG g_dbvx_hits;
+static int dbvx_on(void) {
+    if (g_dbvx_on < 0) {
+        g_dbvx_on = !env_off("SC3NETMOD_DBVX");
+        logf("dbv: DBVX %s (%d crossing template(s): diagonal x diagonal junction boxes, SC3NETMOD_DBVX)",
+             g_dbvx_on ? "on" : "off", g_dbvx_n);
+    }
+    return g_dbvx_on;
+}
+
+static void dbvx_line(const char *path, const char *line) {
+    unsigned long id, w, h, row, pc, st;
+    long x0, z0, dx, dz;
+    char s[256];
+    int k;
+    if (!strncmp(line, "dbvxg ", 6)) {
+        if (sscanf(line + 6, "%lu %lu %255s", &id, &row, s) == 3)
+            for (k = g_dbvx_n - 1; k >= 0; k--)
+                if (g_dbvx[k].id == id) {
+                    if (row == g_dbvx[k].got && row < g_dbvx[k].h && strlen(s) == g_dbvx[k].w) {
+                        memcpy(g_dbvx[k].grid + row * g_dbvx[k].w, s, g_dbvx[k].w);
+                        g_dbvx[k].got++;
+                        return;
+                    }
+                    break;
+                }
+        logf("### dbv: %s: bad crossing grid line '%s'", path, line);
+        return;
+    }
+    if (!strncmp(line, "dbvxw ", 6)) {
+        if (sscanf(line + 6, "%lu %ld %ld %lu %lu", &id, &dx, &dz, &pc, &st) == 5 && g_dbvx_n &&
+            g_dbvx[g_dbvx_n - 1].id == id && dx >= -100 && dx <= 100 && dz >= -100 && dz <= 100 && pc && pc <= 0xffff &&
+            st <= 3 && (pc == 29 || pc == 35 || g_base[pc]) && g_dbvxw_n < DBVX_MAX_W) {
+            DbvXW *q = &g_dbvxw[g_dbvxw_n++];
+            q->dx = (signed char)dx; q->dz = (signed char)dz; q->piece = (WORD)pc; q->state = (BYTE)st;
+            g_dbvx[g_dbvx_n - 1].nw++;
+            return;
+        }
+        logf("### dbv: %s: bad crossing write line '%s'", path, line);
+        return;
+    }
+    if (sscanf(line + 5, "%lu %ld %ld %lu %lu", &id, &x0, &z0, &w, &h) != 5 || id > 0xffff || w < 1 || h < 1 ||
+        w > 200 || w * h > DBVX_MAX_GRID || x0 < -100 || x0 > 100 || z0 < -100 || z0 > 100) {
+        logf("### dbv: %s: bad crossing line '%s'", path, line);
+        return;
+    }
+    if (g_dbvx_n >= DBVX_MAX) { logf("### dbv: %s: too many crossing templates - ignored", path); return; }
+    {
+        DbvX *t = &g_dbvx[g_dbvx_n++];
+        t->id = (WORD)id; t->x0 = (signed char)x0; t->z0 = (signed char)z0; t->w = (BYTE)w; t->h = (BYTE)h;
+        t->got = 0; t->w0 = (WORD)g_dbvxw_n; t->nw = 0;
+    }
+}
+
 static void dbv_line(const char *path, const char *line) {
     unsigned long k, p, st, o, i;
     long dx, dz;
+    if (!strncmp(line, "dbvx", 4)) { dbvx_line(path, line); return; }   /* task diagfix: DBVX */
     if (!strncmp(line, "dbvb ", 5)) {
         if (sscanf(line + 5, "%lu %lu", &o, &i) != 2 || !o || o > 0xffff || !i || i > 0xffff || !g_base[o] ||
             !g_base[i]) {
@@ -105,6 +177,8 @@ static int dbv_is_piece(WORD id) {
     for (k = 1; k < DBV_KINDS; k++)
         for (j = 0; j < g_dbv_nst[k]; j++)
             if (g_dbv_st[k][j].piece == id && id != 29 && id != 35) return 1;
+    for (k = 0; k < g_dbvxw_n; k++)                                      /* task diagfix: DBVX */
+        if (g_dbvxw[k].piece == id && id != 29 && id != 35) return 1;
     return 0;
 }
 
@@ -424,6 +498,8 @@ static int dbv_rd_any(DbvPass *p, int cx, int cz) {                /* task diagf
 static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     DbvUse use[DBV_MAX_USES];
     BYTE endrow[DBV_MAX_ROWS], jbrow[DBV_MAX_ROWS];                      /* task diagfix: DBVJBV rows */
+    BYTE jxrow[DBV_MAX_ROWS];                                            /* task diagfix: DBVX rows */
+    int nxm = 0, xmt[8], xma[8], xmz[8], m;                              /* task diagfix: DBVX matches */
     int nu = 0, e, k, j, i, cx, cz, nclean = 0, armx[256], armz[256], armo[256], na = 0;
     int sw, se, na0, tbad = 0;                                           /* task dbvtouch */
     int ekind[2] = { DK_NONE, DK_NONE };                                 /* task diagfix: DBVCAPCLEAN */
@@ -433,6 +509,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     p->nstub = 0;                                                        /* task dbvtouch */
     memset(endrow, 0, n);
     memset(jbrow, 0, n);
+    memset(jxrow, 0, n);
 #define IN_CHAIN(z) ((z) >= z0 && (z) < z0 + n)
 #define LEFT(z) (x0 + (z) - z0)
 #define MARK(cx, cz) (*dbv_mk(p, p->mark, (cx), (cz)))
@@ -445,9 +522,35 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             if (T) dbv_turn((K) == DK_JCOL_BOTH || (K) == DK_JCOL_A, &dx_, &dz_); \
             armx[na] = (RX) + dx_; armz[na] = (RZ) + dz_; armo[na] = o_; na++; \
             MARK((RX) + dx_, (RZ) + dz_) |= 4; } } while (0)
+    /* ---- task diagfix DBVX: crossing templates, tried on rows with road beside and on the chain's end rows */
+    for (k = 0; k < n && nxm < 8 && g_dbvx_n && dbvx_on(); k++) {
+        int z = z0 + k, a = LEFT(z), t2;
+        if (k && k != n - 1 && !dbv_rd(p, a - 1, z) && !dbv_rd(p, a + 4, z)) continue;
+        for (t2 = 0; t2 < g_dbvx_n && nxm < 8; t2++) {
+            const DbvX *q = &g_dbvx[t2];
+            int i2, j2, ok = q->got == q->h && q->nw, dup = 0;
+            for (j2 = 0; j2 < q->h && ok; j2++)
+                for (i2 = 0; i2 < q->w && ok; i2++) {
+                    char g = q->grid[j2 * q->w + i2];
+                    if (g != '-' && (g == 'r') != (dbv_rd(p, a + q->x0 + i2, z + q->z0 + j2) != 0)) ok = 0;
+                }
+            if (!ok) continue;
+            for (m = 0; m < nxm; m++) if (xmt[m] == t2) dup = 1;
+            if (dup) continue;
+            xmt[nxm] = t2; xma[nxm] = a; xmz[nxm] = z; nxm++;
+            for (j2 = 0; j2 < q->h; j2++) {
+                int zz = z + q->z0 + j2;
+                if (IN_CHAIN(zz)) jxrow[zz - z0] = 1;
+                for (i2 = 0; i2 < q->w; i2++)
+                    if (q->grid[j2 * q->w + i2] == 'r') MARK(a + q->x0 + i2, zz) |= 2;
+            }
+        }
+    }
     /* ---- ends */
     for (e = 1; e >= 0; e--) {
-        int z_e = e ? z0 + n - 1 : z0, a_e = LEFT(z_e), kind = dbv_end_kind(p, z_e, a_e, e, n), sgn = e ? 1 : -1, dx, dz;
+        int z_e = e ? z0 + n - 1 : z0, a_e = LEFT(z_e), kind, sgn = e ? 1 : -1, dx, dz;
+        if (jxrow[z_e - z0]) continue;                                   /* task diagfix: inside a crossing template */
+        kind = dbv_end_kind(p, z_e, a_e, e, n);
         ekind[e] = kind;                                                 /* task diagfix: DBVCAPCLEAN */
         if (kind == DK_NONE) {
             *why = e ? "bottom end: the roads past the band are not an end this package knows"
@@ -550,7 +653,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     /* ---- row roads (W / E arms) */
     for (k = 0; k < n; k++) {
         int z = z0 + k, a = LEFT(z), w, ea, rw, re;
-        if (endrow[k] || jbrow[k]) continue;
+        if (endrow[k] || jbrow[k] || jxrow[k]) continue;
         w = dbv_rd(p, a - 1, z); ea = dbv_rd(p, a + 4, z);
         rw = w && dbv_rd(p, a - 2, z) && !OUTSIDE(a - 1, z + 1) && !OUTSIDE(a - 2, z + 1) && !OUTSIDE(a - 2, z - 1);
         re = ea && dbv_rd(p, a + 5, z) && !OUTSIDE(a + 4, z - 1) && !OUTSIDE(a + 5, z - 1) && !OUTSIDE(a + 5, z + 1);
@@ -591,7 +694,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     /* ---- column roads: N arm above a row's d3, S arm below the row three down (its d0) */
     for (k = 0; k < n; k++) {
         int z = z0 + k, xc = LEFT(z) + 3, zl = z + 3, south, t, bad = 0;
-        if (endrow[k] || !dbv_rd(p, xc, z - 1) || (MARK(xc, z - 1) & 6)) continue;
+        if (endrow[k] || jxrow[k] || !dbv_rd(p, xc, z - 1) || (MARK(xc, z - 1) & 6)) continue;
         if (!(dbv_rd(p, xc, z - 2) && !OUTSIDE(xc + 1, z - 1) && !OUTSIDE(xc + 1, z - 2) && !OUTSIDE(xc - 1, z - 2)))
             { *why = "road above the band is not a straight single road"; dbv_bad(p, xc, z - 1); return 0; }
         south = IN_CHAIN(zl) && LEFT(zl) == xc && dbv_rd(p, xc, zl + 1) && dbv_rd(p, xc, zl + 2) &&
@@ -603,7 +706,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     }
     for (k = 0; k < n; k++) {
         int z = z0 + k, xc = LEFT(z), t, bad = 0, dup = 0;
-        if (endrow[k] || !dbv_rd(p, xc, z + 1) || (MARK(xc, z + 1) & 6)) continue;
+        if (endrow[k] || jxrow[k] || !dbv_rd(p, xc, z + 1) || (MARK(xc, z + 1) & 6)) continue;
         for (i = 0; i < nu; i++) if (use[i].rx == xc && use[i].rz == z) dup = 1;
         if (dup) continue;
         if (!(dbv_rd(p, xc, z + 2) && !OUTSIDE(xc - 1, z + 1) && !OUTSIDE(xc - 1, z + 2) && !OUTSIDE(xc + 1, z + 2)))
@@ -615,6 +718,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     /* ---- clean rows besides junction and end rows */
     for (k = 0; k < n; k++) {
         int z = z0 + k, a = LEFT(z), jr = endrow[k] || jbrow[k];        /* diagfix: DBVJBV rows */
+        if (jxrow[k]) { nclean++; continue; }                            /* a template's row: a known shape */
         for (i = 0; i < nu && !jr; i++) {
             if (use[i].kind == DK_JROW_BOTH || use[i].kind == DK_JROW_A) jr = use[i].rz == z;
             if (use[i].kind == DK_JCOL_BOTH || use[i].kind == DK_JCOL_A) jr = z >= use[i].rz - 3 && z <= use[i].rz;
@@ -645,6 +749,59 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             p->cell[p->n].want = ((DWORD)(d == 0 || d == 3 ? g_dbv_out : g_dbv_inn) << 8) | ST[d];
             MARK(a + d, z) |= 1 | 32;
             p->n++;
+        }
+    }
+    {                                                                    /* task diagfix DBVX: the templates' cells, */
+        int ord[8], spec[8], t3, u3;                                     /* most specific window first; a template */
+        for (m = 0; m < nxm; m++) {                                      /* disagreeing with cells already written */
+            const DbvX *q = &g_dbvx[xmt[m]];                             /* is a smaller window inside a bigger */
+            ord[m] = m; spec[m] = 0;                                     /* shape (a T's inside an L's): skipped */
+            for (j = 0; j < q->w * q->h; j++) if (q->grid[j] != '-') spec[m]++;
+        }
+        for (t3 = 0; t3 < nxm; t3++)
+            for (u3 = t3 + 1; u3 < nxm; u3++)
+                if (spec[ord[u3]] > spec[ord[t3]]) { int x3 = ord[t3]; ord[t3] = ord[u3]; ord[u3] = x3; }
+        for (t3 = 0; t3 < nxm; t3++) {
+            const DbvX *q;
+            int clash = 0;
+            m = ord[t3];
+            q = &g_dbvx[xmt[m]];
+            for (j = 0; j < q->nw && !clash; j++) {
+                const DbvXW *w = &g_dbvxw[q->w0 + j];
+                DWORD want = ((DWORD)w->piece << 8) | w->state;
+                cx = xma[m] + w->dx; cz = xmz[m] + w->dz;
+                if (!dbv_rd(p, cx, cz)) clash = 2;
+                else if (*dbv_mk(p, p->owner, cx, cz) >= 200) {
+                    for (k = 0; k < p->n; k++)
+                        if (p->cell[k].x == cx && p->cell[k].z == cz) break;
+                    if (k < p->n && p->cell[k].want != want) clash = 1;
+                }
+            }
+            if (clash) {
+                logf("dbv: crossing template %u at canonical (%d,%d) skipped: %s", q->id, xma[m], xmz[m],
+                     clash == 2 ? "a cell is not road" : "a more specific template wrote its cells otherwise");
+                continue;
+            }
+            for (j = 0; j < q->nw; j++) {
+                const DbvXW *w = &g_dbvxw[q->w0 + j];
+                DWORD want = ((DWORD)w->piece << 8) | w->state;
+                BYTE *ow;
+                int mk;
+                cx = xma[m] + w->dx; cz = xmz[m] + w->dz;
+                ow = dbv_mk(p, p->owner, cx, cz);
+                mk = MARK(cx, cz);
+                if (*ow >= 200) continue;                                /* the same piece, written already */
+                *ow = (BYTE)(200 + m);
+                if (mk & 32) {
+                    for (k = 0; k < p->n; k++)
+                        if (p->cell[k].x == cx && p->cell[k].z == cz) { p->cell[k].want = want; break; }
+                } else if (p->n < DAV_MAX_CELLS) {
+                    p->cell[p->n].x = cx; p->cell[p->n].z = cz; p->cell[p->n].want = want;
+                    p->n++;
+                }
+                MARK(cx, cz) |= 8 | 32;
+            }
+            InterlockedIncrement(&g_dbvx_hits);
         }
     }
     for (i = 0; i < nu; i++) {

@@ -152,7 +152,7 @@ static int table_read(const char *path) {
         if (!strncmp(p, "bvxb ", 5) || !strncmp(p, "bvxa ", 5)) continue;   /* task bvx: read by rbt_install */
         if (!strncmp(p, "bvxc ", 5) || !strncmp(p, "bvj ", 4)) continue;   /* task bvlanes: read by rbt_install */
         if (!strncmp(p, "avl", 3) && p[4] == ' ') continue;   /* task avcore: AVL lines, read by rbt_install */
-        if (!strncmp(p, "dbvb ", 5) || !strncmp(p, "dbvs ", 5)) continue;   /* task diagbv: DBV lines, read by rbt_install */
+        if (!strncmp(p, "dbvb ", 5) || !strncmp(p, "dbvs ", 5) || !strncmp(p, "dbvx", 4)) continue;   /* task diagbv: DBV lines, read by rbt_install */
         if (p[0] == 'h' && p[1] == 'w') continue;       /* task hwcore: highway program lines (hwy*, hwx, hwt, hwd*) */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
                             !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
