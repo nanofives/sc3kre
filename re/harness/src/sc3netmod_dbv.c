@@ -34,7 +34,7 @@
  */
 
 #define DBV_MIN_CLEAN 3
-#define DBV_KINDS 20                         /* task diagfix: 18 = DK_BEND135, 19 = DK_BEND135M */
+#define DBV_KINDS 23                         /* task diagfix: 18 BEND135, 19 BEND135M, 20 BENDAV, 21 BENDAVM, 22 BENDBV */
 #define DBV_MAX_STAMP 40
 #define DBV_MAX_USES 64
 #define DBV_MAX_ROWS 1024
@@ -45,8 +45,9 @@
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
-       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
+       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BENDAV, DK_BENDAVM, DK_BENDBV, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
 static int dbv_b135_on(void);                /* task diagfix: DBVBEND135 (defined before dbv_band) */
+static int dbv_bbv_on(void);                 /* task diagfix: DBVBBEND */
 
 /* task avends F2a (2026-11-09, round brief ROUND_2026-11-09_avends.md, twin diagbv.classify_end "bend-z-tee"): a bend
    into three straight columns whose second and third rows past the end also carry an avenue arm on ONE side (two rows,
@@ -226,6 +227,22 @@ static int dbv_narrow_ok(DbvPass *p, int z_e, int a_e, int e, int kind) {
 static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     unsigned rr[6];
     int j, d, dz, ok;
+    /* task diagfix (xsect 45): DBVBBEND, a straight BOULEVARD's three rows (0, -1, -2 from their d3 + 1 on) into the end
+       at 135 degrees: the band's last three rows are the stamp `bendbv` (paved bend box opening into the boulevard).
+       Tested before DK_BEND_X, which is the same shape with the overlap left to BV (BV's BVBEND leaves it too) */
+    for (d = -2, ok = 1; d <= 7 && ok; d++) ok = !DBV_RDE(d, 1);
+    if (ok && !DBV_RDE(-1, 0) && DBV_RDE(4, 0) && DBV_RDE(5, 0) && DBV_RDE(6, 0) && DBV_RDE(3, -1) &&
+        DBV_RDE(4, -1) && DBV_RDE(5, -1) && DBV_RDE(2, -2) && DBV_RDE(3, -2) && DBV_RDE(4, -2) && !DBV_RDE(1, -3) &&
+        !DBV_RDE(2, -3) && !DBV_RDE(-2, -1) && !DBV_RDE(-3, -2) && g_dbv_nst[DK_BENDBV] && dbv_bbv_on()) {
+        int bvx = 0;                     /* BV still holds the overlap (no BVBEND): leave it to DK_BEND_X, as before */
+        for (dz = 0; dz >= -2; dz--)
+            for (d = dz; d <= dz + 3; d++) {
+                int cx = DBV_CELLX(d, dz), cz = DBV_CELLZ(d, dz);
+                DWORD v = rb_at(&p->b, DBV_RX(p, cx, cz), DBV_RZ(p, cx, cz));
+                if (v && bv_is_piece((WORD)(v & 0xffff))) bvx = 1;
+            }
+        if (!bvx) return DK_BENDBV;
+    }
     ok = nrows >= 3 + DBV_MIN_CLEAN && !DBV_RDE(1, -3);
     for (dz = -2; dz <= 0 && ok; dz++) ok = DBV_RDE(4, dz) && DBV_RDE(5, dz) && !DBV_RDE(dz - 1, dz);
     for (d = -1; d <= 6 && ok; d++) ok = !DBV_RDE(d, 1);
@@ -261,6 +278,20 @@ static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
         rr[4] == DM(-2) && DBV_RDE(3, 6) && !DBV_RDE(2, 5) && !DBV_RDE(4, 5) && !DBV_RDE(2, 6) && !DBV_RDE(4, 6) &&
         !DBV_RDE(-1, 0) && !DBV_RDE(4, 0) && g_dbv_nst[DK_BEND135M] && dbv_b135_on())   /* a straight road, 3+ cells */
         return DK_BEND135M;
+    /* task diagfix (xsect 34): a straight AVENUE (rows 0 and -1, 3+ cells each, from d3 + 1 / d3 of row -1 + 1 on)
+       into the end at 135 degrees: the boulevard closes into a paved bend box and opens into the avenue (stamp
+       `bendav`, verify/diagfix/paint_34.py); the avenue's end column is stamped as avlj pieces so AVL ends it there */
+    if (!rr[0] && !DBV_RDE(-1, 0) && DBV_RDE(4, 0) && DBV_RDE(5, 0) && DBV_RDE(6, 0) && DBV_RDE(3, -1) &&
+        DBV_RDE(4, -1) && DBV_RDE(5, -1) && !DBV_RDE(2, -2) && !DBV_RDE(3, -2) && !DBV_RDE(4, -2) && !DBV_RDE(5, -2) &&
+        g_dbv_nst[DK_BENDAV] && dbv_b135_on())
+        return DK_BENDAV;
+    /* its x <-> z mirror (an avenue along x into an axis-1 boulevard, seen in the turned frame): cap-x4z4's partial
+       rows with the avenue's two columns going on down from them (columns d0 of row 3 and d-1 of row 3 + 1) */
+    if (rr[0] == (DM(0) | DM(1) | DM(2)) && rr[1] == (DM(0) | DM(1)) && rr[2] == (DM(-1) | DM(0)) &&
+        rr[3] == (DM(-2) | DM(-1)) && DBV_RDE(3, 5) && DBV_RDE(2, 5) && DBV_RDE(3, 6) && DBV_RDE(2, 6) &&
+        !DBV_RDE(1, 4) && !DBV_RDE(1, 5) && !DBV_RDE(4, 5) && !DBV_RDE(4, 6) && !DBV_RDE(-1, 0) && !DBV_RDE(4, 0) &&
+        g_dbv_nst[DK_BENDAVM] && dbv_b135_on())
+        return DK_BENDAVM;
     if (!rr[0] && DBV_RDE(-1, 0) && DBV_RDE(4, 0)) return DK_STEM;
     if (DBV_RDE(-1, 0) || DBV_RDE(4, 0)) return DK_NONE;
     /* task avrbtfix: caps need their stamp rows + one empty row (was: all six rows empty) */
@@ -325,6 +356,23 @@ static int dbv_b135_on(void) {
              "SC3NETMOD_DBVBEND135)", g_dbv_b135 ? "on" : "off");
     }
     return g_dbv_b135;
+}
+
+/* task diagfix (round 2026-11-14b art family a, xsect 45): DBVBBEND. A straight BOULEVARD (BV, three rows) into a
+   diagonal boulevard's end at 135 degrees, from the side of the end row's d3 (canonical bottom end: rows 0, -1, -2 from
+   +x, its rows starting at the band's outer edge; on the map case 45, the boulevard from -x into the top end). Before,
+   BV took the band's first cells for its run and DBV wrote the rest (the boulevard ended square against the band).
+   Now the band's last three rows hold the stamp `bendbv` (a paved bend box with a rounded kerb that opens into the
+   boulevard, the median ends in a nose; verify/diagfix/paint_45.py) and BV ends its run before them (orthfix BVBEND,
+   end type 8). Off: SC3NETMOD_DBVBBEND=0. */
+static int g_dbv_bbv = -1;
+static int dbv_bbv_on(void) {
+    if (g_dbv_bbv < 0) {
+        g_dbv_bbv = !env_off("SC3NETMOD_DBVBBEND");
+        logf("dbv: DBVBBEND %s (a boulevard into a diagonal boulevard's end at 135 degrees: the end is a paved bend box, "
+             "SC3NETMOD_DBVBBEND)", g_dbv_bbv ? "on" : "off");
+    }
+    return g_dbv_bbv;
 }
 
 static int dbv_is_cap(int kind) {
@@ -434,8 +482,16 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             for (j = 1; j <= maxdz; j++)                       /* the claimed rows (the stamp writes them) */
                 for (dx = j - 1; dx <= j + 4; dx++)
                     if (DBV_RDE(dx, j)) MARK(DBV_CELLX(dx, j), DBV_CELLZ(dx, j)) |= 2;
-            if (kind == DK_BEND135)                            /* task diagfix: the road the bend turns into */
+            if (kind == DK_BEND135 || kind == DK_BENDAV)       /* task diagfix: the road / avenue the bend turns into */
                 for (dx = 4; dx < 512 && DBV_RDE(dx, 0); dx++) MARK(DBV_CELLX(dx, 0), DBV_CELLZ(dx, 0)) |= 2;
+            if (kind == DK_BENDAV)
+                for (dx = 4; dx < 512 && DBV_RDE(dx, -1); dx++) MARK(DBV_CELLX(dx, -1), DBV_CELLZ(dx, -1)) |= 2;
+            if (kind == DK_BENDAVM)                            /* task diagfix: the avenue's two columns going on */
+                for (j = 4; j < 512 && (DBV_RDE(2, j) || DBV_RDE(3, j)); j++)          /* (m34l: "touches road") */
+                    for (dx = 2; dx <= 3; dx++) if (DBV_RDE(dx, j)) MARK(DBV_CELLX(dx, j), DBV_CELLZ(dx, j)) |= 2;
+            if (kind == DK_BENDBV)                             /* task diagfix DBVBBEND: the boulevard's rows: path */
+                for (j = 0; j < 3; j++)
+                    for (dx = 4 - j; dx < 512 && DBV_RDE(dx, -j); dx++) MARK(DBV_CELLX(dx, -j), DBV_CELLZ(dx, -j)) |= 2;
         }
     }
     /* ---- row roads (W / E arms) */
@@ -609,6 +665,9 @@ static int dbv_band_t(DbvPass *p, int x0, int z0, int n, const char **why, int *
     p->nbad = 0;
     for (;;) {
         ok = dbv_band(p, x0, z0, n, why);
+        if (!ok && p->nbad && g_dbv_touch > 0 && t < DBV_TOUCH_TRIES)   /* task diagfix: why the try was refused */
+            logf("dbv: band axis %d from canonical (%d,%d): try %d refused (%s), masking the touching road", p->axis, x0, z0,
+                 t + 1, *why);
         if (ok || g_dbv_touch <= 0 || !p->nbad || t >= DBV_TOUCH_TRIES) break;
         dbv_clear(p);
         if (!dbv_mask(p)) break;

@@ -1885,6 +1885,286 @@
    "trblkatt": "none"
   },
   {
+   "id": 22362,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22362"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22363,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22363"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22364,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22364"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22365,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22365"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22366,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22366"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22367,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22367"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22368,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22368"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22369,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22369"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22388,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22388"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22389,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22389"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22390,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22390"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22391,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22391"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22392,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22392"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22393,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22393"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22394,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22394"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22395,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22395"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22396,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22396"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22397,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22397"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22398,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22398"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22399,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22399"
+   },
+   "trblkatt": "none"
+  },
+  {
    "id": 22442,
    "base": 35,
    "network": "ROAD",
@@ -2105,6 +2385,174 @@
    "art": {
     "from": 35,
     "png_dir": "art/22457"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22458,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22458"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22459,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22459"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22460,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22460"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22461,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22461"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22462,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22462"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22463,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22463"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22464,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22464"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22465,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22465"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22466,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22466"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22467,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22467"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22468,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22468"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22469,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard avenue bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22469"
    },
    "trblkatt": "none"
   }
@@ -3687,8 +4135,212 @@
       22457,
       0
      ]
+    ],
+    "bendav": [
+     [
+      0,
+      0,
+      22458,
+      0
+     ],
+     [
+      1,
+      0,
+      22459,
+      0
+     ],
+     [
+      2,
+      0,
+      22460,
+      0
+     ],
+     [
+      3,
+      0,
+      22461,
+      0
+     ],
+     [
+      -1,
+      -1,
+      22462,
+      0
+     ],
+     [
+      0,
+      -1,
+      22463,
+      0
+     ],
+     [
+      1,
+      -1,
+      22464,
+      0
+     ],
+     [
+      2,
+      -1,
+      22465,
+      0
+     ],
+     [
+      0,
+      -2,
+      22466,
+      0
+     ],
+     [
+      3,
+      -1,
+      22467,
+      0
+     ]
+    ],
+    "bendavm": [
+     [
+      3,
+      0,
+      22468,
+      0
+     ],
+     [
+      3,
+      1,
+      22469,
+      0
+     ],
+     [
+      3,
+      2,
+      22362,
+      0
+     ],
+     [
+      3,
+      3,
+      22363,
+      0
+     ],
+     [
+      2,
+      -1,
+      22364,
+      0
+     ],
+     [
+      2,
+      0,
+      22365,
+      0
+     ],
+     [
+      2,
+      1,
+      22366,
+      0
+     ],
+     [
+      2,
+      2,
+      22367,
+      0
+     ],
+     [
+      1,
+      0,
+      22368,
+      0
+     ],
+     [
+      2,
+      3,
+      22369,
+      0
+     ]
+    ],
+    "bendbv": [
+     [
+      -2,
+      -2,
+      22396,
+      0
+     ],
+     [
+      -1,
+      -2,
+      22397,
+      0
+     ],
+     [
+      -1,
+      -1,
+      22392,
+      0
+     ],
+     [
+      0,
+      -2,
+      22398,
+      0
+     ],
+     [
+      0,
+      -1,
+      22393,
+      0
+     ],
+     [
+      0,
+      0,
+      22388,
+      0
+     ],
+     [
+      1,
+      -2,
+      22399,
+      0
+     ],
+     [
+      1,
+      -1,
+      22394,
+      0
+     ],
+     [
+      1,
+      0,
+      22389,
+      0
+     ],
+     [
+      2,
+      -1,
+      22395,
+      0
+     ],
+     [
+      2,
+      0,
+      22390,
+      0
+     ],
+     [
+      3,
+      0,
+      22391,
+      0
+     ]
     ]
    }
   }
+ ],
+ "avenue_lines": [
+  "avlj 22467 .O..",
+  "avlj 22461 .I..",
+  "avlj 22363 ..I.",
+  "avlj 22369 ..O."
  ]
 }

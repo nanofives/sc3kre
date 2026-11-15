@@ -78,7 +78,7 @@ SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
 DBV_KIND_NO = {"jrow-both": 1, "jrow-A": 2, "jrow-stem": 3, "jcol-both": 4, "jcol-A": 5, "narrow-C": 6, "narrow-A": 7,
                "taper-0": 8, "taper-1": 9, "taper-2": 10, "cap-square": 11, "cap-part": 12, "taper-0s": 13,
                "taper-1s": 14, "taper-2s": 15, "cap-x4z3": 16, "cap-x4z4": 17,
-               "bend135": 18, "bend135m": 19}   # task diagfix DBVBEND135   # task diagbv: = diagbv.KIND_NO, sc3netmod_dbv.c
+               "bend135": 18, "bend135m": 19, "bendav": 20, "bendavm": 21, "bendbv": 22}   # task diagfix DBVBEND135   # task diagbv: = diagbv.KIND_NO, sc3netmod_dbv.c
 
 NETMOD = "mods/netmod"
 LEDGER = NETMOD + "/ledger.json"
@@ -733,8 +733,8 @@ def compile_pack(stock, pack_dir, man):
             key = (m.get("axis"), m.get("end"), m.get("cont"))
             # end 2 / 3 (task diagfix DAVBEND135): the bottom / top end where a road meets the avenue at 135 degrees;
             # end 6 / 7: that bend set's stub cell (DAVBENDSTUB)
-            if key[0] not in (0, 1) or key[1] not in range(8) or key[2] not in ("A", "B") or not m.get("cells"):
-                raise NetpackError("%s: merge %s: axis 0/1, end 0..7, cont A/B and cells required" % (where, key))
+            if key[0] not in (0, 1) or key[1] not in range(10) or key[2] not in ("A", "B") or not m.get("cells"):
+                raise NetpackError("%s: merge %s: axis 0/1, end 0..9, cont A/B and cells required" % (where, key))
             if key in mseen:
                 raise NetpackError("%s: merge %s declared twice" % (where, key))
             mseen.add(key)
