@@ -594,6 +594,15 @@ static void dav_unmask(DavPass *p) {
     p->nbad = 0;
 }
 
+/* orthfix (xsect 39): road in the read buffer OR a cell DAVTOUCH masked out of it (real coords x, z). A retry masks
+   the touching boulevard, so dav_road alone reads it as no road. */
+static int dav_road_unmasked(DavPass *p, int x, int z) {
+    int k;
+    if (rb_at(&p->b, x, z)) return 1;
+    for (k = 0; k < p->nfor; k++) if (p->forx[k] == x && p->forz[k] == z) return 1;
+    return 0;
+}
+
 static int dav_mark(DavPass *p, int x, int z) {
     x -= p->b.x0; z -= p->b.z0;
     if (x < 0 || z < 0 || x >= p->b.w || z >= p->b.h) return 0;
@@ -850,6 +859,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         RD(BX(3), BZ(-1)) && RD(BX(4), BZ(-1)) && RD(BX(1), BZ(-2)) && RD(BX(2), BZ(-2)) &&
                         RD(BX(3), BZ(-2)) && !RD(BX(1), BZ(1)) && !RD(BX(2), BZ(1)) && !RD(BX(3), BZ(1)) &&
                         !RD(BX(4), BZ(1)) && !RD(BX(0), BZ(-3)) && !RD(BX(1), BZ(-3)) && dav_bb_set(axis, e) &&
+                        !dav_road_unmasked(&P, axis ? -BX(-1) : BX(-1), BZ(0)) &&   /* orthfix: the boulevard ENDS here, it does not go on past the band's first row (xsect 39's T keeps BV's opening box); masked cells count */
                         dav_bbend_on()) {                          /* task diagfix: DAVBBEND, a boulevard's three rows */
                         int bvx = 0, kk, dd;
                         for (kk = 0; kk < 3; kk++)

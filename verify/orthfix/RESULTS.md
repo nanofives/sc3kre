@@ -53,3 +53,21 @@ run2 (corners as a candidate) and run3 (stopped when the owner approved the corn
 Switches: `SC3NETMOD_BVXING=0`, `SC3NETMOD_BVQUAD=0`, `SC3NETMOD_BVCORNER=0`.
 Ship set: `dev/orthfix/ship/` (boulevard 0.4.0, boulevard_junctions with art 22401..22420, avenue_ends with art 22400;
 install commands in `SHIP.md`).
+
+## run10: BVBEND default on (child/orthfix c045eca on main 380dd35)
+
+`SC3NETMOD_BVBEND=0` turns it off. 41 (DA) / 45 (DB): BV ends staggered before the band, DAV's / DBV's bend sets hold
+the overlap, both draw orders give the same pieces (`owner_shots/ba_sheet_bend_41_45.png`, `bendon1/raw/R41_BxDA_L_rev_z4.png`,
+`R45_BxDB_L_rev_z4.png`). run10 vs run9: 68 identical, 9 changed: 15 19 34 38 40 48 (diagfix 7-8), 41 45 (bend sets),
+39 (see below). vs diagfix m10: 69 identical, the 8 listed are my own fixes absent from m10's tree (26 37 62 67 71),
+42 / 44 (same as run9) and 53 (no m10 build read).
+
+39 regressed: DAVBBEND reads the T as a boulevard end and writes 22370..22378 over the 22470..22487 opening box
+(`owner_shots/ba_39_davbbend_regression.png`). Same in m10, so on main, not from BVBEND. Fix is in DAV's test.
+
+## run11: DAVBBEND guard (child/orthfix ce64b18 on main c65b8f5, with c045eca)
+
+vs run10: 74 identical; 39 back to the opening box (identical to run9); 42 / 44 = diagfix 9's boxes (identical to m10).
+41 keeps its bend in both draw orders (`guard1/raw/R41_BxDA_L_rev_z4.png`). 39 with the diagonal drawn first
+(`guard1/raw/R39_BxDA_T1_rev_z4.png`) stays the stock ladder + stock junction: DAV's bend-1 refusal (the boulevard is
+not one-way yet in the main pass, the post-AVL pass checks avl_dir only), not from the guard. Picture `owner_shots/ba_39_guard.png`.
