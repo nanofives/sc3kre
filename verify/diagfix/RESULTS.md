@@ -151,3 +151,17 @@ cells and states: only the art changes (pack art, gitignored), the manifest and 
 Same detection, switch SC3NETMOD_DBVBEND135 (=0: the square end as before the bend). Regression m18 (fresh game, every
 pack): 0 cells differ from m17 in all 80 cases (art only). In game before (staged 11-15) | after, 4 views, 19 and its
 axis-1 mirror m19: `verify/diagfix/owner_shots/c19_before_after.jpg`, `cm19_before_after.jpg` (local).
+
+## diagfix 16 (round 2026-11-15b, owner review of c15_options: "both options are wrong, but option A is better, you still need to fix the median and the road lines starting way further than they should")
+
+Option A (the bend box) kept and fixed (`verify/diagfix/paint_15a.py`, pieces `add_bend15a.py`): the box is only the
+road's row (canonical row 0: 22430 / 22431 / 22432, axis-1 mirrors 22436..22438). Row 1 is no longer stamped (22433 /
+22434 / 22439 / 22440 dropped), so DAV writes its plain avenue pieces there and the dashed lane lines and the median's
+trees run right up to the box (in the reviewed mock the painted row 1 had no dashes and no trees: lines and trees started
+a row and a half past the junction). The median's body in the box is grass (DiagEl.median is the stock light pixel: it
+drew a long concrete strip in views 1 / 3) and ends in a 0.45-cell nose. Same detection (DAV merge ends 2 / 3, both
+axes), the stub 22435 / 22441 unchanged. Switch: SC3NETMOD_DAVBEND135 (=0: the square end).
+
+Regression m19 (fresh game, every pack): against m18 only 15's two row-1 cells change ((88,34) 22433 -> 20505.2, (89,34)
+22434 -> 20500.0). In game before (staged 11-15) | after, 4 views, 15 and its axis-1 mirror m15:
+`verify/diagfix/owner_shots/c15_before_after.jpg`, `cm15_before_after.jpg` (local).
