@@ -111,3 +111,52 @@ None (no change to dav.c / dbv.c).
   dav_bv_oneway needs avl_dir too, and a post-only accept was reverted by the next edit's main pass. Both STRAIGHT_OK
   branches accept g_bv_p[0] (SC3NETMOD_DAVBVOUTER=0 off). 39 / 41 / 45 reverse = sweep order (verify/orthfix/post3,
   order_cmp.py). run12 vs run11: 77 identical (build + final read; its xsect before|after shots were stopped, same cells as run11).
+
+## round 2026-11-15b (owner review of the final sheets, brief re/sessions/ROUND_2026-11-15b_owner_review.md)
+- Workspace refreshed: child/orthfix fast-forwarded to main 4b761ac; dev/orthfix/tree rebuilt from stage/release
+  (old tree kept as dev/orthfix/tree_old1114) + stage/src ledger and packs; all mods rebuilt.
+- 67 / 71 (BVXART): new `re/tools/netmod/bvxing_paint.py` paints the crossing twins' own art. 67 = RailXing (the
+  boulevard's 3 + 3 lanes and white dashes across the crossing column, median as paint between two yellow lines, one
+  stop bar per carriageway on its approach side, 69's rail band read along the rails so it runs unbroken over all three
+  rows). 71 = Underpass (ray cast over a box model fitted to stock 15098 / 11258: deck top at 32, open-face deck edge
+  6 deep, side walls along the road; the walls between boulevard rows removed, what the ray meets next drawn instead:
+  the boulevard ground or the far outer wall; the deck alone as layer 1 like the stock's). Ids 30200..30208 (art twins
+  of 69 / 15098 / 11258: A, B, middle), boulevard pack 0.5.0, table lines `bvq` (sc3netmod_bv.c prefers them,
+  SC3NETMOD_BVXART=0 off; sc3netmod.c line filter; netpack.py + schema accept bvq). Offline mock sent:
+  verify/orthfix/owner_shots/mock_67_71_art.png.
+- 66 / 70 answer: yes, inconsistent next to the new 67 / 71 (two stock 2-lane crossings with yellow lines / two
+  tunnels with a wall between). Owner call, unchanged.
+- 29 / 31 / 32 / 33 cause: the avenue's end against a 45-degree band: one half ends on a plain band edge piece (not
+  connected), the other meets DAV/DBV's single-road T and its first cell is a stock T 39 (the "stock box"). Needs an
+  avenue T box with avlj joins in the band (diagfix's cells). Asked the orchestrator.
+- 43 cause: DBV refuses the band ("road above the band is not a straight single road"), BV then refuses on the stock
+  drags. Needs DBV to accept a band starting at a boulevard's side (DAVBVBEND's twin, diagfix). My side coded:
+  bvdiag_build.py sets C / D (DB opening box, ids 30209..30232, needs 72 curve shapes, asked for 60 more), bv_obox
+  generalised to a 4-wide band (BVOBOXDB, `bvo 2|3` lines, SC3NETMOD_BVOBOXDB=0 off).
+- 2026-11-16 (orchestrator: owner approved 67 / 71, wants 66 / 70 the same; shapes 29200..29299 granted; orthfix builds
+  43's DBV part and the 29-33 boxes itself):
+  - 66 / 70 AVXART: avenue art twins 30233..30238 (bvxing_paint Section(rows=2), Underpass rows=2), `avlq` lines in the
+    boulevard pack's avenue_lines, sc3netmod_avl.c prefers them (SC3NETMOD_AVXART=0 off). In game: art2.
+  - 43: DBVBVBEND (sc3netmod_dbv.c, marked orthfix block, SC3NETMOD_DBVBVBEND=0 off): new end kind DK_BVOPEN, the
+    band's last 3 rows inside a straight boulevard that goes on both sides -> those rows left to BV (MARK 16|2);
+    BVOBOXDB (bv.c): bv_obox takes a 4-wide band and the `bvo 2|3` sets; boulevard_diagonal 0.2.0 (bvdiag_build.py
+    sets C / D). In game (art3): box written, DBV 9 rows, reverse order identical.
+  - 29 / 31 / 32 / 33: no C code. DAV / DBV crossing templates built by verify/orthfix/avtbox_build.py (29, DA, reuses
+    diagfix's box_build / corner_build) and verify/orthfix/avdbx_build.py (31-33, DB, reuses diagfix's dbvx_build), each
+    with `avlj` end-column lines; packages avenue_diagonal_t (30239..30260) and avenue_dbv_t (30261..30355); netpack +
+    schema accept davx / dbvx lines in avenue_lines. In game (art3, SWEEP_ARM=10): every arm 21700 one-way, no 11204 /
+    39 left; reverse orders identical at the junction.
+  - run13 (BVXART only) vs final1115: 75 same, 67 / 71 changed only. run14 (everything) running.
+
+### files owned (round 2026-11-15b)
+re/harness/src/sc3netmod.c (bvq filter), sc3netmod_bv.c (BVXART, BVOBOXDB), sc3netmod_avl.c (AVXART),
+sc3netmod_dbv.c (orthfix DBVBVBEND block only), re/tools/netmod/bvxing_paint.py (new), boulevard.py, bvdiag_build.py,
+netpack.py, netpack.schema.json; verify/orthfix/{avtbox_build.py, avdbx_build.py, compare.py, run_sweep.sh, RESULTS.md,
+art1..3, run13, run14, owner_shots/{mock_67_71_art, ba_67_71_art, ba_66_70_art, mock_43_obox_db, ba_43_29_33}.png}.
+Package dirs (art gitignored, ship from here): dev/orthfix/packs/{boulevard_x (boulevard 0.5.0), bvdiag_x
+(boulevard_diagonal 0.2.0), avtbox (avenue_diagonal_t 0.1.0), avdbx (avenue_dbv_t 0.1.0)}.
+- 2026-11-16: run14 vs run13: 73 same, 29 43 66 70 changed (intended). Short arms (6): 31 / 32 / 33 identical to the
+  stage look (templates need ~10-cell arms), nothing broken. 70 seam fixed (EDGE 16), a small median nub remains.
+  Committed child/orthfix eb956f2 (one commit for the round). Ship set dev/orthfix/ship/SHIP.md (boulevard 0.5.0,
+  boulevard_diagonal 0.2.0, avenue_diagonal_t 0.1.0, avenue_dbv_t 0.1.0). verify/orthfix/{avtbox_build,avdbx_build}.py
+  live in MAIN's verify/ (not on the branch).

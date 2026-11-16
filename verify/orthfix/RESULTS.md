@@ -83,3 +83,26 @@ run11: 77 identical. Off: `SC3NETMOD_DAVBVOUTER=0`.
 39 drawn diagonal first gets the opening box (`post3/raw/R39_BxDA_T1_rev_z4.png`). 39 / 41 / 45 built in both orders
 in one game: reverse cells identical to sweep order (`order_cmp.py verify/orthfix/run11 39:2 41:4 45:6`). run12 vs
 run11: 77 identical (build + final read). Off: `SC3NETMOD_DAVBVOUTER=0`.
+
+## Round 2026-11-15b
+
+### run13 (BVXART, xsect 67 / 71 art twins), vs the staged build verify/final1115/f1
+Tree rebuilt from stage/release 2026-11-15 + stage/src ledger/packs, boulevard pack 0.5.0 (art twins 30200..30208,
+`bvq` lines), sc3netmod with BVXART (default on). Full sweep (77 cases, on-ramp cases not built), final read-back:
+`compare.py verify/orthfix/run13 --base verify/final1115/f1`: 75 same, 2 changed = 67 (crossing twins 20769..20771 ->
+art twins 30200..30202) and 71 (20778..20780 -> 30203..30205), nothing else. Three drags had no reply in 90 s (PC under
+memory pressure, 27 GB committed); the cases they belong to (16, 17) still came out identical. In-game pictures:
+owner_shots/ba_67_71_art.png (art1/raw, both views). Owner approved from the mock (orchestrator 2026-11-15).
+
+### run14 (everything: BVXART, AVXART, BVOBOXDB, DBVBVBEND, avenue_diagonal_t, avenue_dbv_t) vs run13
+77 cases, sweep arms (6): 73 same, 4 changed, all intended: 29 (box 30239.. + arm one-way, 4 x 21700), 43 (BV's run
+through, opening box 12 pieces), 66 (21710/21711 -> 30233/30234), 70 (21716/21717 -> 30235/30236). No drag lost.
+- Short arms: 31 / 32 / 33 are IDENTICAL to run13 (= the staged look) with the sweep's 6-cell arms: the DBV templates
+  are built on 10-cell arms and need the arm to go on past the band's stair; a shorter arm does not match any template,
+  so DBV writes exactly what it wrote before (two-way stub, stock T) and no new piece appears. 29 converts at 6 cells.
+- With 10-cell arms (art3, SWEEP_ARM=10): 29 / 31 / 32 / 33 all arms one-way (no 11204, no T 39 left), 43 box;
+  reverse draw orders identical at the junction (art3 order_cmp: diffs only in neighbour-slot cells the longer arms
+  reach).
+- 70 / 71 deck: the edge band's end cap at the removed walls was the seam on 70; fixed (EDGE 16, the band re-read
+  further in), art4/seam.png. One small grey nub stays on the highway median at the span's edge (both 70 and 71).
+Commit: child/orthfix eb956f2 (code, tools, tracked pack files). Ship set dev/orthfix/ship + SHIP.md.
