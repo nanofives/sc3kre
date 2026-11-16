@@ -116,6 +116,13 @@ Sheet: `verify/diagxnet/owner_shots/mock_sheet_v1.png` (68 69 72 73, today | moc
   SC3NETMOD_DAVXNHWY=0 reverts the underpass on load.
 - Ship: dev/diagxnet/ship/diagonal_xnet + dev/diagxnet/ship/SHIP.md (KEEP file in dev/diagxnet).
 
+## milestone 5: DAVXHEAL (owner 2026-11-16 "Fix it") - committed child/diagxnet 5caeb96 (on main 5df3524)
+- Cause: the rail / highway drag skips diagonal cells; FUN_100167d4 only takes straight road as the existing piece.
+- Fix: after every rail / highway pass, a run interrupted by 1..4 diagonal cells gets the stock crossing, then DBV + DAV
+  give the DAVXN variants. Plain diagonal roads fixed too. Off SC3NETMOD_DAVXHEAL=0. Call line in rb_pass (approved).
+- Checks: verify/diagxnet/RESULTS.md section DAVXHEAL. Tree now holds every current pack (orthfix 11-15b set, diagfix 12
+  diagonal_boulevard); its old netmod is in dev/diagxnet/netmod_backup_1116. No pack change for this fix.
+
 ## built
 package + code, all checks done (milestone 4)
 

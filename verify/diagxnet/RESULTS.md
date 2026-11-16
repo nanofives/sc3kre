@@ -35,3 +35,32 @@ them", stop lines "Keep them". Code on child/diagxnet (uncommitted, files in `re
 
 Pictures: `owner_shots/game_sheet_1.png` (68 69 72 73 before | after view 0 | after view 1), `owner_shots/game_sheet_2.png`
 (the 10 other orientations), `owner_shots/train_68.png`, mocks `owner_shots/mock_sheet_v1.png`.
+
+## DAVXHEAL: rail or highway drawn across an existing diagonal (owner 2026-11-16 "Fix it")
+
+**Cause.** A rail or highway drag skips the diagonal's cells. The crossing builder FUN_100167d4 [CONFIRMED @ SIMNTWRK
+0x100167d4] only takes straight road (0x1d, 0x2bc4) as the existing piece. Stock 35 and every DA / DB piece (bases 35 /
+43 / 18004) get no crossing. The run is placed on both sides with plain 44 / 15051 / 73, and the diagonal stays road in
+between, so the line is cut. A plain stock diagonal road does the same. No block ran after a rail pass (rb_pass handles
+net 1 and the highway blocks on net 4 only).
+
+**Fix** (`sc3netmod_davxn.c` DAVXHEAL; one call line in `rb_pass`, sc3netmod_rbt.c; off `SC3NETMOD_DAVXHEAL=0`). After
+every rail / highway pass, a straight run with two run cells on each side of 1..4 diagonal-road cells gets the stock
+crossing on those cells. That is 69 at state 1 along x / 0 along z, or 15098 next to 15051 / 11258 next to 73 at the
+neighbour's state, which is what drawing the rail / highway first gives. Then DBV and DAV run over the box, so a DA / DB
+band takes its DAVXN variants.
+
+**Checks** (tree = main 5df3524 code + every current pack: orthfix 11-15b ship set, diagfix 12 `diagonal_boulevard`,
+`diagonal_xnet`):
+
+| check | result |
+|---|---|
+| band first, then rail / highway, all orientations (DA, DB, plain diagonal road; rail along x and z; highway along x (15098) and z (11258); band axis 0 and 1), `repro_rev.py` runs h1 | every case healed: DA / DB get the same pieces and states as sweep order, the plain diagonal road gets stock 69 / 15098 / 11258 (**stock diagonal roads fixed too**) |
+| reverse vs sweep order, same game (`x5_rev.log`) | 68 69 73 74 75 identical (74 / 75 = plain diagonal road x rail / highway). 72 and 45: one neighbour-slot cell at the slot edge each (45's was already in the staged build's record). 39 41 identical |
+| reverse 49..55 (`x6_rev.log`, fresh game) | 53 identical; 50 52 54 55 1..4 stock cells at the slot edge; 49 timing-sensitive: all as recorded before (diagfix's open item), no new piece involved |
+| 80-case sweep in sweep order (`x5`, final read-back; `cmp3.py`) | 68 69 72 73 80 same as x1 (diagxnet); 50 52 53 54 55 same as diagfix m14; 29 43 66 67 70 71 same as orthfix run14; 79 = orthfix's `avlq` art twins (21716 / 21717 -> 30235 / 30236), not DAVXHEAL; 78 unchanged. Nothing else differs |
+| a rail that only ends on a band | no crossing, band untouched (0 DAVXHEAL lines) |
+| trains | a freight train crosses the healed crossing (`owner_shots/train_healed_68.png`) |
+| highway | SimTransit flags (+0x5c) on the healed underpass equal the sweep-built 72 cell for cell (0x3 on the six cells, 0x2 highway on both sides); the sweep-built underpass already carried Sacramento's traffic (above) |
+
+Pictures: `owner_shots/heal_sheet.png` (72 sweep order | band first + highway | band first + rail, a train on it).

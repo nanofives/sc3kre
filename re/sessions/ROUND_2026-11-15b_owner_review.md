@@ -26,6 +26,9 @@ same treatment (avenue crossing follows its 2+2 lanes, one underpass), orthfix.*
 
 **Owner decisions 2026-11-15: 68 / 69 / 72 / 73 = `verify/diagxnet/owner_shots/mock_sheet_v1.png`, stop lines kept.**
 
+**Owner decision 2026-11-16: rail / highway drawn ACROSS an existing diagonal = "Fix it"** (diagxnet; today the line is
+cut, as stock does over a plain diagonal road).
+
 **Owner decision 2026-11-16: case 80 joint = "Dedicated joint"** (not the generic DAV T box; mock first).
 
 **Owner decision 2026-11-15: case 80 = "Full build now"** (verify/diagfix/REPORT_80_onramp.md plan, ~3 days, joint
