@@ -1532,34 +1532,6 @@
    "trblkatt": "copy_base"
   },
   {
-   "id": 22433,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22433"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22434,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22434"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
    "id": 22435,
    "base": 35,
    "network": "ROAD",
@@ -1612,34 +1584,6 @@
    "art": {
     "from": 35,
     "png_dir": "art/22438"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22439,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22439"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22440,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22440"
    },
    "trblkatt": "copy_base"
   },
@@ -3931,21 +3875,9 @@
        0
       ],
       [
-       1,
-       1,
-       22433,
-       0
-      ],
-      [
        2,
        0,
        22432,
-       0
-      ],
-      [
-       2,
-       1,
-       22434,
        0
       ]
      ]
@@ -3968,21 +3900,9 @@
        2
       ],
       [
-       1,
-       -1,
-       22433,
-       2
-      ],
-      [
        0,
        0,
        22432,
-       2
-      ],
-      [
-       0,
-       -1,
-       22434,
        2
       ]
      ]
@@ -4031,21 +3951,9 @@
        1
       ],
       [
-       1,
-       1,
-       22439,
-       1
-      ],
-      [
        2,
        0,
        22438,
-       1
-      ],
-      [
-       2,
-       1,
-       22440,
        1
       ]
      ]
@@ -4068,21 +3976,9 @@
        3
       ],
       [
-       1,
-       -1,
-       22439,
-       3
-      ],
-      [
        0,
        0,
        22438,
-       3
-      ],
-      [
-       0,
-       -1,
-       22440,
        3
       ]
      ]
@@ -4395,9 +4291,7 @@
     22383,
     22386,
     22431,
-    22434,
     22437,
-    22440,
     22600,
     22601,
     22602,
