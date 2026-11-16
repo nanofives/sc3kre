@@ -19,7 +19,8 @@ RailX (look 1): the band crossed by a rail along x on row m (stock 69 at state 1
 
 Underpass (look 2): the band under a highway deck (two rows along x, or two columns along z). Per cell the stock
 crossing frame (15098 on a 15051 highway, 11258 on 73) at the cell's own state and view is the canvas, so deck top,
-slab edge and outer walls are stock pixels lit as stock; layer 1 (the deck top) is stock as it is. Every opaque pixel
+slab edge and outer walls are stock pixels lit as stock; layer 1 = the deck top plus this cell's deck, slab and wall
+pixels (paint_under_cell: the game draws it after the highway cells beside it). Every opaque pixel
 is followed down its view ray from the slab's underside (a point at height e, zoom-3 px, projects where the ground
 point (u - e/32, v + e/32) does; NET_ART.md): the first solid it meets is what the eye sees.
   the ray is over the deck at the slab height   keep the stock pixel (deck top, slab edge)
@@ -33,6 +34,8 @@ import contextlib
 import math
 import os
 
+from PIL import Image
+
 from netmod import netart as NA
 from netmod import diagave_paint as P
 from netmod import diagbv_paint as DP
@@ -43,6 +46,7 @@ RAIL44_STATE = 0        # 44 at state 0: rail along x (xsect 68 grid: 44.0)
 RAIL_PAD = 9            # lane units of rail beside each track panel run
 STOP = (10.0, 22.0)     # stop line, lane units before the track strip
 H_SLAB = 30.0           # deck slab underside, zoom-3 px above ground
+H_TOP = 32.0            # deck top
 SHADE = 0.72            # ground under the deck
 SOLID = {15098: 15051, 11258: 73}
 _PROF = {}
@@ -249,14 +253,16 @@ def endface(sc, z, f, solid, e, t):
 
 
 def march(sc, z, r, X0, Z0, u0, v0, solid, f, own=None):
-    """None = keep the stock pixel. own = this pixel of the cell's OWN solid twin frame (same state and view): a wall
-    hit right after the deck's outer edge takes it first (a neighbour's frame draws its end face at a cell corner, which
-    the next cell covers in game)"""
+    """-> (colour, hit). hit = the world point (wx, wz) of the deck or wall the pixel shows, None = it shows the ground.
+    colour None = keep the stock pixel (deck top, slab edge: solid). own = this pixel of the
+    cell's OWN solid twin frame (same state and view): a wall hit right after the deck's outer edge takes it first (a
+    neighbour's frame draws its end face at a cell corner, which the next cell covers in game)"""
     def at(e):
         return _world(r, X0, Z0, u0 - e / 32.0, v0 + e / 32.0)
     wx, wz = at(H_SLAB)
-    if sc.deck_i(wx, wz) is not None:
-        return None
+    if sc.deck_i(wx, wz) is not None:                        # deck top or slab rim: whose is it?
+        tx, tz = at(H_TOP)                                   # the top face at e = 32 (an end face's rim, between
+        return None, ((tx, tz) if sc.deck_i(tx, tz) is not None else (wx, wz))   # 30 and 32, is the next cell's top)
     was_out, e = True, H_SLAB
     while e > 0.0:
         e -= 0.25
@@ -266,16 +272,30 @@ def march(sc, z, r, X0, Z0, u0, v0, solid, f, own=None):
             if was_out:
                 c = own if own is not None and own[3] >= 128 else _twin_px(sc, z, r, solid, wx, wz, e)
                 if c is not None:
-                    return c
-            return endface(sc, z, f, solid, e, (wx + wz) % 1.0)
+                    return c, (wx, wz)
+            return endface(sc, z, f, solid, e, (wx + wz) % 1.0), (wx, wz)
         was_out = not on
     wx, wz = at(0.0)
-    return sc.ground(z, r, wx, wz) if sc.deck_i(wx, wz) is not None else sc.band(z, r, wx, wz)
+    return (sc.ground(z, r, wx, wz) if sc.deck_i(wx, wz) is not None else sc.band(z, r, wx, wz)), None
 
 
 def paint_under_cell(sc, cell, state, out_dir, kind, zooms=range(NA.ZOOMS)):
     """frames of `cell` as WORLD view r (state-0 labelling, as diagave_paint.paint_cell) on the stock crossing frame
-    (state + r) & 3, plus the stock layer 1. -> anchors"""
+    (state + r) & 3, plus layer 1. -> anchors
+
+    Layer 1 = the stock layer 1 (deck top) plus every layer-0 pixel that shows the deck, the slab or a wall OF THIS
+    CELL (hit point inside the cell's own square; for the deck, the point at the top face e = 32), at the layer-0
+    anchor. Why (owner review 2026-11-16, case 72 view 0, a beige wedge on the near wall right of the opening): the
+    game draws every layer 1 AFTER the plain highway cells (15051 / 73, one layer, each frame carrying an end face that
+    the next highway cell normally covers), and those after the 2-layer pieces' layer 0. Measured on the in-game shots
+    (verify/diagxnet/wedge/gameorder.py, case 72, zoom 4): with that order the offline composite equals the game shot
+    in view 0 (0 pixels off by more than 40 after, 13 before); painter order with layer 1 interleaved does not
+    reproduce it. So a neighbour's end face landed on our layer-0 wall; stock 15098 uses that overdraw for the
+    abutments of its straight opening. The layer-1 copy of the walls covers it. A pixel that belongs to the next cell
+    (its wall, its end face, the 30..32 rim of an end face) stays out of layer 1: drawn last, it would show over that
+    cell (first build of this fix: 1 px beige seams across the deck at the band edges). The ground under the opening
+    stays layer 0 only.
+    """
     os.makedirs(out_dir, exist_ok=True)
     X0, Z0 = cell
     anchors = {}
@@ -289,6 +309,8 @@ def paint_under_cell(sc, cell, state, out_dir, kind, zooms=range(NA.ZOOMS)):
                 tw, (Lt, Tt) = solid[(z, f)]
                 out = im0.copy()
                 px = out.load()
+                top = Image.new("RGBA", out.size, (0, 0, 0, 0))
+                pt = top.load()
                 for y in range(out.height):
                     for x in range(out.width):
                         if px[x, y][3] < 128:
@@ -296,14 +318,20 @@ def paint_under_cell(sc, cell, state, out_dir, kind, zooms=range(NA.ZOOMS)):
                         s_, d_ = 2 * (x + .5 - L) / W, 4 * (y + .5 - T) / W
                         xt, yt = x - L + Lt, y - T + Tt
                         own = tw.getpixel((xt, yt)) if 0 <= xt < tw.width and 0 <= yt < tw.height else None
-                        col = march(sc, z, r, X0, Z0, (s_ - d_) / 2, (s_ + d_) / 2, solid, f, own)
+                        col, hit = march(sc, z, r, X0, Z0, (s_ - d_) / 2, (s_ + d_) / 2, solid, f, own)
                         if col is not None:
                             px[x, y] = col
+                        if hit is not None and math.floor(hit[0]) == X0 and math.floor(hit[1]) == Z0:
+                            pt[x, y] = px[x, y]
                 name = NA.frame_name(z, r)
                 out.save(os.path.join(out_dir, name))
                 anchors[name] = [L, T]
                 l1 = NA.stock_frames(sc.base, 1).get((z, f))
-                if l1 and l1[1] is not None:
-                    l1[0].save(os.path.join(out_dir, NA.frame_name(z, r, 1)))
-                    anchors[NA.frame_name(z, r, 1)] = list(l1[1])
+                if l1 and l1[1] is not None:                 # stock deck top over our copy, at the layer-0 anchor
+                    im1 = l1[0].convert("RGBA")
+                    lay = Image.new("RGBA", top.size, (0, 0, 0, 0))
+                    lay.paste(im1, (L - l1[1][0], T - l1[1][1]), im1)
+                    top.alpha_composite(lay)
+                top.save(os.path.join(out_dir, NA.frame_name(z, r, 1)))
+                anchors[NA.frame_name(z, r, 1)] = [L, T]
     return anchors

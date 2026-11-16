@@ -123,6 +123,14 @@ Sheet: `verify/diagxnet/owner_shots/mock_sheet_v1.png` (68 69 72 73, today | moc
 - Checks: verify/diagxnet/RESULTS.md section DAVXHEAL. Tree now holds every current pack (orthfix 11-15b set, diagfix 12
   diagonal_boulevard); its old netmod is in dev/diagxnet/netmod_backup_1116. No pack change for this fix.
 
+## milestone 6: underpass wall wedge (owner review 2026-11-16, case 72 view 0) - diagonal_xnet 0.1.1
+- Cause: the game draws 2-layer pieces' layer 0, then plain highway cells (15051 / 73), then every layer 1. The highway
+  cell beside the band drew its end face over our layer-0 wall (measured: offline model of that order = the game shot).
+- Fix: xnet_paint.paint_under_cell puts this cell's own deck / slab / wall pixels in layer 1 too (deck judged at e = 32,
+  else 1 px seams). All 56 underpass ids rebuilt, rail ids byte-identical. In game 72 73 H1..H6 x 4 views clean (w3).
+- verify/diagxnet/RESULTS.md section "Underpass wall wedge"; ship dir dev/diagxnet/ship/diagonal_xnet = 0.1.1
+  (0.1.0 kept in dev/diagxnet/ship_prev_0.1.0); tree has 0.1.1 installed.
+
 ## built
 package + code, all checks done (milestone 4)
 
