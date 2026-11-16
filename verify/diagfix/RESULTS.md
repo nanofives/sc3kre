@@ -134,3 +134,20 @@ only 52 / 55 change (the arm cells now the avenue / boulevard) and 53 / 54 (ids 
 (m17b, fresh game): 39 41 45 identical; reversed 49 53 identical, 54 55 the known slot-edge cell, 50 / 52 differ only
 at the boulevard's far end cap (the next slot's road; m13b / m14b / m16 effect, not the box). Before | after, 4 views:
 `verify/diagfix/owner_shots/c52_before_after.jpg`, `c55_before_after.jpg` (local).
+
+## diagfix 15 (round 2026-11-15b, owner review of c19_option: "almost perfect, minor glitch at the end of the avenue and the beginning of the 1 tile road")
+
+19's look is now the owner's: the original cap-square end of the diagonal boulevard, opened only over the road's row
+(`verify/diagfix/paint_19c.py` CapRoad), in place of the taper + bend. The glitch at the road (offline mock and in game):
+the opened outer curb still rounded the corner with the end edge (a grass notch at the road's north kerb), the end edge's
+kerb kept the diagonal strip's x sqrt 2 profile (its gutter line one step off the road's), and the road's south sidewalk
+ended short of the cap's outer curb (an asphalt gap, then a gutter-line stub). Fixed in CapRoad: no rounding on the
+opened side, the end kerb eases into road 29's profile over the last 1.5 cells, the cap's outer curb runs up to the
+road's sidewalk and road 29's own pixels fill that inside corner.
+
+Pieces: the DBV `bend135` stamp (kind 18, `verify/diagfix/add_bend19c.py`, the whole old 8-cell footprint so the mirror
+covers the turned frame's partial rows) and its mirror `bend135m` (kind 19, add_bend19m.py), same ids 22442..22457, same
+cells and states: only the art changes (pack art, gitignored), the manifest and tables are byte-for-byte as before.
+Same detection, switch SC3NETMOD_DBVBEND135 (=0: the square end as before the bend). Regression m18 (fresh game, every
+pack): 0 cells differ from m17 in all 80 cases (art only). In game before (staged 11-15) | after, 4 views, 19 and its
+axis-1 mirror m19: `verify/diagfix/owner_shots/c19_before_after.jpg`, `cm19_before_after.jpg` (local).
