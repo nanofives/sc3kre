@@ -111,3 +111,26 @@ Traps: the 48 scene kept the drags' 1.06-cell overshoot in the ART too (the firs
 cut square); footprint and art now differ (`CornerW.painting`). A 7-row axis-1 DB drag is only 4 full rows in DBV's
 turned frame: bend + far cap leave 2 clean rows (needs 3), so m34 with the xsect drag length stays stock (a geometry
 limit, not the bend). The DAV merge table was at its 64-line cap (now 128).
+
+## diagfix 14 (round 2026-11-15b, owner bug in 52): the avenue arm cut off from the DA x DB corner box
+
+Owner, from the bfill4 sheet and final1115 `sheet_final_3`: in 52 the diagonal avenue arm ends in a V, then grass, then
+the box. Cause: `verify/diagfix/dbvx_build.py` fitted 52 as an L corner, but its drags run the first kind 3 rows on past
+the other band (the avenue dragged to the boulevard's far edge), so the layout is a T with the boulevard as the stem.
+The best-scoring L (ends 0 1) drew the avenue on the far side; its six arm cells beside the box were painted from a scene
+with no avenue there, i.e. empty art, deduped into one piece (22735, written on 52's cells (30,101) (31,101) (30,102)
+(31,102) (32,102) and (31,103)'s row). 55 (DB x DB L) had the same fault on 8 cells.
+
+Fix: L cases also try the T scenes (after the L ones, so a tie keeps the L); 52 and 55 now fit `T stem 1 edge 1` with
+no undrawn drag cell; 55 joins 52 in `ASYM` (a T is not x <-> z symmetric, its mirror gets its own templates); the
+build stops if any written box cell paints nothing. Pack: 76 pieces 22721..22796 (the old 22735 is gone, later ids one
+lower), 22 templates (was 18), template check 0 wrong.
+
+Other empty-art pieces, all by design: 22435 / 22441 (the transparent stub box_build / corner_build write on drag
+overshoot past a box: 15 29 40 48), 22607..22609 (past 48's corner), 22720 (past 44's band edge). 49 50 53 54 write none.
+
+Regression m17 (fresh game, every pack incl. orthfix 11-15b; diagxnet's underpass 0.1.1 is wall art only): against m16
+only 52 / 55 change (the arm cells now the avenue / boulevard) and 53 / 54 (ids one lower, same states). Orders
+(m17b, fresh game): 39 41 45 identical; reversed 49 53 identical, 54 55 the known slot-edge cell, 50 / 52 differ only
+at the boulevard's far end cap (the next slot's road; m13b / m14b / m16 effect, not the box). Before | after, 4 views:
+`verify/diagfix/owner_shots/c52_before_after.jpg`, `c55_before_after.jpg` (local).
