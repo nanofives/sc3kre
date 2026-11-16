@@ -625,6 +625,7 @@ def compile_pack(stock, pack_dir, man):
            "avenue_junction_lines": [],                                                     # task avjunc
            "road_end_lines": [],                                                            # task slopeend
            "boulevard_slope_lines": [],                                                     # task avslope
+           "crossing_lines": [],                                                            # task diagxnet: DAVXN
            "texts": [_text(t, langs_text, "%s texts %d" % (pname, n + 1))                   # task hwask
                      for n, t in enumerate(man.get("texts", []))]}
     for n, v in enumerate(man.get("variants", [])):
@@ -866,6 +867,14 @@ def compile_pack(stock, pack_dir, man):
             raise NetpackError("%s avenue_lines %d: %s names a piece that is not a %s variant of this package" %
                                (pname, n + 1, tok[0], " / ".join(nets)))
         out["avenue_lines"].append(ln)
+    for n, ln in enumerate(man.get("crossing_lines", [])):           # task diagxnet: sc3netmod DAVXN (raw lines)
+        tok = ln.split()                                             # davxn <base> <base state> <band piece> <band state> <variant>
+        if len(tok) != 6 or tok[0] != "davxn" or not all(t.isdigit() for t in tok[1:]) or \
+                int(tok[1]) not in (69, 15098, 11258) or int(tok[2]) > 3 or int(tok[4]) > 3 or \
+                int(tok[5]) not in vids or vids[int(tok[5])]["base"] != int(tok[1]):
+            raise NetpackError("%s crossing_lines %d: '%s' is not `davxn <69|15098|11258> <0..3> <band piece> <0..3> "
+                               "<variant of that crossing piece from this package>`" % (pname, n + 1, ln))
+        out["crossing_lines"].append(ln)
     for n, ln in enumerate(man.get("road_end_lines", [])):           # task slopeend: sc3netmod SLE block (raw lines)
         tok = ln.split()                                             # sle <slope piece> <up> <down> <both> at state 0, then 2
         if len(tok) != 8 or tok[0] != "sle" or not all(t.isdigit() for t in tok[1:]) or \
@@ -1284,7 +1293,7 @@ def merge(stock, packs):
                 c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards") or \
                 c.get("highway_lines") or c.get("avenue_lines") or \
                 c.get("avenue_junction_lines") or c.get("road_end_lines") or \
-                c.get("boulevard_slope_lines"):   # task slopeend, avslope  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore, avjunc
+                c.get("boulevard_slope_lines") or c.get("crossing_lines"):   # task slopeend, avslope, diagxnet  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore, avjunc
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1325,7 +1334,8 @@ def merge(stock, packs):
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_junction_lines", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("road_end_lines", [])) + \
-                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("boulevard_slope_lines", []))   # task hwcore, avcore, avjunc, slopeend, avslope
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("boulevard_slope_lines", [])) + \
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("crossing_lines", []))   # task hwcore, avcore, avjunc, slopeend, avslope, diagxnet
                 # task diagave, avx, boulevard, bigrbt, diagx, bvx, diagbv
 
     # ---- report + checks that need the merged result
@@ -1343,6 +1353,7 @@ def merge(stock, packs):
     placed |= {a["piece"] for a in autos}                    # sc3netmod RBT places it (task roundabout3)
     placed |= {a["closed"] for a in autos if a.get("closed")}   # and the arm-less quarter (task roundabout4)
     placed |= {int(t) for c in comp for ln in c.get("road_end_lines", []) for t in ln.split()[2:]}   # task slopeend: SLE
+    placed |= {int(ln.split()[5]) for c in comp for ln in c.get("crossing_lines", [])}   # task diagxnet: DAVXN
     placed |= {int(ln.split()[2]) for c in comp for ln in c.get("boulevard_slope_lines", [])}   # task avslope: BVS
     placed |= {int(t) for c in comp for ln in c.get("boulevard_slope_lines", []) if ln.startswith("bvn ")
                for t in ln.split()[2:]}                                                           # task avends F3

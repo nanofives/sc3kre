@@ -327,6 +327,7 @@ static int dav_xnet(DWORD v) {
     }
     return g_dav_xnk[id] == 2;
 }
+#include "sc3netmod_davxn.c"   /* task diagxnet: DAVXN, the crossing variants a kept cell takes (SC3NETMOD_DAVXNRAIL / _DAVXNHWY) */
 
 /* road test in axis space: axis 1 mirrors x */
 static int dav_road(RbBuf *b, int axis, int x, int z) { return rb_at(b, axis ? -x : x, z) != 0; }
@@ -1395,7 +1396,11 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                             cz <= z1)                                       /* diagfix: a bend stub is ours, kept */
                             keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
                         if (dbv_claimed(cx, cz)) continue;          /* task diagbv: DBV writes its own cells */
-                        if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
+                        if (dav_xnet(cur)) {                        /* task diagfix: a rail / highway crossing stays */
+                            nw += davxn_write(mgr, lay, cx, cz, cur, want);   /* task diagxnet: DAVXN, its variant */
+                            nxk++;
+                            continue;
+                        }
                         if ((k >= n + na || (dav_xm(&P, cx, cz) & 2)) && dav_xavl_keep(want, cur)) {   /* DAVXAVL */
                             InterlockedIncrement(&g_dav_n_xavl);
                             continue;
@@ -1484,6 +1489,10 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
             for (x = x0 + 1; x < x1; x++) {
                 DWORD v = rb_at(&P.b, x, z);
                 int rect[6];
+                if (davxn_back(mgr, lay, v, x, z, keep[(z - z0) * P.b.w + (x - x0)] || dbv_claimed(x, z), who)) {
+                    nrev++;                                      /* task diagxnet: DAVXN piece no band keeps */
+                    continue;
+                }
                 if (!v || !dav_is_mid_or_twin((WORD)(v & 0xffff)) || keep[(z - z0) * P.b.w + (x - x0)] || dbv_claimed(x, z))
                     continue;                                    /* task diagbv: claimed cells are DBV's */
                 rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = x << 8; rect[4] = z << 8; rect[5] = 0;
@@ -1647,6 +1656,8 @@ static void dav_stats(void) {
         logf("stats: dav cells left to BV (DAVBVBEND)=%ld", g_dav_n_bvyield);
     if (g_dav_n_dbvwin)                                                /* task diagfix: DAVDBVWIN */
         logf("stats: dav windows DBV judged first (DAVDBVWIN)=%ld", g_dav_n_dbvwin);
+    if (g_davxn_n_put || g_davxn_n_back)                               /* task diagxnet: DAVXN */
+        logf("stats: davxn crossing variants written=%ld, stock crossings put back=%ld", g_davxn_n_put, g_davxn_n_back);
     if (g_dav_n_xnet)                                                  /* task diagfix: DAVXNET */
         logf("stats: dav/dbv rail / highway crossing cells kept=%ld", g_dav_n_xnet);
     if (g_dav_n_two)                                                   /* task avrbtchain: DAVTWO */

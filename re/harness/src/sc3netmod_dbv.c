@@ -1063,7 +1063,11 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     DWORD want = (P.cell[k].want & ~0xffUL) | ((P.cell[k].want + axis) & 3), cur = rb_at(&P.b, rx, rz);
                     dbv_claim(rx, rz);
                     if (keep) keep[(rz - z0) * P.b.w + (rx - x0)] = 1;
-                    if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
+                    if (dav_xnet(cur)) {                        /* task diagfix: a rail / highway crossing stays */
+                        nw += davxn_write(mgr, lay, rx, rz, cur, want);   /* task diagxnet: DAVXN, its variant */
+                        nxk++;
+                        continue;
+                    }
                     if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
                     pos[0] = rx << 8; pos[1] = rz << 8; pos[2] = 0;
                     ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);

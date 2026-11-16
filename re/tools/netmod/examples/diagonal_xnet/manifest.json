@@ -1,0 +1,1372 @@
+{
+ "netpack": 1,
+ "name": "diagonal_xnet",
+ "version": "0.1.0",
+ "author": "netmod (task diagxnet)",
+ "description": "Diagonal avenues and boulevards across a rail line or under a highway. Stock keeps its straight road x rail crossing (69) and highway-over-road pieces (15098 / 11258) on those cells, drawn as a 2-lane road. These are variants of those pieces (so the rail and the highway keep working and saves load as stock without the mod) with the band's own lanes: a level crossing that follows the diagonal lanes, and one underpass the shape of the band. sc3netmod's DAVXN block writes them (SC3NETMOD_DAVXNRAIL / SC3NETMOD_DAVXNHWY = 0: off). Built by `py -3.12 -m netmod.xnet_build <this folder>` from re/tools before install (art/ is made from the game's frames and is not shipped).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 30000,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue level crossing",
+    "ENGLISH": "Paso a nivel de avenida diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30000"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30001,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue level crossing",
+    "ENGLISH": "Paso a nivel de avenida diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30001"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30002,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue level crossing",
+    "ENGLISH": "Paso a nivel de avenida diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30002"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30003,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30003"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30004,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30004"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30005,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30005"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30006,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30006"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30007,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30007"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30008,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30008"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30009,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30009"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30010,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30010"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30011,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30011"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30012,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30012"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30013,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30013"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30014,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30014"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30015,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue level crossing",
+    "ENGLISH": "Paso a nivel de avenida diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30015"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30016,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue level crossing",
+    "ENGLISH": "Paso a nivel de avenida diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30016"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30017,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue level crossing",
+    "ENGLISH": "Paso a nivel de avenida diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30017"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30018,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30018"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30019,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30019"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30020,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30020"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30021,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30021"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30022,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30022"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30023,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30023"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30024,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30024"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30025,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30025"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30026,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30026"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30027,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30027"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30028,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30028"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30029,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue underpass",
+    "ENGLISH": "Paso inferior de avenida diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30029"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30030,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30030"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30031,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30031"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30032,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30032"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30033,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30033"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30034,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30034"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30035,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30035"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30036,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30036"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30037,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30037"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30038,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30038"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30039,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30039"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30040,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30040"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30041,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30041"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30042,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30042"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30043,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30043"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30044,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30044"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30045,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30045"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30046,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30046"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30047,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30047"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30048,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30048"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30049,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30049"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30050,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30050"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30051,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30051"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30052,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30052"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30053,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard level crossing",
+    "ENGLISH": "Paso a nivel de bulevar diagonal"
+   },
+   "art": {
+    "from": 69,
+    "png_dir": "art/30053"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30054,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30054"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30055,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30055"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30056,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30056"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30057,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30057"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30058,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30058"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30059,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30059"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30060,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30060"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30061,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30061"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30062,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30062"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30063,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30063"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30064,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30064"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30065,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30065"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30066,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30066"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30067,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30067"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30068,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30068"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30069,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard underpass",
+    "ENGLISH": "Paso inferior de bulevar diagonal"
+   },
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30069"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 30000,
+   "spec": "xn_30000.lanes.json"
+  },
+  {
+   "piece": 30001,
+   "spec": "xn_30001.lanes.json"
+  },
+  {
+   "piece": 30002,
+   "spec": "xn_30002.lanes.json"
+  },
+  {
+   "piece": 30003,
+   "spec": "xn_30003.lanes.json"
+  },
+  {
+   "piece": 30004,
+   "spec": "xn_30004.lanes.json"
+  },
+  {
+   "piece": 30005,
+   "spec": "xn_30005.lanes.json"
+  },
+  {
+   "piece": 30006,
+   "spec": "xn_30006.lanes.json"
+  },
+  {
+   "piece": 30007,
+   "spec": "xn_30007.lanes.json"
+  },
+  {
+   "piece": 30008,
+   "spec": "xn_30008.lanes.json"
+  },
+  {
+   "piece": 30009,
+   "spec": "xn_30009.lanes.json"
+  },
+  {
+   "piece": 30010,
+   "spec": "xn_30010.lanes.json"
+  },
+  {
+   "piece": 30011,
+   "spec": "xn_30011.lanes.json"
+  },
+  {
+   "piece": 30012,
+   "spec": "xn_30012.lanes.json"
+  },
+  {
+   "piece": 30013,
+   "spec": "xn_30013.lanes.json"
+  },
+  {
+   "piece": 30014,
+   "spec": "xn_30014.lanes.json"
+  },
+  {
+   "piece": 30015,
+   "spec": "xn_30015.lanes.json"
+  },
+  {
+   "piece": 30016,
+   "spec": "xn_30016.lanes.json"
+  },
+  {
+   "piece": 30017,
+   "spec": "xn_30017.lanes.json"
+  },
+  {
+   "piece": 30018,
+   "spec": "xn_30018.lanes.json"
+  },
+  {
+   "piece": 30019,
+   "spec": "xn_30019.lanes.json"
+  },
+  {
+   "piece": 30020,
+   "spec": "xn_30020.lanes.json"
+  },
+  {
+   "piece": 30021,
+   "spec": "xn_30021.lanes.json"
+  },
+  {
+   "piece": 30022,
+   "spec": "xn_30022.lanes.json"
+  },
+  {
+   "piece": 30023,
+   "spec": "xn_30023.lanes.json"
+  },
+  {
+   "piece": 30024,
+   "spec": "xn_30024.lanes.json"
+  },
+  {
+   "piece": 30025,
+   "spec": "xn_30025.lanes.json"
+  },
+  {
+   "piece": 30026,
+   "spec": "xn_30026.lanes.json"
+  },
+  {
+   "piece": 30027,
+   "spec": "xn_30027.lanes.json"
+  },
+  {
+   "piece": 30028,
+   "spec": "xn_30028.lanes.json"
+  },
+  {
+   "piece": 30029,
+   "spec": "xn_30029.lanes.json"
+  },
+  {
+   "piece": 30030,
+   "spec": "xn_30030.lanes.json"
+  },
+  {
+   "piece": 30031,
+   "spec": "xn_30031.lanes.json"
+  },
+  {
+   "piece": 30032,
+   "spec": "xn_30032.lanes.json"
+  },
+  {
+   "piece": 30033,
+   "spec": "xn_30033.lanes.json"
+  },
+  {
+   "piece": 30034,
+   "spec": "xn_30034.lanes.json"
+  },
+  {
+   "piece": 30035,
+   "spec": "xn_30035.lanes.json"
+  },
+  {
+   "piece": 30036,
+   "spec": "xn_30036.lanes.json"
+  },
+  {
+   "piece": 30037,
+   "spec": "xn_30037.lanes.json"
+  },
+  {
+   "piece": 30038,
+   "spec": "xn_30038.lanes.json"
+  },
+  {
+   "piece": 30039,
+   "spec": "xn_30039.lanes.json"
+  },
+  {
+   "piece": 30040,
+   "spec": "xn_30040.lanes.json"
+  },
+  {
+   "piece": 30041,
+   "spec": "xn_30041.lanes.json"
+  },
+  {
+   "piece": 30042,
+   "spec": "xn_30042.lanes.json"
+  },
+  {
+   "piece": 30043,
+   "spec": "xn_30043.lanes.json"
+  },
+  {
+   "piece": 30044,
+   "spec": "xn_30044.lanes.json"
+  },
+  {
+   "piece": 30045,
+   "spec": "xn_30045.lanes.json"
+  },
+  {
+   "piece": 30046,
+   "spec": "xn_30046.lanes.json"
+  },
+  {
+   "piece": 30047,
+   "spec": "xn_30047.lanes.json"
+  },
+  {
+   "piece": 30048,
+   "spec": "xn_30048.lanes.json"
+  },
+  {
+   "piece": 30049,
+   "spec": "xn_30049.lanes.json"
+  },
+  {
+   "piece": 30050,
+   "spec": "xn_30050.lanes.json"
+  },
+  {
+   "piece": 30051,
+   "spec": "xn_30051.lanes.json"
+  },
+  {
+   "piece": 30052,
+   "spec": "xn_30052.lanes.json"
+  },
+  {
+   "piece": 30053,
+   "spec": "xn_30053.lanes.json"
+  },
+  {
+   "piece": 30054,
+   "spec": "xn_30054.lanes.json"
+  },
+  {
+   "piece": 30055,
+   "spec": "xn_30055.lanes.json"
+  },
+  {
+   "piece": 30056,
+   "spec": "xn_30056.lanes.json"
+  },
+  {
+   "piece": 30057,
+   "spec": "xn_30057.lanes.json"
+  },
+  {
+   "piece": 30058,
+   "spec": "xn_30058.lanes.json"
+  },
+  {
+   "piece": 30059,
+   "spec": "xn_30059.lanes.json"
+  },
+  {
+   "piece": 30060,
+   "spec": "xn_30060.lanes.json"
+  },
+  {
+   "piece": 30061,
+   "spec": "xn_30061.lanes.json"
+  },
+  {
+   "piece": 30062,
+   "spec": "xn_30062.lanes.json"
+  },
+  {
+   "piece": 30063,
+   "spec": "xn_30063.lanes.json"
+  },
+  {
+   "piece": 30064,
+   "spec": "xn_30064.lanes.json"
+  },
+  {
+   "piece": 30065,
+   "spec": "xn_30065.lanes.json"
+  },
+  {
+   "piece": 30066,
+   "spec": "xn_30066.lanes.json"
+  },
+  {
+   "piece": 30067,
+   "spec": "xn_30067.lanes.json"
+  },
+  {
+   "piece": 30068,
+   "spec": "xn_30068.lanes.json"
+  },
+  {
+   "piece": 30069,
+   "spec": "xn_30069.lanes.json"
+  }
+ ],
+ "crossing_lines": [
+  "davxn 69 1 20505 2 30000",
+  "davxn 69 0 20505 1 30000",
+  "davxn 69 1 20500 0 30001",
+  "davxn 69 0 20500 3 30001",
+  "davxn 69 1 20500 2 30001",
+  "davxn 69 0 20500 1 30001",
+  "davxn 69 1 20505 0 30002",
+  "davxn 69 0 20505 3 30002",
+  "davxn 15098 2 20505 2 30003",
+  "davxn 15098 2 20500 0 30004",
+  "davxn 15098 2 20500 2 30004",
+  "davxn 15098 2 20505 0 30005",
+  "davxn 15098 0 20505 2 30006",
+  "davxn 15098 0 20500 0 30007",
+  "davxn 15098 0 20500 2 30007",
+  "davxn 15098 0 20505 0 30008",
+  "davxn 11258 2 20505 0 30009",
+  "davxn 11258 2 20500 0 30010",
+  "davxn 11258 2 20500 2 30010",
+  "davxn 11258 2 20505 2 30011",
+  "davxn 11258 0 20505 0 30012",
+  "davxn 11258 0 20500 0 30013",
+  "davxn 11258 0 20500 2 30013",
+  "davxn 11258 0 20505 2 30014",
+  "davxn 69 1 20505 3 30015",
+  "davxn 69 0 20505 2 30015",
+  "davxn 69 1 20500 1 30016",
+  "davxn 69 0 20500 0 30016",
+  "davxn 69 1 20500 3 30016",
+  "davxn 69 0 20500 2 30016",
+  "davxn 69 1 20505 1 30017",
+  "davxn 69 0 20505 0 30017",
+  "davxn 15098 2 20505 3 30018",
+  "davxn 15098 2 20500 1 30019",
+  "davxn 15098 2 20500 3 30019",
+  "davxn 15098 2 20505 1 30020",
+  "davxn 15098 0 20505 3 30021",
+  "davxn 15098 0 20500 1 30022",
+  "davxn 15098 0 20500 3 30022",
+  "davxn 15098 0 20505 1 30023",
+  "davxn 11258 2 20505 3 30024",
+  "davxn 11258 2 20500 1 30025",
+  "davxn 11258 2 20500 3 30025",
+  "davxn 11258 2 20505 1 30026",
+  "davxn 11258 0 20505 3 30027",
+  "davxn 11258 0 20500 1 30028",
+  "davxn 11258 0 20500 3 30028",
+  "davxn 11258 0 20505 1 30029",
+  "davxn 69 1 20950 2 30030",
+  "davxn 69 0 20950 1 30030",
+  "davxn 69 1 20951 2 30031",
+  "davxn 69 0 20951 1 30031",
+  "davxn 69 1 20951 0 30032",
+  "davxn 69 0 20951 3 30032",
+  "davxn 69 1 20950 0 30033",
+  "davxn 69 0 20950 3 30033",
+  "davxn 15098 2 20950 2 30034",
+  "davxn 15098 2 20951 2 30035",
+  "davxn 15098 2 20951 0 30036",
+  "davxn 15098 2 20950 0 30037",
+  "davxn 15098 0 20950 2 30038",
+  "davxn 15098 0 20951 2 30039",
+  "davxn 15098 0 20951 0 30040",
+  "davxn 15098 0 20950 0 30041",
+  "davxn 11258 2 20950 0 30042",
+  "davxn 11258 2 20951 0 30043",
+  "davxn 11258 2 20951 2 30044",
+  "davxn 11258 2 20950 2 30045",
+  "davxn 11258 0 20950 0 30046",
+  "davxn 11258 0 20951 0 30047",
+  "davxn 11258 0 20951 2 30048",
+  "davxn 11258 0 20950 2 30049",
+  "davxn 69 1 20950 3 30050",
+  "davxn 69 0 20950 2 30050",
+  "davxn 69 1 20951 3 30051",
+  "davxn 69 0 20951 2 30051",
+  "davxn 69 1 20951 1 30052",
+  "davxn 69 0 20951 0 30052",
+  "davxn 69 1 20950 1 30053",
+  "davxn 69 0 20950 0 30053",
+  "davxn 15098 2 20950 3 30054",
+  "davxn 15098 2 20951 3 30055",
+  "davxn 15098 2 20951 1 30056",
+  "davxn 15098 2 20950 1 30057",
+  "davxn 15098 0 20950 3 30058",
+  "davxn 15098 0 20951 3 30059",
+  "davxn 15098 0 20951 1 30060",
+  "davxn 15098 0 20950 1 30061",
+  "davxn 11258 2 20950 3 30062",
+  "davxn 11258 2 20951 3 30063",
+  "davxn 11258 2 20951 1 30064",
+  "davxn 11258 2 20950 1 30065",
+  "davxn 11258 0 20950 3 30066",
+  "davxn 11258 0 20951 3 30067",
+  "davxn 11258 0 20951 1 30068",
+  "davxn 11258 0 20950 1 30069"
+ ]
+}
