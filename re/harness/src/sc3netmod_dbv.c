@@ -564,7 +564,8 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     }
     for (k = 0; k < n && nxm < 8 && g_dbvx_n && dbvx_on(); k++) {
         int z = z0 + k, a = LEFT(z), t2;
-        if (k && k != n - 1 && !dbv_rd(p, a - 1, z) && !dbv_rd(p, a + 4, z)) continue;
+        /* every row is tried (task diagfix DBVXFILL: a template anchored on a band's end row stops being an end row
+           once its fill cell lengthens the chain, 52) */
         for (t2 = 0; t2 < g_dbvx_n && nxm < 8; t2++) {
             const DbvX *q = &g_dbvx[t2];
             int i2, j2, ok = q->got == q->h && q->nw, dup = 0, outside = 0;
@@ -601,6 +602,12 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                     if (q->grid[j2 * q->w + i2] == 'r') MARK(a + q->x0 + i2, zz) |= 2;
             }
         }
+    }
+    if (p->xdbg && !nxm) {                                               /* SC3NETMOD_DBVXDBG: what was tried */
+        int nr = 0;
+        for (k = 0; k < n; k++) if (!k || k == n - 1 || dbv_rd(p, LEFT(z0 + k) - 1, z0 + k) || dbv_rd(p, LEFT(z0 + k) + 4, z0 + k)) nr++;
+        logf("dbv: DBVXDBG band axis %d from canonical (%d,%d), %d row(s): %d candidate row(s), nearest miss %d", p->axis,
+             x0, z0, n, nr, p->xbest < (1 << 30) ? p->xbest : -1);
     }
     if (p->xdbg && !nxm && p->xbest < (1 << 30))
         logf("dbv: DBVXDBG band axis %d from canonical (%d,%d): no template; nearest %d (%d cell(s) off, first at real "
