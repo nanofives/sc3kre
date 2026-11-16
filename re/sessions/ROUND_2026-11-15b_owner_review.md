@@ -39,6 +39,16 @@ Check 66 / 70 once against the new 67 / 71 looks and say if they now look incons
 
 Also still open from before: 49 drawn diagonal boulevard first is timing-sensitive (diagfix).
 
+## Merged so far (main)
+
+- 78b959e diagfix 12 (DBVXFILL, 50 52 54 55). 854be1a orthfix 11-15b (66 67 70 71 art, 43 box, 29-33 boxes; 31-33
+  need arms of 10+ cells). 35eb5ed diagxnet (68 69 72 73 crossings / underpasses, package diagonal_xnet 30000..30069).
+  47dab82 diagxnet DAVXHEAL (rail / highway drawn across an existing diagonal). diagxnet CLOSED, ship set kept
+  (dev/diagxnet/ship + SHIP.md, KEEP). Merged sc3netmod compiles.
+- Open: diagfix 15 / 19 (owner card), 80 dedicated joint (owner card A / B), 49 DB-first. Then integration again
+  (orthfix ship 11-15b: boulevard 0.5.0, boulevard_diagonal 0.2.0, avenue_diagonal_t, avenue_dbv_t; diagfix
+  diagonal_boulevard update; diagxnet diagonal_xnet), re-stage, final check, owner sheet.
+
 ## File / block ownership
 
 | stream | owns |
