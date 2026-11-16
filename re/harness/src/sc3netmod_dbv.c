@@ -144,6 +144,21 @@ static void dbvx_line(const char *path, const char *line) {
     }
 }
 
+/* task diagfix (round 2026-11-15b, xsect 50 52 54 55: "on the upper road there's a missing road"): DBVXFILL. A
+   diagonal boulevard stem drawn up to another diagonal starts at that band's edge, so the stem band's d0 cell beside
+   the box is never built and the box shows a notch there. A template window cell `f` is a fill cell: ignored when
+   matching (built or not), and its write puts the piece there even on an empty cell. Off: SC3NETMOD_DBVXFILL=0. */
+static int g_dbvx_fill = -1;
+static int dbvx_fill(const DbvX *q, const DbvXW *w) {
+    int i = w->dx - q->x0, j = w->dz - q->z0;
+    if (g_dbvx_fill < 0) {
+        g_dbvx_fill = !env_off("SC3NETMOD_DBVXFILL");
+        logf("dbv: DBVXFILL %s (a crossing template builds the stem's missing cell beside its box, SC3NETMOD_DBVXFILL)",
+             g_dbvx_fill ? "on" : "off");
+    }
+    return g_dbvx_fill && i >= 0 && j >= 0 && i < q->w && j < q->h && q->grid[j * q->w + i] == 'f';
+}
+
 static void dbv_line(const char *path, const char *line) {
     unsigned long k, p, st, o, i;
     long dx, dz;
@@ -549,7 +564,8 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     }
     for (k = 0; k < n && nxm < 8 && g_dbvx_n && dbvx_on(); k++) {
         int z = z0 + k, a = LEFT(z), t2;
-        if (k && k != n - 1 && !dbv_rd(p, a - 1, z) && !dbv_rd(p, a + 4, z)) continue;
+        /* every row is tried (task diagfix DBVXFILL: a template anchored on a band's end row stops being an end row
+           once its fill cell lengthens the chain, 52) */
         for (t2 = 0; t2 < g_dbvx_n && nxm < 8; t2++) {
             const DbvX *q = &g_dbvx[t2];
             int i2, j2, ok = q->got == q->h && q->nw, dup = 0, outside = 0;
@@ -558,7 +574,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                 for (i2 = 0; i2 < q->w && (ok || p->xdbg); i2++) {
                     char g = q->grid[j2 * q->w + i2];
                     int cx2 = a + q->x0 + i2, cz2 = z + q->z0 + j2, rx2 = DBV_RX(p, cx2, cz2), rz2 = DBV_RZ(p, cx2, cz2);
-                    if (g == '-') continue;
+                    if (g == '-' || g == 'f') continue;               /* f: a fill cell, see DBVXFILL */
                     if (rx2 < p->b.x0 || rz2 < p->b.z0 || rx2 >= p->b.x0 + p->b.w || rz2 >= p->b.z0 + p->b.h) {
                         if (g == 'r') outside = 1;               /* not read: a wider pass decides (as DAV's) */
                         continue;
@@ -586,6 +602,12 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                     if (q->grid[j2 * q->w + i2] == 'r') MARK(a + q->x0 + i2, zz) |= 2;
             }
         }
+    }
+    if (p->xdbg && !nxm) {                                               /* SC3NETMOD_DBVXDBG: what was tried */
+        int nr = 0;
+        for (k = 0; k < n; k++) if (!k || k == n - 1 || dbv_rd(p, LEFT(z0 + k) - 1, z0 + k) || dbv_rd(p, LEFT(z0 + k) + 4, z0 + k)) nr++;
+        logf("dbv: DBVXDBG band axis %d from canonical (%d,%d), %d row(s): %d candidate row(s), nearest miss %d", p->axis,
+             x0, z0, n, nr, p->xbest < (1 << 30) ? p->xbest : -1);
     }
     if (p->xdbg && !nxm && p->xbest < (1 << 30))
         logf("dbv: DBVXDBG band axis %d from canonical (%d,%d): no template; nearest %d (%d cell(s) off, first at real "
@@ -817,7 +839,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                 const DbvXW *w = &g_dbvxw[q->w0 + j];
                 DWORD want = ((DWORD)w->piece << 8) | w->state;
                 cx = xma[m] + w->dx; cz = xmz[m] + w->dz;
-                if (!dbv_rd(p, cx, cz)) clash = 2;
+                if (!dbv_rd(p, cx, cz) && !dbvx_fill(q, w)) clash = 2;
                 else if (*dbv_mk(p, p->owner, cx, cz) >= 200) {
                     for (k = 0; k < p->n; k++)
                         if (p->cell[k].x == cx && p->cell[k].z == cz) break;
