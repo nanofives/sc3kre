@@ -64,3 +64,34 @@ band takes its DAVXN variants.
 | highway | SimTransit flags (+0x5c) on the healed underpass equal the sweep-built 72 cell for cell (0x3 on the six cells, 0x2 highway on both sides); the sweep-built underpass already carried Sacramento's traffic (above) |
 
 Pictures: `owner_shots/heal_sheet.png` (72 sweep order | band first + highway | band first + rail, a train on it).
+
+## Underpass wall wedge (owner review 2026-11-16, `diagonal_xnet` 0.1.1)
+
+Owner, case 72 view 0: "there's triangle here that needs to be fixed", a beige triangle on the highway's near wall just
+right of the opening.
+
+**Cause.** The beige is the left end face of the stock highway cell beside the band (15051 at (32,141), frame 0, matched
+pixel for pixel in the shot, `wedge/whose.py`). Every plain highway frame (15051 / 73, one layer) carries that end face,
+and the next highway cell normally covers it. The game draws the 2-layer pieces' layer 0 first, then the plain highway
+cells, then every layer 1. Our variants (on 15098 / 11258) had their walls in layer 0, so the neighbour's end face landed
+on them. Stock 15098 relies on the same overdraw to draw the abutments of its straight opening. The draw order is
+measured, not assumed: the offline composite with that order (`wedge/gameorder.py`, GO_MODE=last) equals the in-game shot
+in view 0 (13 pixels off by more than 40 before the fix, 0 after the first fix build); plain painter order with layer 1
+interleaved does not show the wedge at all.
+
+Same fault, every orientation: beige wedges on 15051 decks and dark ones on 73 decks in 72, 73, H1..H6 (`w1`).
+
+**Fix (`xnet_paint.paint_under_cell`).** Layer 1 = the stock deck top plus every pixel that shows this cell's own deck,
+slab or wall (hit point inside the cell's square; deck pixels judged at the top face e = 32). Drawn after the neighbour, it
+covers the end face, as a plain highway cell would. A first build judged deck pixels at the slab underside (e = 30): the
+30..32 rim of each cell's end face then went into layer 1 and showed as 1 px beige seams across the deck at the band
+edges (`w2`, all four views). Judging at e = 32 gives the rim to the next cell. Ground under the opening stays layer 0
+only. Lanes, manifest lines and rail art unchanged (rail ids 30000..30002, 30015..30017, 30030..30033, 30050..30053
+byte-identical); only the 56 underpass ids changed. Version 0.1.1.
+
+| check | result |
+|---|---|
+| in game, cases 72 73 H1..H6, zoom 4, views 0..3 (`w1` 0.1.0, `w3` 0.1.1, same game build, same cells read back) | no wedge, no seam, wall line continuous outside the opening in all 32 views; the stray step in the view 1 / 3 abutment (an end face) is gone too |
+| offline model of the game order on the 0.1.1 art vs the `w3` shots, case 72 | view 0: 62 pixels off, view 2: 53 (trees, pedestrians); views 1 / 3 differ only where the sandbox's other cases (power lines, water) enter the frame |
+
+Pictures: `owner_shots/wedge_72.jpg` (72 before | after, four views), `owner_shots/wedge_all.png` (8 cases x 4 views).

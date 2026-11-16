@@ -1,7 +1,7 @@
 {
  "netpack": 1,
  "name": "diagonal_xnet",
- "version": "0.1.0",
+ "version": "0.1.1",
  "author": "netmod (task diagxnet)",
  "description": "Diagonal avenues and boulevards across a rail line or under a highway. Stock keeps its straight road x rail crossing (69) and highway-over-road pieces (15098 / 11258) on those cells, drawn as a 2-lane road. These are variants of those pieces (so the rail and the highway keep working and saves load as stock without the mod) with the band's own lanes: a level crossing that follows the diagonal lanes, and one underpass the shape of the band. sc3netmod's DAVXN block writes them (SC3NETMOD_DAVXNRAIL / SC3NETMOD_DAVXNHWY = 0: off). Built by `py -3.12 -m netmod.xnet_build <this folder>` from re/tools before install (art/ is made from the game's frames and is not shipped).",
  "game": {

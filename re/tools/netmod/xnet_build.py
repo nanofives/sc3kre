@@ -181,7 +181,7 @@ def main(argv):
                 keyseen[key] = vid
                 lines.append("davxn %d %d %d %d %d" % (base, bs, p, s, vid))
         print("%d %-34s band %s -> %d lines" % (vid, tag, w, len(keys)))
-    man = {"netpack": 1, "name": "diagonal_xnet", "version": "0.1.0", "author": "netmod (task diagxnet)",
+    man = {"netpack": 1, "name": "diagonal_xnet", "version": "0.1.1", "author": "netmod (task diagxnet)",
            "description": "Diagonal avenues and boulevards across a rail line or under a highway. Stock keeps its "
                           "straight road x rail crossing (69) and highway-over-road pieces (15098 / 11258) on those "
                           "cells, drawn as a 2-lane road. These are variants of those pieces (so the rail and the "
