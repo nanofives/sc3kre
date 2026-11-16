@@ -845,7 +845,7 @@ def compile_pack(stock, pack_dir, man):
             if p not in (29, 35) and (p not in vids or vids[p]["net"] != "ROAD"):
                 raise NetpackError("%s: piece %s must be a ROAD variant declared in this package (or 29 / 35)" % (where, p))
         for t in a.get("crossing", []):                                  # task diagfix: DBVX templates
-            if len(t["grid"]) != t["w"] * t["h"] or set(t["grid"]) - set("r.-") or t["w"] > 200:
+            if len(t["grid"]) != t["w"] * t["h"] or set(t["grid"]) - set("rf.-") or t["w"] > 200:
                 raise NetpackError("%s: crossing %s: grid must be w x h of r . -" % (where, t.get("id")))
         out["auto_diagonal_boulevards"].append({"band": list(a["band"]), "stamps": a["stamps"],
                                                 "crossing": a.get("crossing", []), "where": where})

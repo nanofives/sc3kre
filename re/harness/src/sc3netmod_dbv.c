@@ -144,6 +144,21 @@ static void dbvx_line(const char *path, const char *line) {
     }
 }
 
+/* task diagfix (round 2026-11-15b, xsect 50 52 54 55: "on the upper road there's a missing road"): DBVXFILL. A
+   diagonal boulevard stem drawn up to another diagonal starts at that band's edge, so the stem band's d0 cell beside
+   the box is never built and the box shows a notch there. A template window cell `f` is a fill cell: ignored when
+   matching (built or not), and its write puts the piece there even on an empty cell. Off: SC3NETMOD_DBVXFILL=0. */
+static int g_dbvx_fill = -1;
+static int dbvx_fill(const DbvX *q, const DbvXW *w) {
+    int i = w->dx - q->x0, j = w->dz - q->z0;
+    if (g_dbvx_fill < 0) {
+        g_dbvx_fill = !env_off("SC3NETMOD_DBVXFILL");
+        logf("dbv: DBVXFILL %s (a crossing template builds the stem's missing cell beside its box, SC3NETMOD_DBVXFILL)",
+             g_dbvx_fill ? "on" : "off");
+    }
+    return g_dbvx_fill && i >= 0 && j >= 0 && i < q->w && j < q->h && q->grid[j * q->w + i] == 'f';
+}
+
 static void dbv_line(const char *path, const char *line) {
     unsigned long k, p, st, o, i;
     long dx, dz;
@@ -558,7 +573,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                 for (i2 = 0; i2 < q->w && (ok || p->xdbg); i2++) {
                     char g = q->grid[j2 * q->w + i2];
                     int cx2 = a + q->x0 + i2, cz2 = z + q->z0 + j2, rx2 = DBV_RX(p, cx2, cz2), rz2 = DBV_RZ(p, cx2, cz2);
-                    if (g == '-') continue;
+                    if (g == '-' || g == 'f') continue;               /* f: a fill cell, see DBVXFILL */
                     if (rx2 < p->b.x0 || rz2 < p->b.z0 || rx2 >= p->b.x0 + p->b.w || rz2 >= p->b.z0 + p->b.h) {
                         if (g == 'r') outside = 1;               /* not read: a wider pass decides (as DAV's) */
                         continue;
@@ -817,7 +832,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                 const DbvXW *w = &g_dbvxw[q->w0 + j];
                 DWORD want = ((DWORD)w->piece << 8) | w->state;
                 cx = xma[m] + w->dx; cz = xmz[m] + w->dz;
-                if (!dbv_rd(p, cx, cz)) clash = 2;
+                if (!dbv_rd(p, cx, cz) && !dbvx_fill(q, w)) clash = 2;
                 else if (*dbv_mk(p, p->owner, cx, cz) >= 200) {
                     for (k = 0; k < p->n; k++)
                         if (p->cell[k].x == cx && p->cell[k].z == cz) break;
