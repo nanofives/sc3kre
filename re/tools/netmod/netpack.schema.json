@@ -279,7 +279,7 @@
     },
     "boulevard_slope_lines": {
       "type": "array",
-      "items": {"type": "string", "pattern": "^(bvs (o [0-9]+ [0-9]+ [0-3]|m [0-9]+ [0-9]+)|bvn [01]( [0-9]+){6}|bvr [0-9]+ [0-9]+ [0-4]|bvo [01]( [0-9]+){9})$"},
+      "items": {"type": "string", "pattern": "^(bvs (o [0-9]+ [0-9]+ [0-3]|m [0-9]+ [0-9]+)|bvn [01]( [0-9]+){6}|bv[rq] [0-9]+ [0-9]+ [0-4]|bvo [01]( [0-9]+){9}|bvo [23]( [0-9]+){12})$"},
       "description": "Task avslope: raw sc3netmod table lines of the BVS part of the BV block (sc3netmod_bvs.c): `bvs o <piece> <slope piece> <side>` the sloped outer carriageway of a boulevard (lanes toward world side <side> at state 0), `bvs m <piece> <slope piece>` the sloped middle; the slope piece one of 11202 / 11201 / 32 / 31, the pieces ROAD variants of it from this package. BV writes them on boulevard cells that stand on a legal slope. Task orthfix BVXING: `bvo <0|1> <9 pieces>` the opening box of a diagonal avenue leaving a boulevard (orthfix), `bvr <piece> <base> <side>` a twin of a Protected crossing piece (69 / 67 / 11258 / 15098) for a boulevard crossing it, side 0..3 = an outer row whose lanes run toward world side <side> at state 0, 4 = the middle row."
     },
     "road_end_lines": {
@@ -289,7 +289,7 @@
     },
     "avenue_lines": {
       "type": "array",
-      "items": {"type": "string", "pattern": "^(avl[a-z]|davw) [0-9]+( [-0-9A-Za-z.]+)*$"},
+      "items": {"type": "string", "pattern": "^(avl[a-z]|davw|davx[gw]?|dbvx[gw]?) [0-9]+( [-0-9A-Za-z.]+)*$"},
       "description": "Task avcore: raw sc3netmod table lines of the one-way avenue base (sc3netmod_avl.c, re/analysis/AVENUE_LANES.md): `avls <piece>` the one-way straight half, `avlu <piece>` the end U-turn quarter (also a corner's outer bend), `avlk <piece>` an avenue corner's inner bend, `avlc <piece> <base> <side>` a one-way crossing / slope variant whose lanes run toward world side <side> (0 N 1 E 2 S 3 W) at state 0, `avlj <piece> <NESW>` a sibling piece a one-way band may end on (I = traffic enters the piece across that side, O = leaves, . = none, at state 0). Task avrbtchain: `davw <twin> <piece>` a two-way twin of a diagonal avenue middle piece (same base and art, two-way lanes), written by DAV (DAVTWO) on a band whose straight avenue stays two-way. Pieces must be ROAD variants of this package."
     },
     "auto_diagonal_boulevards": {

@@ -38,10 +38,54 @@ from netmod import boulevard_paint as BP  # noqa: E402
 from netmod import diagave_paint as D     # noqa: E402
 
 U = 255.0
-IDS = {"A": list(range(22470, 22479)), "B": list(range(22479, 22488))}
+IDS = {"A": list(range(22470, 22479)), "B": list(range(22479, 22488)),
+       # round 2026-11-15b (xsect 43): the same opening for a diagonal BOULEVARD (4 band cells per row), ids 30209..
+       "C": list(range(30209, 30221)), "D": list(range(30221, 30233))}
 SHAPE0, SHAPE1 = 29000, 29119
-C = {"A": 0, "B": 7}                      # band offset of the avenue element (A: p in [0, 2); B: q in [7, 9))
+SHAPE2, SHAPE3 = 29200, 29299            # round 2026-11-15b: second block (orchestrator grant), 29120..29199 are diagfix's
+C = {"A": 0, "B": 7, "C": 0, "D": 7}      # band offset of the diagonal element (A: p in [0, 2); B: q in [7, 9))
+N = {"A": 3, "B": 3, "C": 4, "D": 4}      # band cells per boulevard row
+SETS = ("A", "B", "C", "D")               # build order (A / B first: their shapes keep their ids)
 S2 = math.sqrt(2.0)
+
+
+class DiagBEl:
+    """The diagonal boulevard as a Crossing element: c <= x - z < c + 3, as DBV's pieces draw it (diagbv_paint.Band).
+    Copy of diagfix's verify/diagfix/mock_c.DiagBEl (the element its DBVX boxes are painted with)."""
+
+    kind = "diag"
+    width = 3.0 / S2
+    direction = (1.0 / S2, 1.0 / S2)
+    normal = (1.0 / S2, -1.0 / S2)
+
+    def __init__(self, c=0):
+        from netmod import diagbv_paint as DBP
+        self.c = c
+        self.band = DBP.Band()
+        self.DBP = DBP
+
+    def across(self, wx, wz):
+        return (wx - wz - self.c) / S2
+
+    def colour(self, z, r, wx, wz):
+        return self.band.colour(z, r, wx - self.c, wz)
+
+    def median(self, z, r, wx, wz):
+        p = wx - wz - self.c
+        if not (1.2 <= p < 1.8):
+            return None
+        col = self.band.colour(z, r, wx - self.c, wz)
+        return col if self.DBP.grassy(col) else None
+
+    def fill(self, z, r, wx, wz):
+        return self.colour(z, r, wx, wz)
+
+    def sidewalk(self, z, r):
+        prof = D.strip_prof(z, r)
+        return D._first_lane(prof) / S2, (1.0 - D._first_lane(prof, True)) / S2
+
+    def cells(self):
+        return lambda X, Z: X - Z - self.c in (0, 1, 2, 3)
 
 
 class BoulevardEl:
@@ -85,15 +129,17 @@ class BoulevardEl:
 
 
 def scene(ch):
-    da = D.Placed(D.DiagEl(C[ch]), 0 if ch == "A" else 1)
+    el = D.DiagEl(C[ch]) if N[ch] == 3 else DiagBEl(C[ch])
+    da = D.Placed(el, 0 if ch in ("A", "C") else 1)
     return D.Crossing([da, D.Placed(BoulevardEl(0))], stem=(0, 0))   # the avenue stops at the boulevard's N edge
 
 
 def box_cells(ch):
-    """[(X, Z)] in piece order k * 3 + j"""
-    if ch == "A":
-        return [(k + j, k) for k in range(3) for j in range(3)]
-    return [(6 - k + j, k) for k in range(3) for j in range(3)]
+    """[(X, Z)] in piece order k * N + j"""
+    n = N[ch]
+    if ch in ("A", "C"):
+        return [(k + j, k) for k in range(3) for j in range(n)]
+    return [(6 - k + j, k) for k in range(3) for j in range(n)]
 
 
 def in_box(ch, x, z, eps=1e-6):
@@ -114,14 +160,20 @@ def bv_lines():
 
 
 def da_lines(ch):
-    """('out' leaving the box south, 'in' coming from the south), each [outer, inner]"""
+    """('out' leaving the box south, 'in' coming from the south), each [outer .. inner]; lanes 80 / 175 (/ 270 on a
+    diagonal boulevard, dbvlanes.OFF) from the band's outer edges"""
     c = C[ch]
-    o, i = 175.0 / U, 80.0 / U
-    if ch == "A":       # p = x - z; at z = 0 the line passes x = p
-        return {"out": [Line((c + 1 + o, 0.0), (1, 1)), Line((c + 1 + i, 0.0), (1, 1))],
-                "in": [Line((c + i, 0.0), (-1, -1)), Line((c + o, 0.0), (-1, -1))]}
-    return {"out": [Line((c + 1 + o, 0.0), (-1, 1)), Line((c + 1 + i, 0.0), (-1, 1))],      # q = x + z
-            "in": [Line((c + i, 0.0), (1, -1)), Line((c + o, 0.0), (1, -1))]}
+    if N[ch] == 3:                            # the avenue, exactly as built for 39
+        o, i = 175.0 / U, 80.0 / U
+        if ch == "A":       # p = x - z; at z = 0 the line passes x = p
+            return {"out": [Line((c + 1 + o, 0.0), (1, 1)), Line((c + 1 + i, 0.0), (1, 1))],
+                    "in": [Line((c + i, 0.0), (-1, -1)), Line((c + o, 0.0), (-1, -1))]}
+        return {"out": [Line((c + 1 + o, 0.0), (-1, 1)), Line((c + 1 + i, 0.0), (-1, 1))],      # q = x + z
+                "in": [Line((c + i, 0.0), (1, -1)), Line((c + o, 0.0), (1, -1))]}
+    offs = [80.0 / 256.0, 175.0 / 256.0, 270.0 / 256.0]     # the diagonal boulevard (dbvlanes.OFF), outer -> inner
+    d = (1, 1) if ch == "C" else (-1, 1)
+    return {"out": [Line((c + 3 - f, 0.0), d) for f in offs],
+            "in": [Line((c + f, 0.0), (-d[0], -d[1])) for f in offs]}
 
 
 def meet(a, b):
@@ -218,7 +270,7 @@ def lanes(ch):
     for key in ("E", "W"):
         tgt = B[key]
         side = turn_side(A["in"][0].d, tgt[0].d)
-        srcs = A["in"] if side > 0 else A["in"][::-1]
+        srcs = (A["in"] if side > 0 else A["in"][::-1])[:2]       # DB: right turns from the 2 outer, left from the 2 inner
         outs = tgt if side > 0 else tgt[::-1]
         for k, s in enumerate(srcs):
             pts, r = fillet(s, outs[min(k, len(outs) - 1)])
@@ -319,8 +371,10 @@ def _pick(cv, lang, a, b, own):
 
 def _new_shape(cv, pts):
     """a fresh shape at state 0 for exactly these points (not a turned copy of another one)"""
-    if cv.next > SHAPE1:
-        raise ValueError("bvdiag: out of curve shapes (%d..%d)" % (SHAPE0, SHAPE1))
+    if SHAPE1 < cv.next < SHAPE2:
+        cv.next = SHAPE2                     # jump over diagfix's 29120..29199
+    if cv.next > SHAPE3:
+        raise ValueError("bvdiag: out of curve shapes (%d..%d, %d..%d)" % (SHAPE0, SHAPE1, SHAPE2, SHAPE3))
     x = cv.next
     cv.next += 1
     cv.new[x] = [list(v) for v in pts]
@@ -333,7 +387,7 @@ def specs(root=None):
     cv = BL.Curves(root)
     peds = _describe(43, 0)["pedestrian"]
     out, rep = {}, []
-    for ch in ("A", "B"):
+    for ch in SETS:
         for pid, cuts in sorted(cell_cuts(ch).items()):
             plan = []
             seen = set()
@@ -379,14 +433,14 @@ def specs(root=None):
                         "connects": {"road": BL._turns(plan)},
                         "curves": [{"shape": s, "pts": cv.new[s]} for s in sorted(own)],
                         "_": "bvdiag_build.py: opening box %s cell %d (row %d, band cell %d), lanes cut from the world "
-                             "scene, right-hand, no path keys" % (ch, IDS[ch].index(pid), IDS[ch].index(pid) // 3,
-                                                                  IDS[ch].index(pid) % 3)}
+                             "scene, right-hand, no path keys" % (ch, IDS[ch].index(pid), IDS[ch].index(pid) // N[ch],
+                                                                  IDS[ch].index(pid) % N[ch])}
             rep.append("%d (%s %d): %d lanes, %d own curve(s)" % (pid, ch, IDS[ch].index(pid), len(lanes_), len(own)))
     return out, cv, rep
 
 
 def table_lines():
-    return ["bvo %d %s" % (k, " ".join(str(p) for p in IDS[ch])) for k, ch in enumerate(("A", "B"))]
+    return ["bvo %d %s" % (k, " ".join(str(p) for p in IDS[ch])) for k, ch in enumerate(SETS)]
 
 
 def cmd_build(a):
@@ -394,7 +448,7 @@ def cmd_build(a):
     os.makedirs(pack, exist_ok=True)
     sp, cv, rep = specs(a.root)
     print("\n".join(rep))
-    used = sorted(s for s in cv.new if SHAPE0 <= s <= SHAPE1)
+    used = sorted(s for s in cv.new if SHAPE0 <= s <= SHAPE1 or SHAPE2 <= s <= SHAPE3)
     print("curve shapes %d (%s..%s)" % (len(used), used[0] if used else "-", used[-1] if used else "-"))
     variants, lanes_ = [], []
     for pid in sorted(sp):
@@ -405,13 +459,15 @@ def cmd_build(a):
                          "name": {"*": "Boulevard junction", "ENGLISH": "Cruce de bulevar"},
                          "art": {"from": 43, "png_dir": "art/%d" % pid}, "trblkatt": "none"})
     bvman = json.load(open(os.path.join(HERE, "examples", "boulevard", "manifest.json")))
-    man = {"netpack": 1, "name": "boulevard_diagonal", "version": "0.1.0", "author": "netmod (task orthfix)",
+    man = {"netpack": 1, "name": "boulevard_diagonal", "version": "0.2.0", "author": "netmod (task orthfix)",
            "description": "Boulevard x diagonal avenue OPENING box (task orthfix, xsect 39): where a diagonal avenue leaves "
                           "a boulevard through one side and the boulevard runs on, sc3netmod's BV block writes the "
                           "avenue band's nine cells in the boulevard's rows as one paved box (crosswalks where the "
                           "avenue leaves and across the boulevard on both sides, the boulevard's far kerb runs on). "
                           "22470..22478 the avenue going +x+z from the boulevard's +w side, 22479..22487 the mirror. "
-                          "Saved as 43. Needs boulevard, diagonal_avenue. Build: `py -3.12 -m netmod.bvdiag_build build "
+                          "Round 2026-11-15b (0.2.0, xsect 43): the same opening for a diagonal BOULEVARD, 12 cells "
+                          "(30209..30220, mirror 30221..30232, table lines bvo 2 / 3). "
+                          "Saved as 43. Needs boulevard, diagonal_avenue, diagonal_boulevard. Build: `py -3.12 -m netmod.bvdiag_build build "
                           ".` in re/tools (art from the game's frames, not shipped).",
            "game": bvman["game"], "variants": variants, "lanes": lanes_,
            "boulevard_slope_lines": table_lines()}
@@ -421,9 +477,12 @@ def cmd_build(a):
         return 0
     from netmod import netart as NA
     zooms = [int(v) for v in a.zooms.split(",")] if a.zooms else list(range(NA.ZOOMS))
-    for ch in ("A", "B"):
+    only = set(int(v) for v in a.only.split(",")) if getattr(a, "only", None) else None
+    for ch in SETS:
         sc = scene(ch)
         for pid, cell in zip(IDS[ch], box_cells(ch)):
+            if only and pid not in only:
+                continue
             d = os.path.join(pack, "art", str(pid))
             anc = D.paint_cell(sc, cell, d, zooms=zooms)
             anc["_"] = "bvdiag_build.py: opening box %s, cell %s" % (ch, cell)
@@ -435,9 +494,9 @@ def cmd_build(a):
 def cmd_sheet(a):
     from PIL import Image, ImageDraw
     px, W = 70, 2
-    img = Image.new("RGB", (2 * 11 * px, 11 * px), (250, 250, 250))
+    img = Image.new("RGB", (len(SETS) * 11 * px, 11 * px), (250, 250, 250))
     d = ImageDraw.Draw(img)
-    for n, ch in enumerate(("A", "B")):
+    for n, ch in enumerate(SETS):
         ox, oz = n * 11 * px + 2 * px, 3 * px
         for X in range(-2, 9):
             for Z in range(-2, 8):
@@ -462,6 +521,7 @@ def main(argv=None):
     s.add_argument("pack")
     s.add_argument("--no-art", action="store_true")
     s.add_argument("--zooms")
+    s.add_argument("--only", help="art for these piece ids only (the manifest and lanes are always all)")
     s.add_argument("--root")
     s = sub.add_parser("sheet")
     s.add_argument("out")

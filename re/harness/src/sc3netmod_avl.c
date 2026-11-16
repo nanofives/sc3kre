@@ -36,11 +36,11 @@
  * Routing: LANEDENSITY enforces the variants' one-way matrices (default mode). Off: SC3NETMOD_AVL=0.
  */
 
-#define AVL_MAXC 32
+#define AVL_MAXC 48
 #define AVL_MAXJ 4096                                       /* every package's avlj lines together */
 #define AVL_MAXLEN 4096                                     /* longest band walked, rows */
 
-typedef struct { WORD piece, base; BYTE side; WORD fam; } AvlC;   /* fam: task avdiamond D4, 0 = the stock base's own */
+typedef struct { WORD piece, base; BYTE side; WORD fam; BYTE art; } AvlC;   /* art: task orthfix AVXART */   /* fam: task avdiamond D4, 0 = the stock base's own */
 typedef struct { WORD piece; char e[4]; } AvlJ;
 static WORD g_avl_uturn, g_avl_corner;                      /* g_avl_straight, g_avl_on: sc3netmod_rbt.c */
 static AvlC g_avl_c[AVL_MAXC];
@@ -69,9 +69,11 @@ static void avl_line(const char *path, const char *line) {
         logf("avl: %s: %s piece %lu", path, u ? "end U-turn" : kc ? "corner inner bend" : "one-way straight half", v);
         return;
     }
-    if (!strncmp(line, "avlc ", 5)) {
+    if (!strncmp(line, "avlc ", 5) || !strncmp(line, "avlq ", 5)) {
         unsigned long fam = 0;                     /* task avdiamond D4: avlc <piece> <base> <side> [<family>] */
         int nf = sscanf(line + 5, "%lu %lu %lu %lu", &v, &b, &s, &fam);
+        int art = line[3] == 'q';                  /* task orthfix AVXART: avlq = the same twin with its own art */
+        if (art && nf == 4) nf = 0;
         if (nf < 3 || !v || v > 0xffff || !b || b > 0xffff || s > 3 || g_base[v] != (WORD)b || g_avl_nc >= AVL_MAXC ||
             (nf == 4 && (fam > 0xffff || g_base[fam] != (WORD)b))) {
             logf("### avl: %s: bad crossing line (or not a variant of its base, or too many): '%s'", path, line);
@@ -79,6 +81,7 @@ static void avl_line(const char *path, const char *line) {
         }
         g_avl_c[g_avl_nc].piece = (WORD)v; g_avl_c[g_avl_nc].base = (WORD)b; g_avl_c[g_avl_nc].side = (BYTE)s;
         g_avl_c[g_avl_nc].fam = nf == 4 ? (WORD)fam : 0;
+        g_avl_c[g_avl_nc].art = (BYTE)art;
         g_avl_nc++;
         logf("avl: %s: one-way %lu on base %lu, lanes toward side %lu at state 0%s", path, v, b, s,
              nf == 4 ? " (family of a two-way crossing piece)" : "");
@@ -221,10 +224,25 @@ static int avl_cross_of(WORD id) {
 }
 
 /* the variant of base `b` (of family `f`, 0 = the stock one) whose lanes run toward world side `dir` at state `st` */
+/* task orthfix AVXART (round 2026-11-15b, owner on 66 / 70: "the same" as the boulevard's 67 / 71): crossing twins with
+   their own art (bvxing_paint.py: the level crossing in the avenue's 2 + 2 lanes and a painted median, one underpass
+   for both halves), lines `avlq <piece> <base> <side>` as avlc. When on they are handed out before the avlc twin of
+   the same base and side; off, never (a cell holding one is still a crossing row and gets the avlc twin back).
+   Off: SC3NETMOD_AVXART=0. */
+static int g_avl_xart = -1;
+static int avl_xart_on(void) {
+    if (g_avl_xart < 0) {
+        g_avl_xart = !env_off("SC3NETMOD_AVXART");
+        logf("avl: avenue crossing twins with their own art (orthfix AVXART) %s", g_avl_xart ? "on" : "off (SC3NETMOD_AVXART=0)");
+    }
+    return g_avl_xart;
+}
 static WORD avl_cross_want_f(WORD b, int st, int dir, WORD f) {
-    int k;
-    for (k = 0; k < g_avl_nc; k++)
-        if (g_avl_c[k].base == b && g_avl_c[k].fam == f && ((g_avl_c[k].side + st) & 3) == dir) return g_avl_c[k].piece;
+    int k, pass;
+    for (pass = (!f && avl_xart_on()) ? 1 : 0; pass >= 0; pass--)
+        for (k = 0; k < g_avl_nc; k++)
+            if (g_avl_c[k].art == pass && g_avl_c[k].base == b && g_avl_c[k].fam == f &&
+                ((g_avl_c[k].side + st) & 3) == dir) return g_avl_c[k].piece;
     return 0;
 }
 #define avl_cross_want(b, st, dir) avl_cross_want_f((b), (st), (dir), 0)

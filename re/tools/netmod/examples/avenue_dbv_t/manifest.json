@@ -1,0 +1,1640 @@
+{
+ "netpack": 1,
+ "name": "avenue_dbv_t",
+ "version": "0.1.0",
+ "author": "netmod (task orthfix)",
+ "description": "Straight avenue x diagonal boulevard boxes (task orthfix round 2026-11-15b, xsect 31 / 32 / 33): DBV crossing templates (ids 1000..) with avlj end columns, so the avenue's arms convert one-way. Needs diagonal_boulevard, avenue_lanes. Built by verify/orthfix/avdbx_build.py.",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 30261,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30261"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30262,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30262"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30263,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30263"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30264,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30264"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30265,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30265"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30266,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30266"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30267,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30267"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30268,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30268"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30269,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30269"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30270,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30270"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30271,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30271"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30272,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30272"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30273,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30273"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30274,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30274"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30275,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30275"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30276,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30276"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30277,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30277"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30278,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30278"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30279,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30279"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30280,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30280"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30281,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30281"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30282,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30282"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30283,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30283"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30284,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30284"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30285,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30285"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30286,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30286"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30287,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30287"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30288,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30288"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30289,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30289"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30290,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30290"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30291,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30291"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30292,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30292"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30293,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30293"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30294,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30294"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30295,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30295"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30296,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30296"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30297,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30297"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30298,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30298"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30299,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30299"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30300,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30300"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30301,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30301"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30302,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30302"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30303,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30303"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30304,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30304"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30305,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30305"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30306,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30306"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30307,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30307"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30308,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30308"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30309,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30309"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30310,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30310"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30311,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30311"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30312,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30312"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30313,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30313"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30314,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30314"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30315,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30315"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30316,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30316"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30317,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30317"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30318,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30318"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30319,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30319"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30320,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30320"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30321,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30321"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30322,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30322"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30323,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30323"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30324,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30324"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30325,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30325"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30326,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30326"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30327,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30327"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30328,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30328"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30329,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30329"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30330,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30330"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30331,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30331"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30332,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30332"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30333,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30333"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30334,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30334"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30335,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30335"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30336,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30336"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30337,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30337"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30338,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30338"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30339,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30339"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30340,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30340"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30341,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30341"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30342,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30342"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30343,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30343"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30344,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30344"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30345,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30345"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30346,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30346"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30347,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30347"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30348,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30348"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30349,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30349"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30350,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30350"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30351,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30351"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30352,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30352"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30353,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30353"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30354,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30354"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30355,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30355"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [],
+ "avenue_lines": [
+  "dbvx 1000 -5 -3 15 8",
+  "dbvxg 1000 0 ..rrrr.........",
+  "dbvxg 1000 1 ...rrrr........",
+  "dbvxg 1000 2 ....rrrr.......",
+  "dbvxg 1000 3 rrrrrrrrrrrrrrr",
+  "dbvxg 1000 4 rrrrrrrrrrrrrrr",
+  "dbvxg 1000 5 .......rrrr....",
+  "dbvxg 1000 6 ........rrrr...",
+  "dbvxg 1000 7 .........rrrr..",
+  "dbvxw 1000 -2 0 30261 0",
+  "dbvxw 1000 -2 1 30262 0",
+  "dbvxw 1000 -1 0 30263 0",
+  "dbvxw 1000 -1 1 30264 0",
+  "dbvxw 1000 0 0 30265 0",
+  "dbvxw 1000 0 1 30266 0",
+  "dbvxw 1000 1 0 30267 0",
+  "dbvxw 1000 1 1 30268 0",
+  "dbvxw 1000 2 0 30269 0",
+  "dbvxw 1000 2 1 30270 0",
+  "dbvxw 1000 3 0 30271 0",
+  "dbvxw 1000 3 1 30272 0",
+  "dbvxw 1000 4 0 30273 0",
+  "dbvxw 1000 4 1 30274 0",
+  "dbvxw 1000 5 0 30275 0",
+  "dbvxw 1000 5 1 30276 0",
+  "dbvxw 1000 6 0 30277 0",
+  "dbvxw 1000 6 1 30278 0",
+  "dbvx 1001 1 -4 8 15",
+  "dbvxg 1001 0 ...rr...",
+  "dbvxg 1001 1 ...rr...",
+  "dbvxg 1001 2 r..rr...",
+  "dbvxg 1001 3 rr.rr...",
+  "dbvxg 1001 4 rrrrr...",
+  "dbvxg 1001 5 rrrrr...",
+  "dbvxg 1001 6 .rrrr...",
+  "dbvxg 1001 7 ..rrrr..",
+  "dbvxg 1001 8 ...rrrr.",
+  "dbvxg 1001 9 ...rrrrr",
+  "dbvxg 1001 10 ...rrrrr",
+  "dbvxg 1001 11 ...rr.rr",
+  "dbvxg 1001 12 ...rr..r",
+  "dbvxg 1001 13 ...rr...",
+  "dbvxg 1001 14 ...rr...",
+  "dbvxw 1001 4 -1 30279 0",
+  "dbvxw 1001 4 0 30281 0",
+  "dbvxw 1001 4 1 30283 0",
+  "dbvxw 1001 4 2 30285 0",
+  "dbvxw 1001 4 3 30287 0",
+  "dbvxw 1001 4 4 30289 0",
+  "dbvxw 1001 4 5 30291 0",
+  "dbvxw 1001 4 6 30293 0",
+  "dbvxw 1001 4 7 30295 0",
+  "dbvxw 1001 5 -1 30280 0",
+  "dbvxw 1001 5 0 30282 0",
+  "dbvxw 1001 5 1 30284 0",
+  "dbvxw 1001 5 2 30286 0",
+  "dbvxw 1001 5 3 30288 0",
+  "dbvxw 1001 5 4 30290 0",
+  "dbvxw 1001 5 5 30292 0",
+  "dbvxw 1001 5 6 30294 0",
+  "dbvxw 1001 5 7 30296 0",
+  "dbvx 1002 -4 -3 14 8",
+  "dbvxg 1002 0 ..............",
+  "dbvxg 1002 1 ..............",
+  "dbvxg 1002 2 ..............",
+  "dbvxg 1002 3 rrrrrrrrrrrrrr",
+  "dbvxg 1002 4 rrrrrrrrrrrrrr",
+  "dbvxg 1002 5 ......rrrr....",
+  "dbvxg 1002 6 .......rrrr...",
+  "dbvxg 1002 7 ........rrrr..",
+  "dbvxw 1002 -1 0 30297 0",
+  "dbvxw 1002 -1 1 30298 0",
+  "dbvxw 1002 0 0 30299 0",
+  "dbvxw 1002 0 1 30300 0",
+  "dbvxw 1002 1 0 30301 0",
+  "dbvxw 1002 1 1 30302 0",
+  "dbvxw 1002 2 0 30303 0",
+  "dbvxw 1002 2 1 30304 0",
+  "dbvxw 1002 3 0 30305 0",
+  "dbvxw 1002 3 1 30306 0",
+  "dbvxw 1002 4 0 30307 0",
+  "dbvxw 1002 4 1 30308 0",
+  "dbvxw 1002 5 0 30309 0",
+  "dbvxw 1002 5 1 30310 0",
+  "dbvxw 1002 6 0 30311 0",
+  "dbvxw 1002 6 1 30312 0",
+  "dbvx 1003 -5 -3 14 8",
+  "dbvxg 1003 0 ..rrrr........",
+  "dbvxg 1003 1 ...rrrr.......",
+  "dbvxg 1003 2 ....rrrr......",
+  "dbvxg 1003 3 rrrrrrrrrrrrrr",
+  "dbvxg 1003 4 rrrrrrrrrrrrrr",
+  "dbvxg 1003 5 ..............",
+  "dbvxg 1003 6 ..............",
+  "dbvxg 1003 7 ..............",
+  "dbvxw 1003 -2 0 30312 2",
+  "dbvxw 1003 -2 1 30311 2",
+  "dbvxw 1003 -1 0 30310 2",
+  "dbvxw 1003 -1 1 30309 2",
+  "dbvxw 1003 0 0 30308 2",
+  "dbvxw 1003 0 1 30307 2",
+  "dbvxw 1003 1 0 30306 2",
+  "dbvxw 1003 1 1 30305 2",
+  "dbvxw 1003 2 0 30304 2",
+  "dbvxw 1003 2 1 30303 2",
+  "dbvxw 1003 3 0 30302 2",
+  "dbvxw 1003 3 1 30301 2",
+  "dbvxw 1003 4 0 30300 2",
+  "dbvxw 1003 4 1 30299 2",
+  "dbvxw 1003 5 0 30298 2",
+  "dbvxw 1003 5 1 30297 2",
+  "dbvx 1004 -4 -8 8 14",
+  "dbvxg 1004 0 ...rr...",
+  "dbvxg 1004 1 ...rr...",
+  "dbvxg 1004 2 ...rr...",
+  "dbvxg 1004 3 ...rr...",
+  "dbvxg 1004 4 ...rr...",
+  "dbvxg 1004 5 ...rr...",
+  "dbvxg 1004 6 ...rrr..",
+  "dbvxg 1004 7 ...rrrr.",
+  "dbvxg 1004 8 ...rrrrr",
+  "dbvxg 1004 9 ...rrrrr",
+  "dbvxg 1004 10 ...rr.rr",
+  "dbvxg 1004 11 ...rr..r",
+  "dbvxg 1004 12 ...rr...",
+  "dbvxg 1004 13 ...rr...",
+  "dbvxw 1004 -1 -5 30313 0",
+  "dbvxw 1004 -1 -4 30315 0",
+  "dbvxw 1004 -1 -3 30317 0",
+  "dbvxw 1004 -1 -2 30319 0",
+  "dbvxw 1004 -1 -1 30321 0",
+  "dbvxw 1004 -1 0 30323 0",
+  "dbvxw 1004 -1 1 30325 0",
+  "dbvxw 1004 -1 2 30327 0",
+  "dbvxw 1004 0 -5 30314 0",
+  "dbvxw 1004 0 -4 30316 0",
+  "dbvxw 1004 0 -3 30318 0",
+  "dbvxw 1004 0 -2 30320 0",
+  "dbvxw 1004 0 -1 30322 0",
+  "dbvxw 1004 0 0 30324 0",
+  "dbvxw 1004 0 1 30326 0",
+  "dbvxw 1004 0 2 30328 0",
+  "dbvx 1005 1 -4 8 14",
+  "dbvxg 1005 0 ...rr...",
+  "dbvxg 1005 1 ...rr...",
+  "dbvxg 1005 2 r..rr...",
+  "dbvxg 1005 3 rr.rr...",
+  "dbvxg 1005 4 rrrrr...",
+  "dbvxg 1005 5 rrrrr...",
+  "dbvxg 1005 6 .rrrr...",
+  "dbvxg 1005 7 ..rrr...",
+  "dbvxg 1005 8 ...rr...",
+  "dbvxg 1005 9 ...rr...",
+  "dbvxg 1005 10 ...rr...",
+  "dbvxg 1005 11 ...rr...",
+  "dbvxg 1005 12 ...rr...",
+  "dbvxg 1005 13 ...rr...",
+  "dbvxw 1005 4 -1 30328 2",
+  "dbvxw 1005 4 0 30326 2",
+  "dbvxw 1005 4 1 30324 2",
+  "dbvxw 1005 4 2 30322 2",
+  "dbvxw 1005 4 3 30320 2",
+  "dbvxw 1005 4 4 30318 2",
+  "dbvxw 1005 4 5 30316 2",
+  "dbvxw 1005 4 6 30314 2",
+  "dbvxw 1005 5 -1 30327 2",
+  "dbvxw 1005 5 0 30325 2",
+  "dbvxw 1005 5 1 30323 2",
+  "dbvxw 1005 5 2 30321 2",
+  "dbvxw 1005 5 3 30319 2",
+  "dbvxw 1005 5 4 30317 2",
+  "dbvxw 1005 5 5 30315 2",
+  "dbvxw 1005 5 6 30313 2",
+  "dbvx 1006 -3 -3 13 8",
+  "dbvxg 1006 0 rrrr.........",
+  "dbvxg 1006 1 .rrrr........",
+  "dbvxg 1006 2 ..rrrr.......",
+  "dbvxg 1006 3 ...rrrrrrrrrr",
+  "dbvxg 1006 4 ...rrrrrrrrrr",
+  "dbvxg 1006 5 .....rrrr....",
+  "dbvxg 1006 6 ......rrrr...",
+  "dbvxg 1006 7 .......rrrr..",
+  "dbvxw 1006 0 0 30329 0",
+  "dbvxw 1006 0 1 30330 0",
+  "dbvxw 1006 1 0 30331 0",
+  "dbvxw 1006 1 1 30332 0",
+  "dbvxw 1006 2 0 30333 0",
+  "dbvxw 1006 2 1 30334 0",
+  "dbvxw 1006 3 0 30335 0",
+  "dbvxw 1006 3 1 30336 0",
+  "dbvxw 1006 4 0 30337 0",
+  "dbvxw 1006 4 1 30338 0",
+  "dbvxw 1006 5 0 30339 0",
+  "dbvxw 1006 5 1 30340 0",
+  "dbvxw 1006 6 0 30341 0",
+  "dbvxw 1006 6 1 30342 0",
+  "dbvx 1007 -5 -3 13 8",
+  "dbvxg 1007 0 ..rrrr.......",
+  "dbvxg 1007 1 ...rrrr......",
+  "dbvxg 1007 2 ....rrrr.....",
+  "dbvxg 1007 3 rrrrrrrrrr...",
+  "dbvxg 1007 4 rrrrrrrrrr...",
+  "dbvxg 1007 5 .......rrrr..",
+  "dbvxg 1007 6 ........rrrr.",
+  "dbvxg 1007 7 .........rrrr",
+  "dbvxw 1007 -2 0 30342 2",
+  "dbvxw 1007 -2 1 30341 2",
+  "dbvxw 1007 -1 0 30340 2",
+  "dbvxw 1007 -1 1 30339 2",
+  "dbvxw 1007 0 0 30338 2",
+  "dbvxw 1007 0 1 30337 2",
+  "dbvxw 1007 1 0 30336 2",
+  "dbvxw 1007 1 1 30335 2",
+  "dbvxw 1007 2 0 30334 2",
+  "dbvxw 1007 2 1 30333 2",
+  "dbvxw 1007 3 0 30332 2",
+  "dbvxw 1007 3 1 30331 2",
+  "dbvxw 1007 4 0 30330 2",
+  "dbvxw 1007 4 1 30329 2",
+  "dbvx 1008 0 -3 8 13",
+  "dbvxg 1008 0 r.......",
+  "dbvxg 1008 1 rr......",
+  "dbvxg 1008 2 rrr.....",
+  "dbvxg 1008 3 rrrrr...",
+  "dbvxg 1008 4 .rrrr...",
+  "dbvxg 1008 5 ..rrrr..",
+  "dbvxg 1008 6 ...rrrr.",
+  "dbvxg 1008 7 ...rrrrr",
+  "dbvxg 1008 8 ...rrrrr",
+  "dbvxg 1008 9 ...rr.rr",
+  "dbvxg 1008 10 ...rr..r",
+  "dbvxg 1008 11 ...rr...",
+  "dbvxg 1008 12 ...rr...",
+  "dbvxw 1008 3 0 30343 0",
+  "dbvxw 1008 3 1 30344 0",
+  "dbvxw 1008 3 2 30346 0",
+  "dbvxw 1008 3 3 30348 0",
+  "dbvxw 1008 3 4 30350 0",
+  "dbvxw 1008 3 5 30352 0",
+  "dbvxw 1008 3 6 30354 0",
+  "dbvxw 1008 4 0 30330 0",
+  "dbvxw 1008 4 1 30345 0",
+  "dbvxw 1008 4 2 30347 0",
+  "dbvxw 1008 4 3 30349 0",
+  "dbvxw 1008 4 4 30351 0",
+  "dbvxw 1008 4 5 30353 0",
+  "dbvxw 1008 4 6 30355 0",
+  "dbvx 1009 1 -4 8 13",
+  "dbvxg 1009 0 ...rr...",
+  "dbvxg 1009 1 ...rr...",
+  "dbvxg 1009 2 r..rr...",
+  "dbvxg 1009 3 rr.rr...",
+  "dbvxg 1009 4 rrrrr...",
+  "dbvxg 1009 5 rrrrr...",
+  "dbvxg 1009 6 .rrrr...",
+  "dbvxg 1009 7 ..rrrr..",
+  "dbvxg 1009 8 ...rrrr.",
+  "dbvxg 1009 9 ...rrrrr",
+  "dbvxg 1009 10 .....rrr",
+  "dbvxg 1009 11 ......rr",
+  "dbvxg 1009 12 .......r",
+  "dbvxw 1009 4 -1 30355 2",
+  "dbvxw 1009 4 0 30353 2",
+  "dbvxw 1009 4 1 30351 2",
+  "dbvxw 1009 4 2 30349 2",
+  "dbvxw 1009 4 3 30347 2",
+  "dbvxw 1009 4 4 30345 2",
+  "dbvxw 1009 4 5 30330 2",
+  "dbvxw 1009 5 -1 30354 2",
+  "dbvxw 1009 5 0 30352 2",
+  "dbvxw 1009 5 1 30350 2",
+  "dbvxw 1009 5 2 30348 2",
+  "dbvxw 1009 5 3 30346 2",
+  "dbvxw 1009 5 4 30344 2",
+  "dbvxw 1009 5 5 30343 2",
+  "avlj 30261 ...I",
+  "avlj 30262 ...O",
+  "avlj 30277 .O..",
+  "avlj 30278 .I..",
+  "avlj 30279 I...",
+  "avlj 30280 O...",
+  "avlj 30295 ..O.",
+  "avlj 30296 ..I.",
+  "avlj 30297 ...I",
+  "avlj 30298 ...O",
+  "avlj 30311 .O..",
+  "avlj 30312 .I..",
+  "avlj 30313 I...",
+  "avlj 30314 O...",
+  "avlj 30327 ..O.",
+  "avlj 30328 ..I.",
+  "avlj 30341 .O..",
+  "avlj 30342 .I..",
+  "avlj 30354 ..O.",
+  "avlj 30355 ..I."
+ ]
+}

@@ -380,11 +380,15 @@ def cmd_build(a):
         anc["_"] = "boulevard.py build: %s" % note
         json.dump(anc, open(os.path.join(d, "anchors.json"), "w"), indent=1)
         print("built %d (%s)" % (vid, note))
+    if XART:                                                     # task orthfix BVXART
+        from netmod import bvxing_paint as XP
+        XP.build_art(a.pack, zooms, only)
     write_manifest(a.pack)
 
 
 BASE = {OUTER: 11204, MIDDLE: 29, NOSE: 29, NOSE2: 29}
 FULL_LANES = os.environ.get("BV_FULL_LANES") == "1"          # junction, cap and taper pieces: 43
+XART = os.environ.get("BV_XART") != "0"                      # task orthfix BVXART: art twins 30200..30208 (bvq lines)
 
 
 def lane_spec(vid):
@@ -483,6 +487,7 @@ def write_manifest(pack):
             json.dump(lane_spec(vid), open(os.path.join(pack, fn), "w", newline="\n"), indent=1)
             lanes.append({"piece": vid, "spec": fn})
     xlines = []
+    from netmod import bvxing_paint as XP                    # task orthfix BVXART
     for p, base, sd, sp in xing_specs():                     # task orthfix BVXING
         variants.append({"id": p, "base": base, "network": "ROAD",
                          "name": {"*": "Boulevard, crossing", "ENGLISH": "Bulevar, cruce"}, "trblkatt": "copy_base"})
@@ -490,7 +495,34 @@ def write_manifest(pack):
         json.dump(sp, open(os.path.join(pack, fn), "w", newline="\n"), indent=1)
         lanes.append({"piece": p, "spec": fn})
         xlines.append("bvr %d %d %d" % (p, base, sd))
-    man = {"netpack": 1, "name": "boulevard", "version": "0.4.0", "author": "netmod (task boulevard, bvlanes, orthfix)",
+        if base in XP.XART and XART:                         # task orthfix BVXART: the same twin with its own art (bvq)
+            a, b, m = XP.XART[base]
+            q = m if sd == 4 else a if sd == XP.XART_SIDES[base][0] else b
+            sq = dict(sp, piece=q, _comment=sp["_comment"] + "; orthfix BVXART: own art (bvxing_paint.py)")
+            variants.append({"id": q, "base": base, "network": "ROAD",
+                             "name": {"*": "Boulevard, crossing", "ENGLISH": "Bulevar, cruce"}, "trblkatt": "copy_base",
+                             "art": {"from": base, "png_dir": "art/%d" % q}})
+            fq = "bvq_%d.lanes.json" % q
+            json.dump(sq, open(os.path.join(pack, fq), "w", newline="\n"), indent=1)
+            lanes.append({"piece": q, "spec": fq})
+            xlines.append("bvq %d %d %d" % (q, base, sd))
+    avx_lines = []                                            # task orthfix AVXART: the avenue's art twins (avlq)
+    if XART:
+        avman = json.load(open(os.path.join(AVL_PACK, "manifest.json")))
+        aside = {int(t[1]): int(t[3]) for t in (ln.split() for ln in avman["avenue_lines"]) if t[0] == "avlc"}
+        for base, ids in sorted(XP.AVXART.items()):
+            for q, a in zip(ids, XP.AVLC[base]):
+                sp = json.load(open(os.path.join(AVL_PACK, "avl_%d.lanes.json" % a)))
+                sp["piece"] = q
+                sp["_comment"] = "boulevard.py (orthfix AVXART): avenue_lanes %d with its own art (bvxing_paint.py)" % a
+                variants.append({"id": q, "base": base, "network": "ROAD",
+                                 "name": {"*": "Avenue, crossing", "ENGLISH": "Avenida, cruce"}, "trblkatt": "copy_base",
+                                 "art": {"from": base, "png_dir": "art/%d" % q}})
+                fq = "avq_%d.lanes.json" % q
+                json.dump(sp, open(os.path.join(pack, fq), "w", newline="\n"), indent=1)
+                lanes.append({"piece": q, "spec": fq})
+                avx_lines.append("avlq %d %d %d" % (q, base, aside[a]))
+    man = {"netpack": 1, "name": "boulevard", "version": "0.5.0", "author": "netmod (task boulevard, bvlanes, orthfix)",
            "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and "
                           "sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock "
                           "road look, yellow centre line), the middle road gives each one an extra lane and holds a "
@@ -504,6 +536,9 @@ def write_manifest(pack):
                           "Task orthfix (0.4.0): a boulevard crossing a rail line, a power line or passing under a "
                           "highway carries on through it (20769..20780: twins of the crossing pieces with the boulevard's "
                           "one-way lanes; they draw as the stock crossing). "
+                          "Round 2026-11-15b (0.5.0, BVXART): the same twins with their own art, 30200..30208 (bvq lines): "
+                          "the level crossing carries the boulevard's 3 + 3 lanes and a painted median, the underpass is "
+                          "one opening spanning the boulevard (bvxing_paint.py). "
                           "Built by `boulevard.py build .` in this folder before install (art/ is made from the game's "
                           "frames and is not shipped).",
            "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
@@ -518,7 +553,7 @@ def write_manifest(pack):
            # task bvlanes: the narrowing's last column ends a one-way avenue band (AVENUE_LANES.md 5): its avenue
            # rows carry the half's traffic out of (O) / into (I) the piece across their E side at state 0
            "avenue_lines": ["avlj %d .O.." % (AVNARROW[(0, 1)] + 6), "avlj %d .I.." % (AVNARROW[(0, 1)] + 7),
-                            "avlj %d .O.." % (AVNARROW[(1, 2)] + 7), "avlj %d .I.." % (AVNARROW[(1, 2)] + 8)],
+                            "avlj %d .O.." % (AVNARROW[(1, 2)] + 7), "avlj %d .I.." % (AVNARROW[(1, 2)] + 8)] + avx_lines,
            "boulevard_slope_lines": xlines}                   # task orthfix BVXING: raw BV lines (bvr)
     json.dump(man, open(os.path.join(pack, "manifest.json"), "w", newline="\n"), indent=1)
     print("manifest: %d variants, %d lane specs" % (len(variants), len(lanes)))

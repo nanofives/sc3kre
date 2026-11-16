@@ -1,0 +1,808 @@
+{
+ "netpack": 1,
+ "name": "avenue_diagonal_t",
+ "version": "0.1.0",
+ "author": "netmod (task orthfix)",
+ "description": "Straight avenue ending on a diagonal avenue (task orthfix round 2026-11-15b, xsect 29): the band's cells in the avenue's two rows are one paved box (DAV crossing templates, ids 1000..), the box cells in the avenue's end column are avlj joins so AVL converts the arm one-way. Needs diagonal_avenue, avenue_lanes. Built by verify/orthfix/avtbox_build.py (art not shipped).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 30239,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30239"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30240,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30240"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30241,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30241"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30242,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30242"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30243,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30243"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30244,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30244"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30245,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30245"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30246,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30246"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30247,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30247"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30248,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30248"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30249,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30249"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30250,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30250"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30251,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30251"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30252,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30252"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30253,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30253"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30254,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30254"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30255,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30255"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30256,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30256"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30257,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30257"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30258,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30258"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30259,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30259"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30260,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/30260"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 30239,
+   "spec": "xing_30239.lanes.json"
+  },
+  {
+   "piece": 30240,
+   "spec": "xing_30240.lanes.json"
+  },
+  {
+   "piece": 30241,
+   "spec": "xing_30241.lanes.json"
+  },
+  {
+   "piece": 30242,
+   "spec": "xing_30242.lanes.json"
+  },
+  {
+   "piece": 30243,
+   "spec": "xing_30243.lanes.json"
+  },
+  {
+   "piece": 30244,
+   "spec": "xing_30244.lanes.json"
+  },
+  {
+   "piece": 30245,
+   "spec": "xing_30245.lanes.json"
+  },
+  {
+   "piece": 30246,
+   "spec": "xing_30246.lanes.json"
+  },
+  {
+   "piece": 30247,
+   "spec": "xing_30247.lanes.json"
+  },
+  {
+   "piece": 30248,
+   "spec": "xing_30248.lanes.json"
+  },
+  {
+   "piece": 30249,
+   "spec": "xing_30249.lanes.json"
+  },
+  {
+   "piece": 30250,
+   "spec": "xing_30250.lanes.json"
+  },
+  {
+   "piece": 30251,
+   "spec": "xing_30251.lanes.json"
+  },
+  {
+   "piece": 30252,
+   "spec": "xing_30252.lanes.json"
+  },
+  {
+   "piece": 30253,
+   "spec": "xing_30253.lanes.json"
+  },
+  {
+   "piece": 30254,
+   "spec": "xing_30254.lanes.json"
+  },
+  {
+   "piece": 30255,
+   "spec": "xing_30255.lanes.json"
+  },
+  {
+   "piece": 30256,
+   "spec": "xing_30256.lanes.json"
+  },
+  {
+   "piece": 30257,
+   "spec": "xing_30257.lanes.json"
+  },
+  {
+   "piece": 30258,
+   "spec": "xing_30258.lanes.json"
+  },
+  {
+   "piece": 30259,
+   "spec": "xing_30259.lanes.json"
+  },
+  {
+   "piece": 30260,
+   "spec": "xing_30260.lanes.json"
+  }
+ ],
+ "avenue_lines": [
+  "davx 1000 0 255 0 0 -2 -3 8 8",
+  "davxg 1000 0 rr....--",
+  "davxg 1000 1 rrr.....",
+  "davxg 1000 2 .rrr....",
+  "davxg 1000 3 ..rrrrrr",
+  "davxg 1000 4 ...rrrrr",
+  "davxg 1000 5 ....rrr.",
+  "davxg 1000 6 -....rrr",
+  "davxg 1000 7 --....rr",
+  "davxw 1000 0 -1 30239 0",
+  "davxw 1000 0 0 30240 0",
+  "davxw 1000 1 -1 30241 0",
+  "davxw 1000 1 0 30242 0",
+  "davxw 1000 1 1 30243 0",
+  "davxw 1000 2 0 30244 0",
+  "davxw 1000 2 1 30245 0",
+  "davxw 1000 2 2 30246 2",
+  "davxw 1000 3 0 30247 2",
+  "davxw 1000 3 1 30248 0",
+  "davxw 1000 3 2 30249 0",
+  "davxw 1000 4 0 11204 2",
+  "davxw 1000 4 1 11204 0",
+  "davxw 1000 5 0 11204 2",
+  "davxw 1000 5 1 11204 0",
+  "davx 1001 1 255 0 0 -4 -5 8 8",
+  "davxg 1001 0 rr....--",
+  "davxg 1001 1 rrr....-",
+  "davxg 1001 2 .rrr....",
+  "davxg 1001 3 ..rrr...",
+  "davxg 1001 4 ...rrr..",
+  "davxg 1001 5 ...rrrr.",
+  "davxg 1001 6 -..rrrrr",
+  "davxg 1001 7 -..rr.rr",
+  "davxw 1001 -2 -3 30239 1",
+  "davxw 1001 -2 -2 30241 1",
+  "davxw 1001 -1 -3 30240 1",
+  "davxw 1001 -1 -2 30242 1",
+  "davxw 1001 -1 -1 30244 1",
+  "davxw 1001 -1 0 30247 3",
+  "davxw 1001 -1 1 11204 3",
+  "davxw 1001 -1 2 11204 3",
+  "davxw 1001 0 -2 30243 1",
+  "davxw 1001 0 -1 30245 1",
+  "davxw 1001 0 0 30248 1",
+  "davxw 1001 0 1 11204 1",
+  "davxw 1001 0 2 11204 1",
+  "davxw 1001 1 -1 30246 3",
+  "davxw 1001 1 0 30249 1",
+  "davx 1002 0 255 0 0 -2 -3 8 8",
+  "davxg 1002 0 rr....--",
+  "davxg 1002 1 rrr....-",
+  "davxg 1002 2 .rrr....",
+  "davxg 1002 3 rrrrr...",
+  "davxg 1002 4 rrrrrr..",
+  "davxg 1002 5 ....rrr.",
+  "davxg 1002 6 .....rrr",
+  "davxg 1002 7 --....rr",
+  "davxw 1002 -2 0 11204 2",
+  "davxw 1002 -2 1 11204 0",
+  "davxw 1002 -1 0 11204 2",
+  "davxw 1002 -1 1 11204 0",
+  "davxw 1002 0 -1 30249 2",
+  "davxw 1002 0 0 30248 2",
+  "davxw 1002 0 1 30247 0",
+  "davxw 1002 1 -1 30246 0",
+  "davxw 1002 1 0 30245 2",
+  "davxw 1002 1 1 30244 2",
+  "davxw 1002 2 0 30243 2",
+  "davxw 1002 2 1 30242 2",
+  "davxw 1002 2 2 30241 2",
+  "davxw 1002 3 1 30240 2",
+  "davxw 1002 3 2 30239 2",
+  "davx 1003 1 255 0 0 0 -1 8 8",
+  "davxg 1003 0 rr.rr..-",
+  "davxg 1003 1 rrrrr..-",
+  "davxg 1003 2 .rrrr...",
+  "davxg 1003 3 ..rrr...",
+  "davxg 1003 4 ...rrr..",
+  "davxg 1003 5 ....rrr.",
+  "davxg 1003 6 -....rrr",
+  "davxg 1003 7 --....rr",
+  "davxw 1003 2 1 30249 3",
+  "davxw 1003 2 2 30246 1",
+  "davxw 1003 3 -1 11204 3",
+  "davxw 1003 3 0 11204 3",
+  "davxw 1003 3 1 30248 3",
+  "davxw 1003 3 2 30245 3",
+  "davxw 1003 3 3 30243 3",
+  "davxw 1003 4 -1 11204 1",
+  "davxw 1003 4 0 11204 1",
+  "davxw 1003 4 1 30247 1",
+  "davxw 1003 4 2 30244 3",
+  "davxw 1003 4 3 30242 3",
+  "davxw 1003 4 4 30240 3",
+  "davxw 1003 5 3 30241 3",
+  "davxw 1003 5 4 30239 3",
+  "davx 1004 0 255 0 0 -2 -3 8 8",
+  "davxg 1004 0 rr....--",
+  "davxg 1004 1 rrr.....",
+  "davxg 1004 2 .rrr....",
+  "davxg 1004 3 ..rrrrrr",
+  "davxg 1004 4 ..rrrrrr",
+  "davxg 1004 5 ....rrr.",
+  "davxg 1004 6 -....rrr",
+  "davxg 1004 7 --....rr",
+  "davxw 1004 0 -1 30239 0",
+  "davxw 1004 0 0 30240 0",
+  "davxw 1004 0 1 22435 0",
+  "davxw 1004 1 -1 30241 0",
+  "davxw 1004 1 0 30242 0",
+  "davxw 1004 1 1 30243 0",
+  "davxw 1004 2 0 30244 0",
+  "davxw 1004 2 1 30245 0",
+  "davxw 1004 2 2 30246 2",
+  "davxw 1004 3 0 30247 2",
+  "davxw 1004 3 1 30248 0",
+  "davxw 1004 3 2 30249 0",
+  "davxw 1004 4 0 11204 2",
+  "davxw 1004 4 1 11204 0",
+  "davxw 1004 5 0 11204 2",
+  "davxw 1004 5 1 11204 0",
+  "davx 1005 1 255 0 0 -1 -2 8 8",
+  "davxg 1005 0 rr....--",
+  "davxg 1005 1 rrr....-",
+  "davxg 1005 2 .rrrr...",
+  "davxg 1005 3 ..rrr...",
+  "davxg 1005 4 ...rrr..",
+  "davxg 1005 5 ...rrrr.",
+  "davxg 1005 6 -..rrrrr",
+  "davxg 1005 7 -..rr.rr",
+  "davxw 1005 1 0 30239 1",
+  "davxw 1005 1 1 30241 1",
+  "davxw 1005 2 0 30240 1",
+  "davxw 1005 2 1 30242 1",
+  "davxw 1005 2 2 30244 1",
+  "davxw 1005 2 3 30247 3",
+  "davxw 1005 2 4 11204 3",
+  "davxw 1005 2 5 11204 3",
+  "davxw 1005 3 0 22435 1",
+  "davxw 1005 3 1 30243 1",
+  "davxw 1005 3 2 30245 1",
+  "davxw 1005 3 3 30248 1",
+  "davxw 1005 3 4 11204 1",
+  "davxw 1005 3 5 11204 1",
+  "davxw 1005 4 2 30246 3",
+  "davxw 1005 4 3 30249 1",
+  "davx 1006 0 255 0 0 -2 -3 8 8",
+  "davxg 1006 0 rr....--",
+  "davxg 1006 1 rrr....-",
+  "davxg 1006 2 .rrr....",
+  "davxg 1006 3 rrrrrr..",
+  "davxg 1006 4 rrrrrr..",
+  "davxg 1006 5 ....rrr.",
+  "davxg 1006 6 .....rrr",
+  "davxg 1006 7 --....rr",
+  "davxw 1006 -2 0 11204 2",
+  "davxw 1006 -2 1 11204 0",
+  "davxw 1006 -1 0 11204 2",
+  "davxw 1006 -1 1 11204 0",
+  "davxw 1006 0 -1 30249 2",
+  "davxw 1006 0 0 30248 2",
+  "davxw 1006 0 1 30247 0",
+  "davxw 1006 1 -1 30246 0",
+  "davxw 1006 1 0 30245 2",
+  "davxw 1006 1 1 30244 2",
+  "davxw 1006 2 0 30243 2",
+  "davxw 1006 2 1 30242 2",
+  "davxw 1006 2 2 30241 2",
+  "davxw 1006 3 0 22435 2",
+  "davxw 1006 3 1 30240 2",
+  "davxw 1006 3 2 30239 2",
+  "davx 1007 1 255 0 0 0 -1 8 8",
+  "davxg 1007 0 rr.rr..-",
+  "davxg 1007 1 rrrrr..-",
+  "davxg 1007 2 .rrrr...",
+  "davxg 1007 3 ..rrr...",
+  "davxg 1007 4 ...rrr..",
+  "davxg 1007 5 ...rrrr.",
+  "davxg 1007 6 -....rrr",
+  "davxg 1007 7 --....rr",
+  "davxw 1007 2 1 30249 3",
+  "davxw 1007 2 2 30246 1",
+  "davxw 1007 3 -1 11204 3",
+  "davxw 1007 3 0 11204 3",
+  "davxw 1007 3 1 30248 3",
+  "davxw 1007 3 2 30245 3",
+  "davxw 1007 3 3 30243 3",
+  "davxw 1007 3 4 22435 3",
+  "davxw 1007 4 -1 11204 1",
+  "davxw 1007 4 0 11204 1",
+  "davxw 1007 4 1 30247 1",
+  "davxw 1007 4 2 30244 3",
+  "davxw 1007 4 3 30242 3",
+  "davxw 1007 4 4 30240 3",
+  "davxw 1007 5 3 30241 3",
+  "davxw 1007 5 4 30239 3",
+  "davx 1008 1 255 0 0 -2 -3 8 8",
+  "davxg 1008 0 rr....--",
+  "davxg 1008 1 rrr.....",
+  "davxg 1008 2 .rrr....",
+  "davxg 1008 3 ..rrrrrr",
+  "davxg 1008 4 ...rrrrr",
+  "davxg 1008 5 ....rrr.",
+  "davxg 1008 6 -....rrr",
+  "davxg 1008 7 --....rr",
+  "davxw 1008 0 -1 30250 1",
+  "davxw 1008 0 0 30251 1",
+  "davxw 1008 1 -1 30252 1",
+  "davxw 1008 1 0 30253 1",
+  "davxw 1008 1 1 30254 1",
+  "davxw 1008 2 0 30255 1",
+  "davxw 1008 2 1 30256 1",
+  "davxw 1008 2 2 30257 3",
+  "davxw 1008 3 0 30258 3",
+  "davxw 1008 3 1 30259 1",
+  "davxw 1008 3 2 30260 1",
+  "davxw 1008 4 0 11204 3",
+  "davxw 1008 4 1 11204 1",
+  "davxw 1008 5 0 11204 3",
+  "davxw 1008 5 1 11204 1",
+  "davx 1009 0 255 0 0 -4 -5 8 8",
+  "davxg 1009 0 rr....--",
+  "davxg 1009 1 rrr....-",
+  "davxg 1009 2 .rrr....",
+  "davxg 1009 3 ..rrr...",
+  "davxg 1009 4 ...rrr..",
+  "davxg 1009 5 ...rrrr.",
+  "davxg 1009 6 -..rrrrr",
+  "davxg 1009 7 -..rr.rr",
+  "davxw 1009 -2 -3 30250 0",
+  "davxw 1009 -2 -2 30252 0",
+  "davxw 1009 -1 -3 30251 0",
+  "davxw 1009 -1 -2 30253 0",
+  "davxw 1009 -1 -1 30255 0",
+  "davxw 1009 -1 0 30258 2",
+  "davxw 1009 -1 1 11204 2",
+  "davxw 1009 -1 2 11204 2",
+  "davxw 1009 0 -2 30254 0",
+  "davxw 1009 0 -1 30256 0",
+  "davxw 1009 0 0 30259 0",
+  "davxw 1009 0 1 11204 0",
+  "davxw 1009 0 2 11204 0",
+  "davxw 1009 1 -1 30257 2",
+  "davxw 1009 1 0 30260 0",
+  "davx 1010 1 255 0 0 -2 -3 8 8",
+  "davxg 1010 0 rr....--",
+  "davxg 1010 1 rrr....-",
+  "davxg 1010 2 .rrr....",
+  "davxg 1010 3 rrrrr...",
+  "davxg 1010 4 rrrrrr..",
+  "davxg 1010 5 ....rrr.",
+  "davxg 1010 6 .....rrr",
+  "davxg 1010 7 --....rr",
+  "davxw 1010 -2 0 11204 3",
+  "davxw 1010 -2 1 11204 1",
+  "davxw 1010 -1 0 11204 3",
+  "davxw 1010 -1 1 11204 1",
+  "davxw 1010 0 -1 30260 3",
+  "davxw 1010 0 0 30259 3",
+  "davxw 1010 0 1 30258 1",
+  "davxw 1010 1 -1 30257 1",
+  "davxw 1010 1 0 30256 3",
+  "davxw 1010 1 1 30255 3",
+  "davxw 1010 2 0 30254 3",
+  "davxw 1010 2 1 30253 3",
+  "davxw 1010 2 2 30252 3",
+  "davxw 1010 3 1 30251 3",
+  "davxw 1010 3 2 30250 3",
+  "davx 1011 0 255 0 0 0 -1 8 8",
+  "davxg 1011 0 rr.rr..-",
+  "davxg 1011 1 rrrrr..-",
+  "davxg 1011 2 .rrrr...",
+  "davxg 1011 3 ..rrr...",
+  "davxg 1011 4 ...rrr..",
+  "davxg 1011 5 ....rrr.",
+  "davxg 1011 6 -....rrr",
+  "davxg 1011 7 --....rr",
+  "davxw 1011 2 1 30260 2",
+  "davxw 1011 2 2 30257 0",
+  "davxw 1011 3 -1 11204 2",
+  "davxw 1011 3 0 11204 2",
+  "davxw 1011 3 1 30259 2",
+  "davxw 1011 3 2 30256 2",
+  "davxw 1011 3 3 30254 2",
+  "davxw 1011 4 -1 11204 0",
+  "davxw 1011 4 0 11204 0",
+  "davxw 1011 4 1 30258 0",
+  "davxw 1011 4 2 30255 2",
+  "davxw 1011 4 3 30253 2",
+  "davxw 1011 4 4 30251 2",
+  "davxw 1011 5 3 30252 2",
+  "davxw 1011 5 4 30250 2",
+  "davx 1012 1 255 0 0 -2 -3 8 8",
+  "davxg 1012 0 rr....--",
+  "davxg 1012 1 rrr.....",
+  "davxg 1012 2 .rrr....",
+  "davxg 1012 3 ..rrrrrr",
+  "davxg 1012 4 ..rrrrrr",
+  "davxg 1012 5 ....rrr.",
+  "davxg 1012 6 -....rrr",
+  "davxg 1012 7 --....rr",
+  "davxw 1012 0 -1 30250 1",
+  "davxw 1012 0 0 30251 1",
+  "davxw 1012 0 1 22441 1",
+  "davxw 1012 1 -1 30252 1",
+  "davxw 1012 1 0 30253 1",
+  "davxw 1012 1 1 30254 1",
+  "davxw 1012 2 0 30255 1",
+  "davxw 1012 2 1 30256 1",
+  "davxw 1012 2 2 30257 3",
+  "davxw 1012 3 0 30258 3",
+  "davxw 1012 3 1 30259 1",
+  "davxw 1012 3 2 30260 1",
+  "davxw 1012 4 0 11204 3",
+  "davxw 1012 4 1 11204 1",
+  "davxw 1012 5 0 11204 3",
+  "davxw 1012 5 1 11204 1",
+  "davx 1013 0 255 0 0 -1 -2 8 8",
+  "davxg 1013 0 rr....--",
+  "davxg 1013 1 rrr....-",
+  "davxg 1013 2 .rrrr...",
+  "davxg 1013 3 ..rrr...",
+  "davxg 1013 4 ...rrr..",
+  "davxg 1013 5 ...rrrr.",
+  "davxg 1013 6 -..rrrrr",
+  "davxg 1013 7 -..rr.rr",
+  "davxw 1013 1 0 30250 0",
+  "davxw 1013 1 1 30252 0",
+  "davxw 1013 2 0 30251 0",
+  "davxw 1013 2 1 30253 0",
+  "davxw 1013 2 2 30255 0",
+  "davxw 1013 2 3 30258 2",
+  "davxw 1013 2 4 11204 2",
+  "davxw 1013 2 5 11204 2",
+  "davxw 1013 3 0 22441 0",
+  "davxw 1013 3 1 30254 0",
+  "davxw 1013 3 2 30256 0",
+  "davxw 1013 3 3 30259 0",
+  "davxw 1013 3 4 11204 0",
+  "davxw 1013 3 5 11204 0",
+  "davxw 1013 4 2 30257 2",
+  "davxw 1013 4 3 30260 0",
+  "davx 1014 1 255 0 0 -2 -3 8 8",
+  "davxg 1014 0 rr....--",
+  "davxg 1014 1 rrr....-",
+  "davxg 1014 2 .rrr....",
+  "davxg 1014 3 rrrrrr..",
+  "davxg 1014 4 rrrrrr..",
+  "davxg 1014 5 ....rrr.",
+  "davxg 1014 6 .....rrr",
+  "davxg 1014 7 --....rr",
+  "davxw 1014 -2 0 11204 3",
+  "davxw 1014 -2 1 11204 1",
+  "davxw 1014 -1 0 11204 3",
+  "davxw 1014 -1 1 11204 1",
+  "davxw 1014 0 -1 30260 3",
+  "davxw 1014 0 0 30259 3",
+  "davxw 1014 0 1 30258 1",
+  "davxw 1014 1 -1 30257 1",
+  "davxw 1014 1 0 30256 3",
+  "davxw 1014 1 1 30255 3",
+  "davxw 1014 2 0 30254 3",
+  "davxw 1014 2 1 30253 3",
+  "davxw 1014 2 2 30252 3",
+  "davxw 1014 3 0 22441 3",
+  "davxw 1014 3 1 30251 3",
+  "davxw 1014 3 2 30250 3",
+  "davx 1015 0 255 0 0 0 -1 8 8",
+  "davxg 1015 0 rr.rr..-",
+  "davxg 1015 1 rrrrr..-",
+  "davxg 1015 2 .rrrr...",
+  "davxg 1015 3 ..rrr...",
+  "davxg 1015 4 ...rrr..",
+  "davxg 1015 5 ...rrrr.",
+  "davxg 1015 6 -....rrr",
+  "davxg 1015 7 --....rr",
+  "davxw 1015 2 1 30260 2",
+  "davxw 1015 2 2 30257 0",
+  "davxw 1015 3 -1 11204 2",
+  "davxw 1015 3 0 11204 2",
+  "davxw 1015 3 1 30259 2",
+  "davxw 1015 3 2 30256 2",
+  "davxw 1015 3 3 30254 2",
+  "davxw 1015 3 4 22441 2",
+  "davxw 1015 4 -1 11204 0",
+  "davxw 1015 4 0 11204 0",
+  "davxw 1015 4 1 30258 0",
+  "davxw 1015 4 2 30255 2",
+  "davxw 1015 4 3 30253 2",
+  "davxw 1015 4 4 30251 2",
+  "davxw 1015 5 3 30252 2",
+  "davxw 1015 5 4 30250 2",
+  "avlj 30247 ...O",
+  "avlj 30248 .I..",
+  "avlj 30258 O...",
+  "avlj 30259 ..I."
+ ]
+}

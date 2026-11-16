@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "boulevard",
- "version": "0.4.0",
+ "version": "0.5.0",
  "author": "netmod (task boulevard, bvlanes, orthfix)",
- "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock road look, yellow centre line), the middle road gives each one an extra lane and holds a grass median with avenue 11204's trees, about twice as wide as the stock avenue's. Single straight roads crossing it or meeting it from one side get junctions with crosswalks (the median ends in a nose); where all three roads stop the end column closes it with a round curb; where only one goes on, the boulevard tapers into it over its last three columns; where two neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side; the narrowing meets the one-way avenue halves of avenue_lanes. Task orthfix (0.4.0): a boulevard crossing a rail line, a power line or passing under a highway carries on through it (20769..20780: twins of the crossing pieces with the boulevard's one-way lanes; they draw as the stock crossing). Built by `boulevard.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
+ "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock road look, yellow centre line), the middle road gives each one an extra lane and holds a grass median with avenue 11204's trees, about twice as wide as the stock avenue's. Single straight roads crossing it or meeting it from one side get junctions with crosswalks (the median ends in a nose); where all three roads stop the end column closes it with a round curb; where only one goes on, the boulevard tapers into it over its last three columns; where two neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side; the narrowing meets the one-way avenue halves of avenue_lanes. Task orthfix (0.4.0): a boulevard crossing a rail line, a power line or passing under a highway carries on through it (20769..20780: twins of the crossing pieces with the boulevard's one-way lanes; they draw as the stock crossing). Round 2026-11-15b (0.5.0, BVXART): the same twins with their own art, 30200..30208 (bvq lines): the level crossing carries the boulevard's 3 + 3 lanes and a painted median, the underpass is one opening spanning the boulevard (bvxing_paint.py). Built by `boulevard.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
  "game": {
   "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
  },
@@ -847,6 +847,20 @@
    "trblkatt": "copy_base"
   },
   {
+   "id": 30200,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 69,
+    "png_dir": "art/30200"
+   }
+  },
+  {
    "id": 20770,
    "base": 69,
    "network": "ROAD",
@@ -855,6 +869,20 @@
     "ENGLISH": "Bulevar, cruce"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 30201,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 69,
+    "png_dir": "art/30201"
+   }
   },
   {
    "id": 20771,
@@ -867,6 +895,20 @@
    "trblkatt": "copy_base"
   },
   {
+   "id": 30202,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 69,
+    "png_dir": "art/30202"
+   }
+  },
+  {
    "id": 20775,
    "base": 11258,
    "network": "ROAD",
@@ -875,6 +917,20 @@
     "ENGLISH": "Bulevar, cruce"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 30206,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30206"
+   }
   },
   {
    "id": 20776,
@@ -887,6 +943,20 @@
    "trblkatt": "copy_base"
   },
   {
+   "id": 30207,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30207"
+   }
+  },
+  {
    "id": 20777,
    "base": 11258,
    "network": "ROAD",
@@ -895,6 +965,20 @@
     "ENGLISH": "Bulevar, cruce"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 30208,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30208"
+   }
   },
   {
    "id": 20778,
@@ -907,6 +991,20 @@
    "trblkatt": "copy_base"
   },
   {
+   "id": 30203,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30203"
+   }
+  },
+  {
    "id": 20779,
    "base": 15098,
    "network": "ROAD",
@@ -917,6 +1015,20 @@
    "trblkatt": "copy_base"
   },
   {
+   "id": 30204,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30204"
+   }
+  },
+  {
    "id": 20780,
    "base": 15098,
    "network": "ROAD",
@@ -925,6 +1037,104 @@
     "ENGLISH": "Bulevar, cruce"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 30205,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30205"
+   }
+  },
+  {
+   "id": 30233,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue, crossing",
+    "ENGLISH": "Avenida, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 69,
+    "png_dir": "art/30233"
+   }
+  },
+  {
+   "id": 30234,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue, crossing",
+    "ENGLISH": "Avenida, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 69,
+    "png_dir": "art/30234"
+   }
+  },
+  {
+   "id": 30237,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue, crossing",
+    "ENGLISH": "Avenida, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30237"
+   }
+  },
+  {
+   "id": 30238,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue, crossing",
+    "ENGLISH": "Avenida, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11258,
+    "png_dir": "art/30238"
+   }
+  },
+  {
+   "id": 30235,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue, crossing",
+    "ENGLISH": "Avenida, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30235"
+   }
+  },
+  {
+   "id": 30236,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue, crossing",
+    "ENGLISH": "Avenida, cruce"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 15098,
+    "png_dir": "art/30236"
+   }
   }
  ],
  "lanes": [
@@ -1173,36 +1383,96 @@
    "spec": "bvr_20769.lanes.json"
   },
   {
+   "piece": 30200,
+   "spec": "bvq_30200.lanes.json"
+  },
+  {
    "piece": 20770,
    "spec": "bvr_20770.lanes.json"
+  },
+  {
+   "piece": 30201,
+   "spec": "bvq_30201.lanes.json"
   },
   {
    "piece": 20771,
    "spec": "bvr_20771.lanes.json"
   },
   {
+   "piece": 30202,
+   "spec": "bvq_30202.lanes.json"
+  },
+  {
    "piece": 20775,
    "spec": "bvr_20775.lanes.json"
+  },
+  {
+   "piece": 30206,
+   "spec": "bvq_30206.lanes.json"
   },
   {
    "piece": 20776,
    "spec": "bvr_20776.lanes.json"
   },
   {
+   "piece": 30207,
+   "spec": "bvq_30207.lanes.json"
+  },
+  {
    "piece": 20777,
    "spec": "bvr_20777.lanes.json"
+  },
+  {
+   "piece": 30208,
+   "spec": "bvq_30208.lanes.json"
   },
   {
    "piece": 20778,
    "spec": "bvr_20778.lanes.json"
   },
   {
+   "piece": 30203,
+   "spec": "bvq_30203.lanes.json"
+  },
+  {
    "piece": 20779,
    "spec": "bvr_20779.lanes.json"
   },
   {
+   "piece": 30204,
+   "spec": "bvq_30204.lanes.json"
+  },
+  {
    "piece": 20780,
    "spec": "bvr_20780.lanes.json"
+  },
+  {
+   "piece": 30205,
+   "spec": "bvq_30205.lanes.json"
+  },
+  {
+   "piece": 30233,
+   "spec": "avq_30233.lanes.json"
+  },
+  {
+   "piece": 30234,
+   "spec": "avq_30234.lanes.json"
+  },
+  {
+   "piece": 30237,
+   "spec": "avq_30237.lanes.json"
+  },
+  {
+   "piece": 30238,
+   "spec": "avq_30238.lanes.json"
+  },
+  {
+   "piece": 30235,
+   "spec": "avq_30235.lanes.json"
+  },
+  {
+   "piece": 30236,
+   "spec": "avq_30236.lanes.json"
   }
  ],
  "auto_boulevards": [
@@ -1290,20 +1560,35 @@
   "avlj 20756 .O..",
   "avlj 20757 .I..",
   "avlj 20767 .O..",
-  "avlj 20768 .I.."
+  "avlj 20768 .I..",
+  "avlq 30233 69 1",
+  "avlq 30234 69 3",
+  "avlq 30237 11258 1",
+  "avlq 30238 11258 3",
+  "avlq 30235 15098 2",
+  "avlq 30236 15098 0"
  ],
  "boulevard_slope_lines": [
   "bvr 20772 67 1",
   "bvr 20773 67 3",
   "bvr 20774 67 4",
   "bvr 20769 69 1",
+  "bvq 30200 69 1",
   "bvr 20770 69 3",
+  "bvq 30201 69 3",
   "bvr 20771 69 4",
+  "bvq 30202 69 4",
   "bvr 20775 11258 1",
+  "bvq 30206 11258 1",
   "bvr 20776 11258 3",
+  "bvq 30207 11258 3",
   "bvr 20777 11258 4",
+  "bvq 30208 11258 4",
   "bvr 20778 15098 2",
+  "bvq 30203 15098 2",
   "bvr 20779 15098 0",
-  "bvr 20780 15098 4"
+  "bvq 30204 15098 0",
+  "bvr 20780 15098 4",
+  "bvq 30205 15098 4"
  ]
 }

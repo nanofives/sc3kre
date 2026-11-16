@@ -46,7 +46,8 @@
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
-       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BENDAV, DK_BENDAVM, DK_BENDBV, DK_JBVX, DK_JBVE, DK_JBVEO, DK_BENDBVM, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
+       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BENDAV, DK_BENDAVM, DK_BENDBV, DK_JBVX, DK_JBVE, DK_JBVEO, DK_BENDBVM, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT,
+       DK_BVOPEN };                          /* DK_BVOPEN: orthfix DBVBVBEND */     /* DK_RAGGED: task avrbtfix */
 static int dbv_b135_on(void);                /* task diagfix: DBVBEND135 (defined before dbv_band) */
 static int dbv_bbv_on(void);                 /* task diagfix: DBVBBEND */
 
@@ -301,9 +302,37 @@ static int dbv_narrow_ok(DbvPass *p, int z_e, int a_e, int e, int kind) {
 #endif
 }
 
+/* orthfix DBVBVBEND (round 2026-11-15b, xsect 43; orchestrator: orthfix's own block in diagfix's file): a diagonal
+   boulevard LEAVING a straight boulevard through one side while the boulevard runs on (the 4-wide twin of DAVBVBEND's
+   39). The band's last three rows are the boulevard's three rows, with the boulevard going on on BOTH sides of the band
+   and nothing past them; the row after them (into the band) has no road beside it. Those three rows are BV's: its
+   opening box (sc3netmod_bv.c BVOBOXDB, package boulevard_diagonal 0.2.0) writes the band's 12 cells there; DBV writes
+   the band from the fourth row on and leaves the boulevard alone. Before this the end was unknown (or, cut short, a
+   "road above the band is not a straight single road") and the band stayed the stock ladder. Off: SC3NETMOD_DBVBVBEND=0 */
+static int g_dbv_bvopen = -1;
+static int dbv_bvopen_on(void) {
+    if (g_dbv_bvopen < 0) {
+        g_dbv_bvopen = !env_off("SC3NETMOD_DBVBVBEND");
+        logf("dbv: a diagonal boulevard leaving a boulevard's side (orthfix DBVBVBEND, xsect 43) %s",
+             g_dbv_bvopen ? "on" : "off (SC3NETMOD_DBVBVBEND=0)");
+    }
+    return g_dbv_bvopen;
+}
+static int dbv_is_bvopen(DbvPass *p, int z_e, int a_e, int e, int nrows) {
+    int d, dz;
+    if (!dbv_bvopen_on() || nrows < 3 + DBV_MIN_CLEAN) return 0;
+    for (d = -4; d <= 8; d++) if (DBV_RDE(d, 1)) return 0;                  /* nothing past the boulevard */
+    for (dz = -2; dz <= 0; dz++) {
+        for (d = dz - 2; d <= dz + 5; d++) if (!DBV_RDE(d, dz)) return 0;     /* both sides go on, band cells road */
+    }
+    if (DBV_RDE(-4, -3) || DBV_RDE(1, -3)) return 0;                         /* the band leaves clean */
+    return 1;
+}
+
 static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     unsigned rr[6];
     int j, d, dz, ok;
+    if (dbv_is_bvopen(p, z_e, a_e, e, nrows)) return DK_BVOPEN;             /* orthfix DBVBVBEND */
     /* task diagfix (xsect 45): DBVBBEND, a straight BOULEVARD's three rows (0, -1, -2 from their d3 + 1 on) into the end
        at 135 degrees: the band's last three rows are the stamp `bendbv` (paved bend box opening into the boulevard).
        Tested before DK_BEND_X, which is the same shape with the overlap left to BV (BV's BVBEND leaves it too) */
@@ -602,6 +631,16 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             dbv_bad(p, DBV_CELLX(-1, 0), DBV_CELLZ(-1, 0));                 /* task dbvtouch: a road beside the end row */
             dbv_bad(p, DBV_CELLX(4, 0), DBV_CELLZ(4, 0));
             return 0;
+        }
+        if (kind == DK_BVOPEN) {                                         /* orthfix DBVBVBEND: the rows are BV's */
+            for (dz = -2; dz <= 0; dz++) {
+                int zr = z_e + sgn * dz;
+                if (IN_CHAIN(zr)) endrow[zr - z0] = 1;
+                for (dx = dz; dx <= dz + 3; dx++) MARK(DBV_CELLX(dx, dz), DBV_CELLZ(dx, dz)) |= 16 | 2;   /* BV's, path */
+                for (dx = dz + 4; dx < 512 && DBV_RDE(dx, dz); dx++) MARK(DBV_CELLX(dx, dz), DBV_CELLZ(dx, dz)) |= 2;
+                for (dx = dz - 1; dx > -512 && DBV_RDE(dx, dz); dx--) MARK(DBV_CELLX(dx, dz), DBV_CELLZ(dx, dz)) |= 2;
+            }
+            continue;
         }
         if (kind == DK_BEND_X) {
             for (dz = -2; dz <= 0; dz++) {
