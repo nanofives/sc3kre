@@ -69,6 +69,7 @@ static void dav_xline(const char *path, const char *line);       /* task diagx: 
 static void dav_xgline(const char *path, const char *line);
 static void dav_xwline(const char *path, const char *line);
 static void davxn_line(const char *path, const char *line);      /* task diagxnet: DAVXN */
+static void davxn_heal(BYTE *mgr, int net, int bx0, int bz0, int bx1, int bz1, const char *who);   /* task diagxnet: DAVXHEAL */
 static void dav_oline(const char *path, const char *line);       /* task avdiag: davu / davn / davt / davo */
 static void dav_wline(const char *path, const char *line);       /* task avrbtchain: DAVTWO */
 static void dav_init_table(void);
@@ -416,6 +417,19 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
         ZeroMemory(g_pt, sizeof(g_pt));
         g_pt_reruns = 0;
         g_pt[PT_STOCK] = (double)(pt_now() - pt_t0) * 1000.0 / (double)g_freq.QuadPart;
+    }
+    if ((net == 2 || net == 4) && box && !g_rb_busy && box[0] != 0x7fffffff && box[1] != 0x7fffffff &&
+        box[3] != 0x7fffffff && box[4] != 0x7fffffff) {                       /* task diagxnet: DAVXHEAL */
+        g_rb_mgr = mgr;
+        InterlockedIncrement(&g_rb_busy);
+        __try {
+            davxn_heal(mgr, net, min(box[0], box[3]) >> 8, min(box[1], box[4]) >> 8, max(box[0], box[3]) >> 8,
+                       max(box[1], box[4]) >> 8, "edit");
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            InterlockedIncrement(&g_rb_n_fault);
+            logf("### dav: exception 0x%08lX in DAVXHEAL", GetExceptionCode());
+        }
+        InterlockedDecrement(&g_rb_busy);
     }
     if (net == 4 && box && !g_rb_busy && g_hwy_np && box[0] != 0x7fffffff && box[1] != 0x7fffffff) {  /* task hwcore */
         g_rb_mgr = mgr;

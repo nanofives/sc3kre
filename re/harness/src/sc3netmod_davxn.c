@@ -86,3 +86,100 @@ static int davxn_back(BYTE *mgr, void *lay, DWORD v, int x, int z, int kept, con
     logf("dav: %s: (%d,%d) crossing piece %u no longer under a band -> stock %u (DAVXN)", who, x, z, id, g_base[id]);
     return 1;
 }
+
+/* task diagxnet (owner 2026-11-16 "Fix it"): DAVXHEAL, rail or a highway drawn ACROSS an existing diagonal road / avenue /
+ * boulevard. The drag skips the diagonal's cells: the crossing builder FUN_100167d4 [CONFIRMED @ SIMNTWRK 0x100167d4]
+ * only knows straight road (0x1d, 0x2bc4) as the existing piece, so 35 and every DAV / DBV piece (bases 35, 43, 18004)
+ * get no crossing, and the run is placed on both sides with the diagonal left in between: the line was cut (stock does
+ * the same with a plain diagonal road). After every rail (net 2) and highway (net 4) pass, a straight run of that network
+ * interrupted by 1..DAVXH_GAP diagonal-road cells, with two run cells on each side, gets the stock crossing piece on the
+ * gap cells: 69 at state 1 (rail along x) / 0 (along z), the same pieces drawing the rail first gives (xsect 68 / 69 / 74);
+ * 15098 next to 15051, 11258 next to 73, at the neighbour's state (the deck half). Then DBV and DAV run over the box,
+ * so a diagonal avenue / boulevard's kept crossing cells take their DAVXN variants. Off: SC3NETMOD_DAVXHEAL=0. */
+#define DAVXH_GAP 4
+static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);   /* sc3netmod_dbv.c */
+static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);   /* sc3netmod_dav.c */
+static int g_davxh = -1;
+static volatile LONG g_davxh_n_runs, g_davxh_n_cells;
+
+/* the surface occupant at (x, z) if the manager's network test vt+0x14c accepts it for network `net`: id | state << 16 */
+static DWORD davxh_read(BYTE *mgr, void *lay, int x, int z, int W, int H, int net) {
+    void *occ = NULL;
+    DWORD r = 0, vt;
+    if (x < 0 || z < 0 || x >= W || z >= H) return 0;
+    if (!((PFN_At)VT(lay, 0x7c))(lay, 0, x, z, &occ) || !occ) return 0;
+    vt = *(DWORD *)occ;
+    if (vt >= (DWORD)g_rb_m && vt < (DWORD)g_rb_m + g_rb_msize && ((PFN_Pred)VT(mgr, 0x14c))(mgr, 0, net, occ))
+        r = 0x80000000UL | ((*(DWORD *)((BYTE *)occ + 0x10) >> 30) << 16) | (*(DWORD *)((BYTE *)occ + 0x14) & 0xffff);
+    ((PFN_B0)VT(occ, 8))(occ);
+    return r;
+}
+
+static int davxh_diag(DWORD v) {                 /* a diagonal road / avenue / boulevard cell (never stock 43) */
+    WORD id = (WORD)(v & 0xffff), b;
+    if (!v) return 0;
+    if (id == 35) return 1;
+    b = g_base[id];
+    return id >= 20000 && (b == 35 || b == 43 || b == 18004);
+}
+
+/* a plain run cell of network net: rail 44, highway 15051 / 73 (-> 0 none) */
+static WORD davxh_line(DWORD v, int net) {
+    WORD id = (WORD)(v & 0xffff);
+    if (!v) return 0;
+    if (net == 2) return id == 44 ? id : 0;
+    return id == 15051 || id == 73 ? id : 0;
+}
+
+static void davxn_heal(BYTE *mgr, int net, int bx0, int bz0, int bx1, int bz1, const char *who) {
+    void *lay = *(void **)(mgr + 0x3c);
+    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, ax, nw = 0;
+    int x0 = bx0 - DAVXH_GAP - 3, z0 = bz0 - DAVXH_GAP - 3, x1 = bx1 + DAVXH_GAP + 3, z1 = bz1 + DAVXH_GAP + 3;
+    if (g_davxh < 0) {
+        g_davxh = !env_off("SC3NETMOD_DAVXHEAL");
+        logf("dav: DAVXHEAL %s (rail / highway drawn across an existing diagonal gets its crossing, SC3NETMOD_DAVXHEAL)",
+             g_davxh ? "on" : "off");
+    }
+    if (!g_davxh || (net != 2 && net != 4) || W < 4 || H < 4 || W > 4096 || H > 4096) return;
+    if (x0 < 0) x0 = 0;
+    if (z0 < 0) z0 = 0;
+    if (x1 > W - 1) x1 = W - 1;
+    if (z1 > H - 1) z1 = H - 1;
+    for (ax = 0; ax < 2; ax++) {                 /* 0: runs along x (rows), 1: along z (columns) */
+        int a, s, A0 = ax ? z0 : x0, A1 = ax ? z1 : x1, S0 = ax ? x0 : z0, S1 = ax ? x1 : z1;
+        for (s = S0; s <= S1; s++)
+            for (a = A0 + 1; a + 2 <= A1; a++) {
+#define DXH_AT(aa, nn) davxh_read(mgr, lay, ax ? s : (aa), ax ? (aa) : s, W, H, (nn))
+                DWORD L1 = DXH_AT(a, net), L0, R0, R1, d;
+                WORD lid = davxh_line(L1, net);
+                int g, k, st;
+                if (!lid || !davxh_diag(DXH_AT(a + 1, 1))) continue;
+                L0 = DXH_AT(a - 1, net);
+                if (davxh_line(L0, net) != lid) continue;
+                for (g = 1; g <= DAVXH_GAP && davxh_diag(DXH_AT(a + g, 1)); g++) ;
+                g--;                             /* cells a+1 .. a+g are diagonal */
+                R0 = DXH_AT(a + g + 1, net); R1 = DXH_AT(a + g + 2, net);
+                if (davxh_line(R0, net) != lid || davxh_line(R1, net) != lid) continue;
+                if (net == 4 && (((L1 >> 16) & 3) != ((R0 >> 16) & 3))) continue;   /* one deck half */
+                st = net == 2 ? (ax ? 0 : 1) : (int)((L1 >> 16) & 3);
+                for (k = 1; k <= g; k++) {
+                    int pos[3], cx = ax ? s : a + k, cz = ax ? a + k : s;
+                    d = ((DWORD)(net == 2 ? 69 : lid == 15051 ? 15098 : 11258) << 8) | (DWORD)st;
+                    pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
+                    ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, d, -1, 8, 0);
+                    nw++;
+                }
+                InterlockedIncrement(&g_davxh_n_runs);
+                InterlockedExchangeAdd(&g_davxh_n_cells, g);
+                logf("dav: %s: %s along %c at %d across a diagonal, cells %d..%d: %d cell(s) -> %u.%d (DAVXHEAL)", who,
+                     net == 2 ? "rail" : "highway", ax ? 'z' : 'x', s, a + 1, a + g, g,
+                     net == 2 ? 69 : lid == 15051 ? 15098 : 11258, st);
+                a += g;
+#undef DXH_AT
+            }
+    }
+    if (nw) {                                    /* the band blocks over the box: kept crossings -> DAVXN variants */
+        dbv_run(mgr, x0, z0, x1, z1, "heal");
+        if (g_dav_on) dav_run(mgr, x0, z0, x1, z1, "heal");
+    }
+}
