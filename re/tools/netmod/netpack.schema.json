@@ -282,6 +282,11 @@
       "items": {"type": "string", "pattern": "^(bvs (o [0-9]+ [0-9]+ [0-3]|m [0-9]+ [0-9]+)|bvn [01]( [0-9]+){6}|bv[rq] [0-9]+ [0-9]+ [0-4]|bvo [01]( [0-9]+){9}|bvo [23]( [0-9]+){12})$"},
       "description": "Task avslope: raw sc3netmod table lines of the BVS part of the BV block (sc3netmod_bvs.c): `bvs o <piece> <slope piece> <side>` the sloped outer carriageway of a boulevard (lanes toward world side <side> at state 0), `bvs m <piece> <slope piece>` the sloped middle; the slope piece one of 11202 / 11201 / 32 / 31, the pieces ROAD variants of it from this package. BV writes them on boulevard cells that stand on a legal slope. Task orthfix BVXING: `bvo <0|1> <9 pieces>` the opening box of a diagonal avenue leaving a boulevard (orthfix), `bvr <piece> <base> <side>` a twin of a Protected crossing piece (69 / 67 / 11258 / 15098) for a boulevard crossing it, side 0..3 = an outer row whose lanes run toward world side <side> at state 0, 4 = the middle row."
     },
+    "crossing_lines": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^davxn (69|15098|11258) [0-3] [0-9]+ [0-3] [0-9]+$"},
+      "description": "Task diagxnet: raw sc3netmod table lines of the DAVXN part of the DAV block (sc3netmod_davxn.c): `davxn <base> <base state> <band piece> <band state> <variant>` = on a rail / highway crossing cell (base 69 / 15098 / 11258 at that state) that a diagonal avenue or boulevard holds, where DAV / DBV would write <band piece> at <band state>, write <variant> (a ROAD variant of the base from this package) at the base's state."
+    },
     "road_end_lines": {
       "type": "array",
       "items": {"type": "string", "pattern": "^sle [0-9]+( [0-9]+){6}$"},

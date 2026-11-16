@@ -68,6 +68,7 @@ static void dav_sline(const char *path, const char *line);
 static void dav_xline(const char *path, const char *line);       /* task diagx: crossings */
 static void dav_xgline(const char *path, const char *line);
 static void dav_xwline(const char *path, const char *line);
+static void davxn_line(const char *path, const char *line);      /* task diagxnet: DAVXN */
 static void dav_oline(const char *path, const char *line);       /* task avdiag: davu / davn / davt / davo */
 static void dav_wline(const char *path, const char *line);       /* task avrbtchain: DAVTWO */
 static void dav_init_table(void);
@@ -155,6 +156,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "davx ", 5)) { dav_xline(path, line); continue; }      /* task diagx: crossings */
         if (!strncmp(line, "davxg ", 6)) { dav_xgline(path, line); continue; }    /* task diagx */
         if (!strncmp(line, "davxw ", 6)) { dav_xwline(path, line); continue; }    /* task diagx */
+        if (!strncmp(line, "davxn ", 6)) { davxn_line(path, line); continue; }    /* task diagxnet: DAVXN */
         if (!strncmp(line, "davu ", 5) || !strncmp(line, "davn ", 5) || !strncmp(line, "davt ", 5) || !strncmp(line, "davo ", 5)) { dav_oline(path, line); continue; }   /* task avdiag */
         if (!strncmp(line, "davw ", 5)) { dav_wline(path, line); continue; }      /* task avrbtchain: DAVTWO twins */
         if (!strncmp(line, "dav ", 4)) { dav_line(path, line); continue; }        /* task diagave */
