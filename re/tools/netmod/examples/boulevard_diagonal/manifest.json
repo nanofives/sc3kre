@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "boulevard_diagonal",
- "version": "0.1.0",
+ "version": "0.2.0",
  "author": "netmod (task orthfix)",
- "description": "Boulevard x diagonal avenue OPENING box (task orthfix, xsect 39): where a diagonal avenue leaves a boulevard through one side and the boulevard runs on, sc3netmod's BV block writes the avenue band's nine cells in the boulevard's rows as one paved box (crosswalks where the avenue leaves and across the boulevard on both sides, the boulevard's far kerb runs on). 22470..22478 the avenue going +x+z from the boulevard's +w side, 22479..22487 the mirror. Saved as 43. Needs boulevard, diagonal_avenue. Build: `py -3.12 -m netmod.bvdiag_build build .` in re/tools (art from the game's frames, not shipped).",
+ "description": "Boulevard x diagonal avenue OPENING box (task orthfix, xsect 39): where a diagonal avenue leaves a boulevard through one side and the boulevard runs on, sc3netmod's BV block writes the avenue band's nine cells in the boulevard's rows as one paved box (crosswalks where the avenue leaves and across the boulevard on both sides, the boulevard's far kerb runs on). 22470..22478 the avenue going +x+z from the boulevard's +w side, 22479..22487 the mirror. Round 2026-11-15b (0.2.0, xsect 43): the same opening for a diagonal BOULEVARD, 12 cells (30209..30220, mirror 30221..30232, table lines bvo 2 / 3). Saved as 43. Needs boulevard, diagonal_avenue, diagonal_boulevard. Build: `py -3.12 -m netmod.bvdiag_build build .` in re/tools (art from the game's frames, not shipped).",
  "game": {
   "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
  },
@@ -259,6 +259,342 @@
     "png_dir": "art/22487"
    },
    "trblkatt": "none"
+  },
+  {
+   "id": 30209,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30209"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30210,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30210"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30211,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30211"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30212,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30212"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30213,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30213"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30214,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30214"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30215,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30215"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30216,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30216"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30217,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30217"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30218,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30218"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30219,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30219"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30220,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30220"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30221,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30221"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30222,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30222"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30223,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30223"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30224,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30224"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30225,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30225"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30226,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30226"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30227,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30227"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30228,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30228"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30229,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30229"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30230,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30230"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30231,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30231"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 30232,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard junction",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/30232"
+   },
+   "trblkatt": "none"
   }
  ],
  "lanes": [
@@ -333,10 +669,108 @@
   {
    "piece": 22487,
    "spec": "bvo_22487.lanes.json"
+  },
+  {
+   "piece": 30209,
+   "spec": "bvo_30209.lanes.json"
+  },
+  {
+   "piece": 30210,
+   "spec": "bvo_30210.lanes.json"
+  },
+  {
+   "piece": 30211,
+   "spec": "bvo_30211.lanes.json"
+  },
+  {
+   "piece": 30212,
+   "spec": "bvo_30212.lanes.json"
+  },
+  {
+   "piece": 30213,
+   "spec": "bvo_30213.lanes.json"
+  },
+  {
+   "piece": 30214,
+   "spec": "bvo_30214.lanes.json"
+  },
+  {
+   "piece": 30215,
+   "spec": "bvo_30215.lanes.json"
+  },
+  {
+   "piece": 30216,
+   "spec": "bvo_30216.lanes.json"
+  },
+  {
+   "piece": 30217,
+   "spec": "bvo_30217.lanes.json"
+  },
+  {
+   "piece": 30218,
+   "spec": "bvo_30218.lanes.json"
+  },
+  {
+   "piece": 30219,
+   "spec": "bvo_30219.lanes.json"
+  },
+  {
+   "piece": 30220,
+   "spec": "bvo_30220.lanes.json"
+  },
+  {
+   "piece": 30221,
+   "spec": "bvo_30221.lanes.json"
+  },
+  {
+   "piece": 30222,
+   "spec": "bvo_30222.lanes.json"
+  },
+  {
+   "piece": 30223,
+   "spec": "bvo_30223.lanes.json"
+  },
+  {
+   "piece": 30224,
+   "spec": "bvo_30224.lanes.json"
+  },
+  {
+   "piece": 30225,
+   "spec": "bvo_30225.lanes.json"
+  },
+  {
+   "piece": 30226,
+   "spec": "bvo_30226.lanes.json"
+  },
+  {
+   "piece": 30227,
+   "spec": "bvo_30227.lanes.json"
+  },
+  {
+   "piece": 30228,
+   "spec": "bvo_30228.lanes.json"
+  },
+  {
+   "piece": 30229,
+   "spec": "bvo_30229.lanes.json"
+  },
+  {
+   "piece": 30230,
+   "spec": "bvo_30230.lanes.json"
+  },
+  {
+   "piece": 30231,
+   "spec": "bvo_30231.lanes.json"
+  },
+  {
+   "piece": 30232,
+   "spec": "bvo_30232.lanes.json"
   }
  ],
  "boulevard_slope_lines": [
   "bvo 0 22470 22471 22472 22473 22474 22475 22476 22477 22478",
-  "bvo 1 22479 22480 22481 22482 22483 22484 22485 22486 22487"
+  "bvo 1 22479 22480 22481 22482 22483 22484 22485 22486 22487",
+  "bvo 2 30209 30210 30211 30212 30213 30214 30215 30216 30217 30218 30219 30220",
+  "bvo 3 30221 30222 30223 30224 30225 30226 30227 30228 30229 30230 30231 30232"
  ]
 }

@@ -857,9 +857,16 @@ def compile_pack(stock, pack_dir, man):
         out["highway_lines"].append(ln)
     for n, ln in enumerate(man.get("avenue_lines", [])):             # task avcore: sc3netmod AVL block (raw lines)
         tok = ln.split()                                             # avls / avlu / avlc <piece> ..., avlj <piece> <NESW>
-        if not tok or tok[0] not in ("avls", "avlu", "avlk", "avlc", "avlj", "avlt", "avlp", "davw") or len(tok) < 2 or \
-                not tok[1].isdigit():                                # avlt / avlp: task avpaint, davw: avrbtchain
-            raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlk / avlc / avlj / avlt / avlp / davw line" %
+        if tok[:1] in (["davx"], ["davxg"], ["davxw"], ["dbvx"], ["dbvxg"], ["dbvxw"]):   # orthfix (11-15b): DAV / DBV templates
+            if len(tok) < 3 or not all(t.lstrip("-").isdigit() for t in tok[1:3]) or \
+                    (tok[0] in ("davxw", "dbvxw") and (len(tok) != 6 or not tok[4].isdigit() or
+                                            (int(tok[4]) not in vids and not stock_road(int(tok[4])) and int(tok[4]) < 20000))):
+                raise NetpackError("%s avenue_lines %d: '%s' is not a davx / davxg / davxw / dbvx / dbvxg / dbvxw line" % (pname, n + 1, ln))
+            out["avenue_lines"].append(ln)                           # (another package's piece in a davxw: checked
+            continue                                                 #  against the composed set at install)
+        if not tok or tok[0] not in ("avls", "avlu", "avlk", "avlc", "avlq", "avlj", "avlt", "avlp", "davw") or \
+                len(tok) < 2 or not tok[1].isdigit():                # avlt / avlp: task avpaint, davw: avrbtchain, avlq: orthfix AVXART
+            raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlk / avlc / avlq / avlj / avlt / avlp / davw line" %
                                (pname, n + 1, ln))
         nets = ("ROAD", "HWAY") if tok[0] == "avlj" else ("ROAD",)     # avlj: hwave's ground row is HWAY (avmisc)
         if int(tok[1]) not in vids or vids[int(tok[1])]["net"] not in nets:
@@ -877,17 +884,19 @@ def compile_pack(stock, pack_dir, man):
     for n, ln in enumerate(man.get("boulevard_slope_lines", [])):    # task avslope: sc3netmod BVS (BV) lines, raw
         tok = ln.split()                                             # bvs o <piece> <slope piece> <side>, bvs m <piece> <slope piece>
         if tok[:1] == ["bvo"]:                                       # task orthfix: bvo <0|1> <9 box pieces> (opening box)
-            if len(tok) != 11 or tok[1] not in ("0", "1") or not all(t.isdigit() for t in tok[2:]) or \
+            # (orthfix BVOBOXDB: bvo <2|3> <12 box pieces>, the diagonal boulevard's opening box)
+            if len(tok) != (11 if tok[1:2] in (["0"], ["1"]) else 14) or tok[1] not in ("0", "1", "2", "3") or \
+                    not all(t.isdigit() for t in tok[2:]) or \
                     any(int(t) not in vids or vids[int(t)]["net"] != "ROAD" for t in tok[2:]):
                 raise NetpackError("%s boulevard_slope_lines %d: '%s' is not `bvo <0|1> <9 ROAD variants of this package>`"
-                                   % (pname, n + 1, ln))
+                                   " or `bvo <2|3> <12 ...>`" % (pname, n + 1, ln))
             out["boulevard_slope_lines"].append(ln)
             continue
-        if tok[:1] == ["bvr"]:                                       # task orthfix BVXING: bvr <piece> <base> <side 0..3 | 4 middle>
+        if tok[:1] in (["bvr"], ["bvq"]):                            # task orthfix BVXING: bvr <piece> <base> <side 0..3 | 4 middle>; BVXART: bvq (own art)
             if len(tok) != 4 or not all(t.isdigit() for t in tok[1:]) or int(tok[2]) not in (69, 67, 11258, 15098) or \
                     int(tok[3]) > 4 or int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "ROAD" or \
                     vids[int(tok[1])]["base"] != int(tok[2]):
-                raise NetpackError("%s boulevard_slope_lines %d: '%s' is not `bvr <piece> <69|67|11258|15098> <side 0..3 | 4>` "
+                raise NetpackError("%s boulevard_slope_lines %d: '%s' is not `bvr|bvq <piece> <69|67|11258|15098> <side 0..3 | 4>` "
                                    "with a ROAD variant of that crossing piece from this package" % (pname, n + 1, ln))
             out["boulevard_slope_lines"].append(ln)
             continue

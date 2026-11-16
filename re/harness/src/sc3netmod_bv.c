@@ -87,14 +87,31 @@ static volatile LONG g_bv_n_runs, g_bv_n_cells, g_bv_n_rev;
    gets its base written back at its state. Line `bvr <piece> <base> <side>`: side 0..3 = an outer twin whose lanes run
    toward world side <side> at state 0 (as avlc), 4 = the middle twin. Off: SC3NETMOD_BVXING=0. */
 #define BV_XSPAN 4
-#define BV_XMAX 24
-typedef struct { WORD piece, base; BYTE side; } BvX;
+#define BV_XMAX 48
+typedef struct { WORD piece, base; BYTE side, art; } BvX;
 static BvX g_bv_x[BV_XMAX];
 static int g_bv_nx, g_bv_xing = -1;
+/* task orthfix BVXART (round 2026-11-15b, owner on 67 "the crossing is not following the 3 lane layout", on 71 "there
+   shouldn't be 3 tunnels below the highway"): crossing twins WITH their own art (re/tools/netmod/bvxing_paint.py: the
+   level crossing in the boulevard's 3 + 3 lanes, one underpass spanning the boulevard). Line `bvq <piece> <base>
+   <side>`, as bvr. When on, bv_x_want hands out an art twin before a bvr one; off, art twins are never chosen (a cell
+   already holding one still counts as a twin and is rewritten to the bvr twin by the next run). Off: SC3NETMOD_BVXART=0. */
+static int g_bv_xart = -1;
+static int bv_xart_on(void) {
+    if (g_bv_xart < 0) {
+        g_bv_xart = !env_off("SC3NETMOD_BVXART");
+        logf("bv: crossing twins with boulevard art (orthfix BVXART) %s", g_bv_xart ? "on" : "off (SC3NETMOD_BVXART=0)");
+    }
+    return g_bv_xart;
+}
 /* task orthfix BVOBOX (2026-11-15, xsect 39, owner "Yes, all three"): the opening box, see bv_obox. `bvo <0|1> <9 ids>`:
    0 = the avenue leaving the boulevard's +w side going +s (cell k * 3 + j = row w0 + k, j-th band cell from low s),
    1 = its mirror (going -s). Pieces from re/tools/netmod/bvdiag_build.py (package boulevard_diagonal). */
 static WORD g_bv_ob[2][9];
+/* task orthfix BVOBOXDB (round 2026-11-15b, xsect 43): the same opening for a diagonal BOULEVARD (band 4 cells wide):
+   `bvo <2|3> <12 ids>` (2 = as set 0, 3 = as set 1; cell k * 4 + j). Off: SC3NETMOD_BVOBOXDB=0. */
+static WORD g_bv_obd[2][12];
+static int g_bv_oboxdb = -1;
 /* task orthfix BVCORNER (xsect 26 / 37): a run may end in a corner box, the crossing avenue / boulevard on ONE side of
    it only (bv_run1 used to refuse "an end on a corner", leaving the corner and its columns stock). The box is a T box
    whose side without an arm is closed too (bvx_boxes reads 'C' there); its cells come from the bvxc table (bvlanes.py
@@ -123,10 +140,12 @@ static int bv_x_is_piece(WORD id) {
 }
 /* the twin of base b for the outer row travelling toward world side `dir` at cell state st (dir 4 = middle), 0 none */
 static WORD bv_x_want(WORD b, int st, int dir) {
-    int k;
-    for (k = 0; k < g_bv_nx; k++)
-        if (g_bv_x[k].base == b && (dir == 4 ? g_bv_x[k].side == 4 : g_bv_x[k].side < 4 && ((g_bv_x[k].side + st) & 3) == dir))
-            return g_bv_x[k].piece;
+    int k, pass;
+    for (pass = bv_xart_on() ? 1 : 0; pass >= 0; pass--)     /* task orthfix BVXART: art twins first, when on */
+        for (k = 0; k < g_bv_nx; k++)
+            if (g_bv_x[k].art == pass && g_bv_x[k].base == b &&
+                (dir == 4 ? g_bv_x[k].side == 4 : g_bv_x[k].side < 4 && ((g_bv_x[k].side + st) & 3) == dir))
+                return g_bv_x[k].piece;
     return 0;
 }
 
@@ -141,7 +160,20 @@ static void bv_line(const char *path, const char *line) {
     int k;
     if (!strncmp(line, "bvs ", 4)) { bvs_line(path, line); return; }                  /* task avslope */
     if (!strncmp(line, "bvo ", 4)) {                                                  /* task orthfix BVOBOX */
-        unsigned long ch, q[9];
+        unsigned long ch, q[12];
+        if (sscanf(line + 4, "%lu", &ch) == 1 && (ch == 2 || ch == 3)) {                /* task orthfix BVOBOXDB */
+            if (sscanf(line + 4, "%lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu", &ch, &q[0], &q[1], &q[2], &q[3],
+                       &q[4], &q[5], &q[6], &q[7], &q[8], &q[9], &q[10], &q[11]) != 13) {
+                logf("### bv: %s: bad opening box line '%s'", path, line);
+                return;
+            }
+            for (k = 0; k < 12; k++)
+                if (!bv_variant(q[k])) { logf("### bv: %s: opening box piece %lu is not a variant", path, q[k]); return; }
+            for (k = 0; k < 12; k++) g_bv_obd[ch - 2][k] = (WORD)q[k];
+            logf("bv: %s: opening box for a diagonal boulevard %s = pieces %lu..%lu", path, ch == 3 ? "(mirror)" : "",
+                 q[0], q[11]);
+            return;
+        }
         if (sscanf(line + 4, "%lu %lu %lu %lu %lu %lu %lu %lu %lu %lu", &ch, &q[0], &q[1], &q[2], &q[3], &q[4], &q[5],
                    &q[6], &q[7], &q[8]) != 10 || ch > 1) {
             logf("### bv: %s: bad opening box line '%s'", path, line);
@@ -153,15 +185,17 @@ static void bv_line(const char *path, const char *line) {
         logf("bv: %s: opening box %s = pieces %lu..%lu", path, ch ? "(mirror)" : "", q[0], q[8]);
         return;
     }
-    if (!strncmp(line, "bvr ", 4)) {                                                  /* task orthfix BVXING */
+    if (!strncmp(line, "bvr ", 4) || !strncmp(line, "bvq ", 4)) {                   /* task orthfix BVXING, BVXART */
+        int art = line[2] == 'q';
         if (sscanf(line + 4, "%lu %lu %lu", &v[0], &v[1], &v[2]) != 3 || !bv_variant(v[0]) || g_base[v[0]] != v[1] ||
             v[2] > 4 || g_bv_nx >= BV_XMAX) {
             logf("### bv: %s: bad crossing twin line (or not a variant of its base, or too many): '%s'", path, line);
             return;
         }
         g_bv_x[g_bv_nx].piece = (WORD)v[0]; g_bv_x[g_bv_nx].base = (WORD)v[1]; g_bv_x[g_bv_nx].side = (BYTE)v[2];
+        g_bv_x[g_bv_nx].art = (BYTE)art;
         g_bv_nx++;
-        logf("bv: %s: crossing twin %lu on base %lu, %s", path, v[0], v[1], v[2] == 4 ? "middle row (two-way)" :
+        logf("bv: %s: crossing twin%s %lu on base %lu, %s", path, art ? " (own art)" : "", v[0], v[1], v[2] == 4 ? "middle row (two-way)" :
              v[2] == 0 ? "outer row, lanes toward N at state 0" : v[2] == 1 ? "outer row, lanes toward E at state 0" :
              v[2] == 2 ? "outer row, lanes toward S at state 0" : "outer row, lanes toward W at state 0");
         return;
@@ -571,41 +605,59 @@ static void bv_cellput(BvPass *p, int s, int w, WORD piece, int st) {   /* repla
         if (p->cell[k].x == x && p->cell[k].z == z) { p->cell[k].want = want; return; }
     bv_put(p, s, w, piece, st);
 }
+static int bv_oboxdb_on(void) {
+    if (g_bv_oboxdb < 0) {
+        g_bv_oboxdb = !env_off("SC3NETMOD_BVOBOXDB");
+        logf("bv: opening box where a diagonal boulevard leaves a boulevard (orthfix BVOBOXDB) %s",
+             g_bv_oboxdb ? (g_bv_obd[0][0] ? "on" : "on, but no bvo 2 / 3 lines (package boulevard_diagonal 0.2)") :
+                           "off (SC3NETMOD_BVOBOXDB=0)");
+    }
+    return g_bv_oboxdb && g_bv_obd[0][0] && g_bv_obd[1][0];
+}
 static int bv_obox(BvPass *p, int sa, int sb, int w0) {
-    int side, a, d, m, j, nbox = 0;
-    if (!bv_diag_on() || !bv_obox_on()) return 0;
+    int side, a, d, m, j, nbox = 0, nb;
+    if (!bv_diag_on()) return 0;
     for (side = 1; side >= -1; side -= 2) {
         int we = side > 0 ? w0 + 3 : w0 - 1, wn = we + side;
-        for (a = sa - 3; a <= sb + 1; a++) {
+        for (a = sa - 4; a <= sb + 1; a++) {
             int ok = 1, ch, rot;
-            if (!(bv_hdg(p, a, we) && bv_hdg(p, a + 1, we) && bv_hdg(p, a + 2, we))) continue;
-            if (bv_hdg(p, a - 1, we) || bv_hdg(p, a + 3, we)) continue;          /* exactly 3 wide: a DA */
-            d = (bv_hdg(p, a + 1, wn) && bv_hdg(p, a + 2, wn) && bv_hdg(p, a + 3, wn)) ? 1 :
-                (bv_hdg(p, a - 1, wn) && bv_hdg(p, a, wn) && bv_hdg(p, a + 1, wn)) ? -1 : 0;
+            const WORD *set;
+            /* task orthfix BVOBOXDB: the band is exactly nb wide in the row outside the run: 3 a DA, 4 a DB */
+            for (nb = 0; nb < 5 && bv_hdg(p, a + nb, we); nb++) ;
+            if (nb != 3 && nb != 4) continue;
+            if (bv_hdg(p, a - 1, we)) continue;
+            if (nb == 3 ? !bv_obox_on() : !bv_oboxdb_on()) continue;
+            d = 1;
+            for (j = 1; j <= nb; j++) if (!bv_hdg(p, a + j, wn)) d = 0;
+            if (!d) {
+                d = -1;
+                for (j = -1; j <= nb - 2; j++) if (!bv_hdg(p, a + j, wn)) d = 0;
+            }
             if (!d) continue;
-            for (j = 0; j < 3; j++)                       /* the run's other side: no band there (a crossing) */
+            for (j = 0; j < nb; j++)                      /* the run's other side: no band there (a crossing) */
                 if (bv_hdg(p, a - 4 * d + j, we - 4 * side)) ok = 0;
             for (m = 1; m <= 3 && ok; m++)                /* the band's cells in the rows: road, inside the run */
-                for (j = 0; j < 3; j++) {
+                for (j = 0; j < nb; j++) {
                     int sc = a - d * m + j;
                     if (!bv_rraw(p, sc, we - side * m) || sc < sa - 2 || sc > sb + 2) ok = 0;
                 }
             if (!ok) continue;
             ch = d == side ? 0 : 1;
             rot = side > 0 ? 0 : 2;
+            set = nb == 3 ? g_bv_ob[ch] : g_bv_obd[ch];
             for (m = 1; m <= 3; m++) {
                 int w = we - side * m, ka = w - w0;
-                for (j = 0; j < 3; j++) {
-                    int kc = rot ? 2 - ka : ka, jc = rot ? 2 - j : j;
-                    bv_cellput(p, a - d * m + j, w, g_bv_ob[ch][kc * 3 + jc], rot);
+                for (j = 0; j < nb; j++) {
+                    int kc = rot ? 2 - ka : ka, jc = rot ? nb - 1 - j : j;
+                    bv_cellput(p, a - d * m + j, w, set[kc * nb + jc], rot);
                 }
                 if (ka == 1) {                            /* the median beside the box: plain, the box draws the nose */
                     bv_cellput(p, a - d * m - 1, w, g_bv_p[BV_MIDDLE], 0);
-                    bv_cellput(p, a - d * m + 3, w, g_bv_p[BV_MIDDLE], 0);
+                    bv_cellput(p, a - d * m + nb, w, g_bv_p[BV_MIDDLE], 0);
                 }
             }
             nbox++;
-            a += 2;
+            a += nb - 1;
         }
     }
     return nbox;
