@@ -205,3 +205,32 @@ crossing with ramps on both sides (20510 / 20512 / 20510). Now:
 
 Pictures (local): `owner_shots/c80_diamond.jpg` (the diamond, zoom 3 / 4, 4 views), `c80_diamond_sacramento.jpg`,
 `c80_underpass_xnet.jpg` (the underpass with diagonal_xnet 0.1.1; owner's "too big" answer open, underpass art unchanged).
+
+## diagfix 18 (round 2026-11-15b, owner "Fix 49 first"): case 49 drawn diagonal boulevard first gets its box every time (DBVREPASS)
+
+Measured before (current main, three fresh games, reversed builds in row-9 slots): 4 of 9 valid builds failed (the
+first one or two builds of every game; the slot itself does not matter: cols 3 / 5 / 7 each failed and passed). A failed
+build leaves the whole box and the boulevard's top rows as stock pieces (43 / 39 / 11203), 18 cells off.
+
+**Cause, proven by a write trace** (`verify/diagfix/trace49.py`: a 15 ms poll of the slot's cells from Frida while the
+reversed drags are laid, game build of today, fresh game, col 5 = a failing build, col 7 = a passing one, `t49c/`).
+The final DBV pass wrote the DBVX box and the band (all box cells at their pieces at 4381 ms). 16 ms later every box
+cell and the band's top rows were stock 43 / 39 / 11203. sc3netmod.log for that pass (`t49d/`): the pass wrote 38
+cells, then its own revert loop ("DBV pieces no band kept: back to stock") retiled (110,171) and (111,171). Those are the
+band's top-end cap pieces from an earlier drag, masked out of the band this pass by DBVTOUCH. That one-cell stock
+retile spread along the connected road and rewrote the cells the pass had just written. In the passing build the same
+revert fell in an earlier pass, which a later pass repaired. So which build failed depended on the drag history, not on
+the game finishing the drag late.
+
+**Fix** (sc3netmod_dbv.c, DBVREPASS, `SC3NETMOD_DBVREPASS=0` off): a final pass that reverted anything is run once more
+on the same window. The reverted cells are stock by then, so the second pass judges the same band, writes the box and
+band cells the cascade overwrote, and reverts nothing.
+
+| check | result |
+|---|---|
+| reversed 49, fix on: 4 fresh games, 16 builds (cols 3 5 7 9, one game 5 3 7 9) | 16 / 16 identical to sweep order |
+| control, `SC3NETMOD_DBVREPASS=0`, same layout | col 3 (the first build) fails again, 18 cells |
+| regression m21 (fresh game, every pack) vs m20 | 0 cells differ in all 80 cases (DBVREPASS never fires in sweep order) |
+| orders m21b (fresh game) | 39 41 45 identical; reversed 49 53 identical, 50 52 54 55 the known slot-edge / far end cap cells |
+
+Picture (local): `owner_shots/c49_reverse_before_after.jpg` (col 3, the failing build, switch off | on, 4 views).

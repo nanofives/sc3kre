@@ -1063,6 +1063,27 @@ static int dbv_cut_sides(DbvPass *P, int W, int H) {
 
 /* -> 1 when an accepted band reached the read border (the caller re-runs it over the whole map); task avslow: with
    psides and DBVGROW on, -> 1 when dbv_cut_sides finds a cut, before any write or revert (*psides = the sides) */
+/* task diagfix 49 (round 2026-11-15b, owner "Fix 49 first"): DBVREPASS. A pass's revert loop (DBV pieces no band kept:
+   stock retile, one cell each) runs after the pass wrote its bands; the stock tiler's retile of such a cell spreads along
+   the connected road it touches and rewrites cells this pass had just written. Measured on xsect 49 drawn diagonal
+   boulevard first (verify/diagfix/trace49.py, a 15 ms poll of the box cells): the final pass wrote the DBVX box and the
+   band (4381 ms), then the revert retiled the band's two old top-end cap cells (110,171) / (111,171) (masked out of the
+   band by DBVTOUCH this pass) and 16 ms later every box cell and the band's top rows were stock 43 / 39 / 11203. Which
+   build failed depended on whether that revert fell in the final pass (the drag history), hence "timing-sensitive".
+   Now a final pass that reverted anything is run once more on the same window: the reverted cells are stock by then,
+   so the second pass judges the same band, writes the box and band cells the cascade overwrote, and reverts nothing.
+   Off: SC3NETMOD_DBVREPASS=0. */
+static int g_dbv_last_nrev, g_dbv_repass = -1;
+static volatile LONG g_dbv_n_repass;
+static int dbv_repass_on(void) {
+    if (g_dbv_repass < 0) {
+        g_dbv_repass = !env_off("SC3NETMOD_DBVREPASS");
+        logf("dbv: DBVREPASS %s (a pass whose revert retiled cells runs once more, SC3NETMOD_DBVREPASS)",
+             g_dbv_repass ? "on" : "off");
+    }
+    return g_dbv_repass;
+}
+
 static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep, int *psides) {
     void *lay = *(void **)(mgr + 0x3c);
     DbvPass P;
@@ -1171,6 +1192,7 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     InterlockedExchangeAdd(&g_dbv_n_bands, nb);
     InterlockedExchangeAdd(&g_dbv_n_cells, nwall);
     InterlockedExchangeAdd(&g_dbv_n_rev, nrev);
+    g_dbv_last_nrev = nrev;                      /* task diagfix 49: DBVREPASS */
     return border;
 }
 
@@ -1203,7 +1225,20 @@ static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
         full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
         keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
         if (!keep) return;
-        if (!dbv_pass(mgr, x0, z0, x1, z1, W, H, who, keep, full ? NULL : &sides) || full) break;
+        g_dbv_last_nrev = 0;
+        if (!dbv_pass(mgr, x0, z0, x1, z1, W, H, who, keep, full ? NULL : &sides) || full) {
+            if (g_dbv_last_nrev && dbv_repass_on()) {                       /* task diagfix 49: DBVREPASS */
+                int nr = g_dbv_last_nrev;
+                ZeroMemory(keep, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1));
+                if (g_dbv_claim) { ZeroMemory(g_dbv_claim, DBV_CLAIM * sizeof(DWORD)); g_dbv_nclaim = 0; }
+                g_dbv_last_nrev = 0;
+                dbv_pass(mgr, x0, z0, x1, z1, W, H, who, keep, NULL);
+                InterlockedIncrement(&g_dbv_n_repass);
+                logf("dbv: %s: the pass reverted %d cell(s) (stock retile) - judged once more (DBVREPASS)%s", who, nr,
+                     g_dbv_last_nrev ? ", the second pass reverted again" : "");
+            }
+            break;
+        }
         VirtualFree(keep, 0, MEM_RELEASE);
         if (!g_dbv_grow) {                                                   /* the old way */
             logf("dbv: %s: a diagonal boulevard reached the read border - whole-map pass", who);
