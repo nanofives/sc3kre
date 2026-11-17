@@ -1,0 +1,23 @@
+arm trace_Eur_B: pid 24884 city Europolis 1024.sc3 env SC3PERF_SPR_IMGREF=0
+running after load (pause depth 0, 1 P press(es), 1.4 s)
+[0/8] baseline: private=279.4 MB free=803 | prepare 0 unprepare 0 images made 0 | last-unprepare Release -> {} | decoded buffers 0 (0.0 MB) freed 0 (0.0 MB) live 0 (0.0 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[1/8] rot: private=279.9 MB free=803 | prepare 202158 unprepare 518240 images made 222 | last-unprepare Release -> {'1': 23, '2': 2, '3': 15, '>3': 182} | decoded buffers 222 (0.1 MB) freed 0 (0.0 MB) live 222 (0.1 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+[2/8] rot: private=280.1 MB free=803 | prepare 412664 unprepare 725401 images made 444 | last-unprepare Release -> {'1': 69, '2': 24, '3': 26, '>3': 325} | decoded buffers 444 (0.2 MB) freed 0 (0.0 MB) live 444 (0.2 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+[3/8] rot: private=292.7 MB free=803 | prepare 624461 unprepare 936121 images made 672 | last-unprepare Release -> {'1': 107, '2': 48, '3': 45, '>3': 466} | decoded buffers 672 (0.4 MB) freed 0 (0.0 MB) live 672 (0.4 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+[4/8] rot: private=292.9 MB free=803 | prepare 834506 unprepare 1147613 images made 898 | last-unprepare Release -> {'1': 143, '2': 61, '3': 53, '>3': 637} | decoded buffers 898 (0.5 MB) freed 0 (0.0 MB) live 898 (0.5 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+[5/8] rot: private=293.2 MB free=803 | prepare 1037373 unprepare 1357791 images made 1123 | last-unprepare Release -> {'1': 172, '2': 78, '3': 68, '>3': 802} | decoded buffers 1123 (0.6 MB) freed 0 (0.0 MB) live 1123 (0.6 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+[6/8] rot: private=293.7 MB free=803 | prepare 1248635 unprepare 1560336 images made 1349 | last-unprepare Release -> {'1': 218, '2': 103, '3': 79, '>3': 946} | decoded buffers 1349 (0.7 MB) freed 0 (0.0 MB) live 1349 (0.7 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+[7/8] rot: private=293.8 MB free=803 | prepare 1459064 unprepare 1771850 images made 1576 | last-unprepare Release -> {'1': 257, '2': 128, '3': 98, '>3': 1089} | decoded buffers 1576 (0.9 MB) freed 0 (0.0 MB) live 1576 (0.9 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+[8/8] rot: private=293.9 MB free=803 | prepare 1668889 unprepare 1982578 images made 1805 | last-unprepare Release -> {'1': 291, '2': 144, '3': 109, '>3': 1254} | decoded buffers 1805 (1.0 MB) freed 0 (0.0 MB) live 1805 (1.0 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+final (+8 s): private=293.9 MB free=803 | prepare 1839719 unprepare 1982942 images made 1805 | last-unprepare Release -> {'1': 291, '2': 144, '3': 109, '>3': 1254} | decoded buffers 1805 (1.0 MB) freed 0 (0.0 MB) live 1805 (1.0 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 48, failed 11)
+images made since the reset, by state at the end: [count, MB of live decoded buffer]
+  held1 buffer live                           268      0.1 MB
+  held2 buffer live                           142      0.1 MB
+  held3 buffer live                            94      0.1 MB
+  held>3 buffer live                         1070      0.5 MB
+  prepared buffer live                        231      0.1 MB
+AddRef / Release calls on images made since the reset, by call site [addref, release, net]:
+  GZGraphicD.dll+0x16b8              128763        0  +128763
+  SIMSPR.DLL+0x12d28                      0     1574    -1574
+  live buffers owned by no image seen          0      0.0 MB
+[   230.513 ms] SPR_IMGREF> off (spr_imgref=0): shipped PrepareImage, sprite images leak on rotation / zoom

@@ -1,0 +1,25 @@
+[+] SC3U pid 16364  logs: C:\Users\maria\Desktop\Proyectos\Simcity\dev\leak1024\inst   (set SC3_PID=16364 for sc3io tools)
+arm Berlin_B20: pid 16364 stock=False env={'SC3PERF_SPR_IMGREF': '0'}
+arm Berlin_B20: client 800x600 at (1520,748)
+[0/20] start private=182.2 MB free=892 MB PASS
+[1/20] rot private=199.0 MB free=892 MB PASS
+[2/20] rot private=214.9 MB free=892 MB PASS
+[3/20] rot private=231.2 MB free=876 MB PASS
+[4/20] rot private=246.9 MB free=860 MB PASS
+[5/20] rot private=262.2 MB free=844 MB PASS
+[6/20] rot private=278.2 MB free=829 MB PASS
+[7/20] rot private=294.7 MB free=813 MB PASS
+[8/20] rot private=310.1 MB free=797 MB PASS
+[9/20] rot private=326.5 MB free=781 MB PASS
+[10/20] rot private=341.9 MB free=765 MB PASS
+[11/20] rot private=357.7 MB free=750 MB PASS
+[12/20] rot private=374.0 MB free=734 MB PASS
+[13/20] rot private=389.7 MB free=718 MB PASS
+[14/20] rot private=405.3 MB free=702 MB PASS
+[15/20] rot private=421.4 MB free=686 MB PASS
+[16/20] rot private=436.4 MB free=671 MB PASS
+[17/20] rot private=453.9 MB free=655 MB PASS
+[18/20] rot private=468.7 MB free=639 MB PASS
+[19/20] rot private=484.3 MB free=623 MB PASS
+[20/20] rot private=501.2 MB free=607 MB PASS
+arm Berlin_B20: private 182.2 -> 503.4 MB (+321.2, 16.06 MB per step), largest free 892 -> 607 MB

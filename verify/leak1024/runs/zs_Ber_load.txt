@@ -1,0 +1,6 @@
+[+] SC3U pid 15976  logs: C:\Users\maria\Desktop\Proyectos\Simcity\dev\leak1024\inst   (set SC3_PID=15976 for sc3io tools)
+arm zs_Ber_load: pid 15976 stock=False env={}
+arm zs_Ber_load: client 800x600 at (1520,748)
+[0/1] start private=178.6 MB free=925 MB PASS
+[1/1] rot private=179.0 MB free=925 MB PASS
+arm zs_Ber_load: private 178.6 -> 181.3 MB (+2.7, 2.73 MB per step), largest free 925 -> 910 MB

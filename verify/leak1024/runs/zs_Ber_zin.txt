@@ -1,0 +1,6 @@
+[+] SC3U pid 18888  logs: C:\Users\maria\Desktop\Proyectos\Simcity\dev\leak1024\inst   (set SC3_PID=18888 for sc3io tools)
+arm zs_Ber_zin: pid 18888 stock=False env={}
+arm zs_Ber_zin: client 800x600 at (1520,748)
+[0/1] start private=181.7 MB free=909 MB PASS
+[1/1] rot private=182.0 MB free=909 MB PASS
+arm zs_Ber_zin: private 181.7 -> 182.9 MB (+1.2, 1.18 MB per step), largest free 909 -> 909 MB

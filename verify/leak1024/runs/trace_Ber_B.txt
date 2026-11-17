@@ -1,0 +1,23 @@
+arm trace_Ber_B: pid 21860 city rotleak Berlin.sc3 env SC3PERF_SPR_IMGREF=0
+running after load (pause depth 0, 1 P press(es), 1.4 s)
+[0/8] baseline: private=196.4 MB free=903 | prepare 0 unprepare 0 images made 0 | last-unprepare Release -> {} | decoded buffers 0 (0.0 MB) freed 0 (0.0 MB) live 0 (0.0 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[1/8] rot: private=211.7 MB free=887 | prepare 61685 unprepare 97396 images made 1497 | last-unprepare Release -> {'1': 1603, '>3': 43} | decoded buffers 1497 (14.2 MB) freed 0 (0.0 MB) live 1497 (14.2 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[2/8] rot: private=227.6 MB free=886 | prepare 125988 unprepare 162068 images made 3092 | last-unprepare Release -> {'1': 2943, '2': 3, '3': 3, '>3': 83} | decoded buffers 3092 (28.7 MB) freed 0 (0.0 MB) live 3092 (28.7 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[3/8] rot: private=244.2 MB free=870 | prepare 190573 unprepare 225822 images made 4913 | last-unprepare Release -> {'1': 4278, '2': 3, '3': 7, '>3': 126} | decoded buffers 4913 (43.3 MB) freed 0 (0.0 MB) live 4913 (43.3 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[4/8] rot: private=259.4 MB free=853 | prepare 255310 unprepare 290002 images made 6298 | last-unprepare Release -> {'1': 5623, '2': 4, '3': 9, '>3': 168} | decoded buffers 6298 (57.6 MB) freed 0 (0.0 MB) live 6298 (57.6 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[5/8] rot: private=274.4 MB free=837 | prepare 319941 unprepare 355288 images made 7688 | last-unprepare Release -> {'1': 6969, '2': 4, '3': 11, '>3': 213} | decoded buffers 7688 (71.9 MB) freed 0 (0.0 MB) live 7688 (71.9 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[6/8] rot: private=284.0 MB free=819 | prepare 364533 unprepare 419375 images made 8472 | last-unprepare Release -> {'1': 8304, '2': 7, '3': 14, '>3': 255} | decoded buffers 8472 (79.7 MB) freed 0 (0.0 MB) live 8472 (79.7 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[7/8] rot: private=290.9 MB free=819 | prepare 403815 unprepare 463546 images made 9306 | last-unprepare Release -> {'1': 9071, '2': 7, '3': 16, '>3': 300} | decoded buffers 9306 (86.4 MB) freed 0 (0.0 MB) live 9306 (86.4 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[8/8] rot: private=297.1 MB free=803 | prepare 439508 unprepare 501464 images made 9957 | last-unprepare Release -> {'1': 9715, '2': 9, '3': 17, '>3': 342} | decoded buffers 9957 (91.7 MB) freed 0 (0.0 MB) live 9957 (91.7 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+final (+8 s): private=308.2 MB free=803 | prepare 473743 unprepare 501627 images made 10902 | last-unprepare Release -> {'1': 9715, '2': 9, '3': 17, '>3': 342} | decoded buffers 10902 (102.0 MB) freed 0 (0.0 MB) live 10902 (102.0 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+images made since the reset, by state at the end: [count, MB of live decoded buffer]
+  held1 buffer live                          8040     81.1 MB
+  held2 buffer live                             9      0.0 MB
+  held3 buffer live                            17      0.1 MB
+  held>3 buffer live                          292      4.8 MB
+  prepared buffer live                       2544     16.0 MB
+AddRef / Release calls on images made since the reset, by call site [addref, release, net]:
+  GZGraphicD.dll+0x16b8              188034        0  +188034
+  SIMSPR.DLL+0x12d28                      0     8358    -8358
+  live buffers owned by no image seen          0      0.0 MB
+[   199.449 ms] SPR_IMGREF> off (spr_imgref=0): shipped PrepareImage, sprite images leak on rotation / zoom

@@ -1,0 +1,19 @@
+city up after 8.6 s
+running after load (pause depth 0, 14 P press(es), 22.4 s)
+arm soak_B: pid 10680 env ['SC3PERF_SPR_IMGREF=0'] start private=276.4 MB free=808 MB
+[1/15] min 1 rotations 6 private=308.8 MB free=803 MB PASS
+[2/15] min 2 rotations 12 private=312.3 MB free=803 MB PASS
+[3/15] min 3 rotations 18 private=315.7 MB free=787 MB PASS
+[4/15] min 4 rotations 24 private=318.9 MB free=787 MB PASS
+[5/15] min 5 rotations 30 private=324.1 MB free=787 MB PASS
+[6/15] min 6 rotations 36 private=329.1 MB free=787 MB PASS
+[7/15] min 7 rotations 42 private=333.0 MB free=771 MB PASS
+[8/15] min 8 rotations 48 private=337.1 MB free=771 MB PASS
+[9/15] min 9 rotations 54 private=342.0 MB free=771 MB PASS
+[10/15] min 10 rotations 60 private=347.0 MB free=771 MB PASS
+[11/15] min 11 rotations 66 private=350.2 MB free=755 MB PASS
+[12/15] min 12 rotations 72 private=353.8 MB free=755 MB PASS
+[13/15] min 13 rotations 78 private=357.5 MB free=755 MB PASS
+[14/15] min 14 rotations 84 private=360.7 MB free=755 MB PASS
+[15/15] min 15 rotations 90 private=365.3 MB free=735 MB PASS
+arm soak_B: private 276.4 -> 365.3 MB, largest free 808 -> 735 MB, 90 rotations, VEH faults after startup 0

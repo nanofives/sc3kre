@@ -1,0 +1,25 @@
+arm trace_Eur_B_zin: pid 8776 city Europolis 1024.sc3 env SC3PERF_SPR_IMGREF=0
+running after load (pause depth 0, 1 P press(es), 1.4 s)
+[0/8] baseline: private=323.5 MB free=780 | prepare 0 unprepare 22 images made 0 | last-unprepare Release -> {} | decoded buffers 0 (0.0 MB) freed 0 (0.0 MB) live 0 (0.0 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 0, failed 0)
+[1/8] rot: private=330.6 MB free=780 | prepare 194140 unprepare 1010026 images made 296 | last-unprepare Release -> {'1': 546, '2': 6, '3': 18, '>3': 153} | decoded buffers 273 (5.9 MB) freed 0 (0.0 MB) live 273 (5.9 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+[2/8] rot: private=337.6 MB free=764 | prepare 404968 unprepare 1210179 images made 593 | last-unprepare Release -> {'1': 805, '2': 10, '3': 18, '>3': 186} | decoded buffers 546 (12.0 MB) freed 0 (0.0 MB) live 546 (12.0 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+[3/8] rot: private=344.5 MB free=764 | prepare 613355 unprepare 1420109 images made 1130 | last-unprepare Release -> {'1': 1066, '2': 10, '3': 18, '>3': 222} | decoded buffers 1060 (18.1 MB) freed 0 (0.0 MB) live 1060 (18.1 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+[4/8] rot: private=351.4 MB free=764 | prepare 823324 unprepare 1628626 images made 1427 | last-unprepare Release -> {'1': 1318, '2': 10, '3': 18, '>3': 267} | decoded buffers 1333 (24.2 MB) freed 0 (0.0 MB) live 1333 (24.2 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+[5/8] rot: private=358.1 MB free=748 | prepare 1031029 unprepare 1838770 images made 1725 | last-unprepare Release -> {'1': 1579, '2': 10, '3': 18, '>3': 303} | decoded buffers 1608 (30.2 MB) freed 0 (0.0 MB) live 1608 (30.2 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+[6/8] rot: private=365.6 MB free=746 | prepare 1235133 unprepare 2045364 images made 2022 | last-unprepare Release -> {'1': 1839, '2': 15, '3': 18, '>3': 336} | decoded buffers 1881 (36.3 MB) freed 0 (0.0 MB) live 1881 (36.3 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+[7/8] rot: private=372.1 MB free=730 | prepare 1439086 unprepare 2249660 images made 2318 | last-unprepare Release -> {'1': 2093, '2': 15, '3': 18, '>3': 379} | decoded buffers 2154 (42.3 MB) freed 0 (0.0 MB) live 2154 (42.3 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+[8/8] rot: private=379.0 MB free=714 | prepare 1644443 unprepare 2453454 images made 2616 | last-unprepare Release -> {'1': 2345, '2': 15, '3': 18, '>3': 424} | decoded buffers 2428 (48.4 MB) freed 0 (0.0 MB) live 2428 (48.4 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+final (+8 s): private=379.2 MB free=714 | prepare 1813497 unprepare 2453906 images made 2713 | last-unprepare Release -> {'1': 2345, '2': 15, '3': 18, '>3': 424} | decoded buffers 2525 (48.5 MB) freed 0 (0.0 MB) live 2525 (48.5 MB) | destroyed 0 (address re-allocated 0), calls on a destroyed image 0  (vtable hooks 112, failed 7)
+images made since the reset, by state at the end: [count, MB of live decoded buffer]
+  held1 (no QFS buffer)                       164      0.0 MB
+  held1 buffer live                          1635     38.7 MB
+  held2 buffer live                             9      0.2 MB
+  held>3 buffer live                          269      3.3 MB
+  prepared (no QFS buffer)                     24      0.0 MB
+  prepared buffer live                        612      6.2 MB
+AddRef / Release calls on images made since the reset, by call site [addref, release, net]:
+  GZGraphicD.dll+0x16b8              192704        0  +192704
+  SIMSPR.DLL+0x12d28                      0     2077    -2077
+  GZGraphicD.dll+0x9fbe                 188        0     +188
+  live buffers owned by no image seen          0      0.0 MB
+[   333.786 ms] SPR_IMGREF> off (spr_imgref=0): shipped PrepareImage, sprite images leak on rotation / zoom

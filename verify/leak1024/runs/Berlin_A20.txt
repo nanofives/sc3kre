@@ -1,0 +1,25 @@
+[+] SC3U pid 21220  logs: C:\Users\maria\Desktop\Proyectos\Simcity\dev\leak1024\inst   (set SC3_PID=21220 for sc3io tools)
+arm Berlin_A20: pid 21220 stock=False env={}
+arm Berlin_A20: client 800x600 at (1520,748)
+[0/20] start private=179.7 MB free=910 MB PASS
+[1/20] rot private=181.8 MB free=895 MB PASS
+[2/20] rot private=182.6 MB free=895 MB PASS
+[3/20] rot private=183.6 MB free=895 MB PASS
+[4/20] rot private=183.9 MB free=895 MB PASS
+[5/20] rot private=184.7 MB free=895 MB PASS
+[6/20] rot private=185.6 MB free=895 MB PASS
+[7/20] rot private=186.5 MB free=895 MB PASS
+[8/20] rot private=187.6 MB free=895 MB PASS
+[9/20] rot private=188.1 MB free=895 MB PASS
+[10/20] rot private=188.7 MB free=895 MB PASS
+[11/20] rot private=189.5 MB free=895 MB PASS
+[12/20] rot private=190.3 MB free=895 MB PASS
+[13/20] rot private=190.8 MB free=895 MB PASS
+[14/20] rot private=191.6 MB free=895 MB PASS
+[15/20] rot private=192.3 MB free=895 MB PASS
+[16/20] rot private=192.9 MB free=895 MB PASS
+[17/20] rot private=193.7 MB free=895 MB PASS
+[18/20] rot private=194.5 MB free=895 MB PASS
+[19/20] rot private=195.3 MB free=895 MB PASS
+[20/20] rot private=195.8 MB free=895 MB PASS
+arm Berlin_A20: private 179.7 -> 198.3 MB (+18.5, 0.93 MB per step), largest free 910 -> 879 MB

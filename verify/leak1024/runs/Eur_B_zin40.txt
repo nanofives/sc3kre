@@ -1,0 +1,45 @@
+[+] SC3U pid 21988  logs: C:\Users\maria\Desktop\Proyectos\Simcity\dev\leak1024\inst   (set SC3_PID=21988 for sc3io tools)
+arm Eur_B_zin40: pid 21988 stock=False env={'SC3PERF_SPR_IMGREF': '0'}
+arm Eur_B_zin40: client 800x600 at (1520,748)
+[0/40] start private=293.9 MB free=787 MB PASS
+[1/40] rot private=300.7 MB free=787 MB PASS
+[2/40] rot private=307.7 MB free=787 MB PASS
+[3/40] rot private=314.6 MB free=787 MB PASS
+[4/40] rot private=321.4 MB free=787 MB PASS
+[5/40] rot private=328.5 MB free=787 MB PASS
+[6/40] rot private=335.4 MB free=787 MB PASS
+[7/40] rot private=342.2 MB free=771 MB PASS
+[8/40] rot private=349.5 MB free=771 MB PASS
+[9/40] rot private=356.3 MB free=739 MB PASS
+[10/40] rot private=363.7 MB free=739 MB PASS
+[11/40] rot private=370.6 MB free=723 MB PASS
+[12/40] rot private=377.6 MB free=723 MB PASS
+[13/40] rot private=384.7 MB free=723 MB PASS
+[14/40] rot private=392.0 MB free=708 MB PASS
+[15/40] rot private=398.8 MB free=708 MB PASS
+[16/40] rot private=405.7 MB free=692 MB PASS
+[17/40] rot private=412.9 MB free=692 MB PASS
+[18/40] rot private=420.0 MB free=692 MB PASS
+[19/40] rot private=426.5 MB free=676 MB PASS
+[20/40] rot private=433.6 MB free=676 MB PASS
+[21/40] rot private=440.3 MB free=660 MB PASS
+[22/40] rot private=447.6 MB free=660 MB PASS
+[23/40] rot private=454.5 MB free=660 MB PASS
+[24/40] rot private=461.3 MB free=644 MB PASS
+[25/40] rot private=468.3 MB free=644 MB PASS
+[26/40] rot private=475.1 MB free=628 MB PASS
+[27/40] rot private=482.3 MB free=628 MB PASS
+[28/40] rot private=489.5 MB free=628 MB PASS
+[29/40] rot private=496.1 MB free=613 MB PASS
+[30/40] rot private=503.5 MB free=613 MB PASS
+[31/40] rot private=510.4 MB free=597 MB PASS
+[32/40] rot private=516.9 MB free=597 MB PASS
+[33/40] rot private=523.7 MB free=597 MB PASS
+[34/40] rot private=530.9 MB free=581 MB PASS
+[35/40] rot private=537.9 MB free=581 MB PASS
+[36/40] rot private=544.5 MB free=565 MB PASS
+[37/40] rot private=550.7 MB free=565 MB PASS
+[38/40] rot private=558.1 MB free=565 MB PASS
+[39/40] rot private=564.8 MB free=549 MB PASS
+[40/40] rot private=571.6 MB free=549 MB PASS
+arm Eur_B_zin40: private 293.9 -> 573.0 MB (+279.1, 6.98 MB per step), largest free 787 -> 549 MB
