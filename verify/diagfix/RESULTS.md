@@ -165,3 +165,43 @@ axes), the stub 22435 / 22441 unchanged. Switch: SC3NETMOD_DAVBEND135 (=0: the s
 Regression m19 (fresh game, every pack): against m18 only 15's two row-1 cells change ((88,34) 22433 -> 20505.2, (89,34)
 22434 -> 20500.0). In game before (staged 11-15) | after, 4 views, 15 and its axis-1 mirror m15:
 `verify/diagfix/owner_shots/c15_before_after.jpg`, `cm15_before_after.jpg` (local).
+
+## diagfix 17 (round 2026-11-15b, case 80, owner "Full build now" then "Yes, diamond" / "Yes, build it"): on-ramps beside a diagonal avenue, a diamond with B joints
+
+**DAVRAMP** (sc3netmod_dav.c, SC3NETMOD_DAVRAMP): the stock On-ramp tool refused any strip beside a diagonal avenue
+crossing the highway, because its lane reads (SIMNTWRK FUN_10009bc7 hover x6, FUN_1000aaba build x6) saw the
+highway-under-diagonal crossing cells instead of straight highway (REPORT_80_onramp.md). DAVRAMP maps those reads
+(11258 -> 73, 15098 -> 15051, variants by base). It installs after netbridge's INHERIT and wraps its thunk, so both
+mappings run (12 of INHERIT's 29 sites; before, INHERIT logged 12 `###` skips).
+
+**Stock ramps are one-way.** Verified from the stock lane records (lanekit): entry 15139 / 15135 / 15131 with merges
+15120 / 15116 / 15147, road -> highway only; exit 15138 / 15134 / 15130 with 15119 / 15115 / 15148. The tool picks entry or
+exit from which strip end the road touches. A two-way connection is a diamond: on each side of the highway an entry on
+one side of the avenue and an exit on the other. DAV's avenue is right-hand (high x - z drives +q), so every ramp end
+meets its near carriageway with a right turn (45 degrees onto an entry, 135 degrees off an exit). `verify/diagfix/ramp80d.py`
+builds all four around xsect 80.
+
+**DAVRAMPJ** (sc3netmod_dav.c, SC3NETMOD_DAVRAMPJ, `davxr` table lines; dispatch in sc3netmod_rbt.c, netpack.py / schema
+accept `davxr`). Before, DAV read the ramp's road-end piece as a road arm and built a T / median-opening box, or a full road
+crossing with ramps on both sides (20510 / 20512 / 20510). Now:
+- DAV reads ramp road ends (base 15138 / 15139) as no road, so the band stays the plain avenue (one-way halves,
+  median, trees).
+- A post-pass writes a joint on the outer cell (20505) beside each ramp end, or puts 20505 back when the ramp is gone.
+- The band writer keeps a joint instead of rewriting 20505.
+- Pieces 30400 JE / 30401 JX: ramp on the outer cell's x+ leg, entry / exit. 30402 / 30403: the z- leg. All four
+  states. Art by `verify/diagfix/add_ramp80j.py` (paint_80j.Joint: the kerb opened over the ramp's row, rounded
+  corners, no crosswalk, no yellow line).
+- Lanes: 20505's two one-way lanes plus the right turn to (entry) or from (exit) the ramp's own lane points. Curve
+  shapes 29120..29129.
+
+| check | result |
+|---|---|
+| regression m20 (fresh game, every pack incl. diagonal_xnet 0.1.1, now in my tree) vs m19 | only 68 69 72 73 (diagxnet's pack, newly installed) and 80 (xnet underpass + joint 30400.0 at (177,139), (175,139) / (176,139) plain avenue again); 78 / 79 identical |
+| orders (m20b, fresh game) | 39 41 45 identical (45 now without its old one-cell difference); reversed 49 53 identical, 50 52 54 55 the known slot-edge / far end cap cells (as m17b) |
+| shipped strips (`netramp.py check-saves`, 15 cities) | 599 / 599 |
+| diamond in the sandbox (r80k) | rows 139 / 142 = 30401.2 20500.0 30400.0 / 30400.2 20500.0 30401.0 |
+| removal (r80k) | the NE ramp bulldozed: on the next edit pass (177,139) 30400.0 -> 20505.0 |
+| traffic both ways (Sacramento copy, the diamond over its highway at rows 51 / 52, `ramp80_sac.py`, 7 min, 24,312 arrived trips) | SW entry used by 21 trips (avenue -> joint -> ramp -> highway), SE exit by 2 (highway -> ramp -> joint -> avenue); the north ramps 0 (no road reaches the avenue from the north). Low exit count: highway exits ignore the destination (HIGHWAY_TRIPS.md 4) |
+
+Pictures (local): `owner_shots/c80_diamond.jpg` (the diamond, zoom 3 / 4, 4 views), `c80_diamond_sacramento.jpg`,
+`c80_underpass_xnet.jpg` (the underpass with diagonal_xnet 0.1.1; owner's "too big" answer open, underpass art unchanged).
