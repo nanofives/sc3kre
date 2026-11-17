@@ -858,11 +858,11 @@ def compile_pack(stock, pack_dir, man):
         out["highway_lines"].append(ln)
     for n, ln in enumerate(man.get("avenue_lines", [])):             # task avcore: sc3netmod AVL block (raw lines)
         tok = ln.split()                                             # avls / avlu / avlc <piece> ..., avlj <piece> <NESW>
-        if tok[:1] in (["davx"], ["davxg"], ["davxw"], ["dbvx"], ["dbvxg"], ["dbvxw"]):   # orthfix (11-15b): DAV / DBV templates
+        if tok[:1] in (["davx"], ["davxg"], ["davxw"], ["dbvx"], ["dbvxg"], ["dbvxw"], ["davxr"]):   # orthfix (11-15b): DAV / DBV templates; davxr: task diagfix 80 (DAVRAMPJ joints)
             if len(tok) < 3 or not all(t.lstrip("-").isdigit() for t in tok[1:3]) or \
-                    (tok[0] in ("davxw", "dbvxw") and (len(tok) != 6 or not tok[4].isdigit() or
+                    (tok[0] in ("davxw", "dbvxw", "davxr") and (len(tok) != 6 or not tok[4].isdigit() or
                                             (int(tok[4]) not in vids and not stock_road(int(tok[4])) and int(tok[4]) < 20000))):
-                raise NetpackError("%s avenue_lines %d: '%s' is not a davx / davxg / davxw / dbvx / dbvxg / dbvxw line" % (pname, n + 1, ln))
+                raise NetpackError("%s avenue_lines %d: '%s' is not a davx / davxg / davxw / dbvx / dbvxg / dbvxw / davxr line" % (pname, n + 1, ln))
             out["avenue_lines"].append(ln)                           # (another package's piece in a davxw: checked
             continue                                                 #  against the composed set at install)
         if not tok or tok[0] not in ("avls", "avlu", "avlk", "avlc", "avlq", "avlj", "avlt", "avlp", "davw") or \

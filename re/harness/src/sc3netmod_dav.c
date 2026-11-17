@@ -82,6 +82,9 @@ static int dav_is_mrg(WORD id);
 static int dav_is_s43(WORD id);
 
 static int dav_is_x(WORD id);
+static void davrj_mask(RbBuf *b);                                                   /* task diagfix 80: DAVRAMPJ */
+static int davrj_keeps(DWORD cur, DWORD want);
+static void davrj_post(BYTE *mgr, void *lay, int x0, int z0, int x1, int z1, int W, int H, const char *who);
 
 /* task avdiag (avenue lane rework, verify/avdiag/PLAN.md): one-way lane roles. Every DAV piece carries one-way lanes
    (right-hand, two lanes per carriageway); the writer places three role variants on top of the band's pieces:
@@ -755,6 +758,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
     if (keep) cut_begin(&cg, x0, z0, x1, z1, W, H); else ZeroMemory(&cg, sizeof(cg));   /* task avdiagbreak */
     P.nbad = P.nfor = 0;                                                                   /* task davtouch */
+    davrj_mask(&P.b);                    /* task diagfix 80: DAVRAMPJ, ramp road ends read as no road */
     if (g_dav_touch < 0) {
         g_dav_touch = !env_off("SC3NETMOD_DAVTOUCH");
         logf("dav: DAVTOUCH %s (SC3NETMOD_DAVTOUCH)", g_dav_touch ? "on" : "off");
@@ -1411,6 +1415,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         }
                         cut_wrote(&cg, cx, cz, want);               /* task avdiagbreak */
                         if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
+                        if (davrj_keeps(cur, want)) continue;   /* task diagfix 80: a DAVRAMPJ joint is this 20505 */
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                         ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
                         nw++;
@@ -1501,6 +1506,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 logf("dav: %s: (%d,%d) avenue piece %lu no longer in a band -> stock retile", who, x, z, v & 0xffff);
             }
     if (keep && nrev) cut_reput(&cg, mgr, lay, who, "dav");    /* task avdiagbreak: the run-wide retile's damage */
+    if (keep && !g_dav_probe) davrj_post(mgr, lay, x0, z0, x1, z1, W, H, who);   /* task diagfix 80: DAVRAMPJ joints */
     if (psides) *psides = allsd | (keep ? cg.sides : 0);       /* task avdiagbreak: DAVGROW */
     if (keep) cut_end(&cg);
     VirtualFree(mem, 0, MEM_RELEASE);
@@ -1664,3 +1670,167 @@ static void dav_stats(void) {
         logf("stats: dav two-way look bands=%ld, cells written=%ld", g_dav_n_two, g_dav_n_two_cells);
 
 }
+
+/* ==== DAVRAMP begin (task diagfix 80, round 2026-11-15b; owner: "Full build now") ================================
+   An on-ramp beside a diagonal avenue. The stock On-ramp tool needs straight highway in the lane beside each of its 3
+   strip cells (hover FUN_10009d20, click FUN_1000abde, lane reads FUN_10009bc7 / FUN_1000aaba). A diagonal crossing
+   the highway meets the row beside it one column away from where it crosses the lane, so the only strip whose end is
+   the diagonal's cell lies beside a highway-over-road crossing cell (stock 11258 / 15098, or diagxnet's variants of
+   them), and the tool never offered it (verify/diagfix/REPORT_80_onramp.md, ramp80_trace.py). DAVRAMP redirects the six
+   strip-lane reads of each function (not the end-lane reads, not the corner case) to a wrapper that reads a crossing
+   as the straight highway of its axis (11258 -> 73, 15098 -> 15051; variants by their base, g_base). Straight roads
+   never put a crossing beside a strip cell (the road's own column is the strip's end), so their ramps are unchanged.
+   Off: SC3NETMOD_DAVRAMP=0. */
+typedef DWORD (__fastcall *PFN_DavrLane)(void *self, int edx, int x, int z);
+static DWORD g_davr_hov, g_davr_clk;                     /* the original lane readers */
+static volatile LONG g_davr_n;
+static DWORD davr_map(DWORD id) {
+    WORD w = (WORD)id, b = g_base[w] ? g_base[w] : w;
+    if (b == 11258) { InterlockedIncrement(&g_davr_n); return 73; }
+    if (b == 15098) { InterlockedIncrement(&g_davr_n); return 15051; }
+    return id;
+}
+static DWORD __fastcall davr_lane_hov(void *self, int edx, int x, int z) {
+    return davr_map(((PFN_DavrLane)g_davr_hov)(self, edx, x, z));
+}
+static DWORD __fastcall davr_lane_clk(void *self, int edx, int x, int z) {
+    return davr_map(((PFN_DavrLane)g_davr_clk)(self, edx, x, z));
+}
+static void davramp_install(BYTE *m) {
+    static const DWORD HOV[6] = { 0xa098, 0xa0a8, 0xa0b7, 0xa1af, 0xa1bf, 0xa1ce };   /* in FUN_10009d20 */
+    static const DWORD CLK[6] = { 0xb080, 0xb0a7, 0xb0c5, 0xb382, 0xb3a0, 0xb3ca };   /* in FUN_1000abde */
+    /* installed after bridge_patch: when netbridge's INHERIT already holds a site (variant id -> base), DAVRAMP wraps
+       INHERIT's thunk, so the lane read sees INHERIT's base id first and then DAVRAMP's crossing mapping */
+    DWORD ih = (DWORD)nb_bc7_thunk - (DWORD)m, ic = (DWORD)nb_aaba_thunk - (DWORD)m, t;
+    int k, nh = 0, nc = 0, nih = 0;
+    if (env_off("SC3NETMOD_DAVRAMP")) { logf("dav: DAVRAMP off (SC3NETMOD_DAVRAMP=0)"); return; }
+    for (k = 0; k < 6; k++) {
+        if ((t = retarget_call(m, HOV[k], 0x9bc7, (void *)davr_lane_hov)) != 0 ||
+            ((t = retarget_call(m, HOV[k], ih, (void *)davr_lane_hov)) != 0 && ++nih)) { g_davr_hov = t; nh++; }
+        if ((t = retarget_call(m, CLK[k], 0xaaba, (void *)davr_lane_clk)) != 0 ||
+            ((t = retarget_call(m, CLK[k], ic, (void *)davr_lane_clk)) != 0 && ++nih)) { g_davr_clk = t; nc++; }
+    }
+    logf("dav: DAVRAMP %s (on-ramp beside a diagonal crossing the highway: %d / 6 hover, %d / 6 build lane reads, "
+         "%d over INHERIT, SC3NETMOD_DAVRAMP)", nh == 6 && nc == 6 ? "on" : "PARTIAL", nh, nc, nih);
+}
+/* ==== DAVRAMP end ================================================================================================ */
+
+/* ==== DAVRAMPJ (task diagfix 80, round 2026-11-15b; owner 11-16 "Yes, diamond", B joints) ========================
+   An on-ramp's road end against a diagonal avenue's outer cell (the stock On-ramp tool, DAVRAMP above, builds entry
+   15139 / 15135 / 15131 and exit 15138 / 15134 / 15130 strips; their road end piece is 15139 / 15138, the road end at
+   the side rot(x-, state)). Before: DAV read that end piece as a road arm and built a T / median-opening box, or with
+   ramps on both sides a full road crossing (20510 / 20512 / 20510): the avenue stopped being an avenue there.
+   Now: (1) DAV reads every ramp road-end piece as no road (dav_pass, after the read), so the band stays the plain
+   avenue (one-way halves, median and trees); (2) after the pass, the outer cell (20505) beside each ramp end gets a
+   joint piece from the `davxr <outer state> <face> <kind> <piece> <state>` table (face = the outer cell's side the ramp
+   is on, 0 x- 1 z- 2 x+ 3 z+; kind 0 entry 15139, 1 exit 15138): the kerb opened over the ramp, its lanes = the outer
+   cell's two one-way lanes plus the right-hand lane to (entry) or from (exit) the ramp's lane points. Every ramp end of
+   a diamond meets its near carriageway as a right turn (verify/diagfix/ramp80d.py), so the median stays closed.
+   A joint whose ramp is gone goes back to 20505. Off: SC3NETMOD_DAVRAMPJ=0. */
+#define DAVRJ_MAX 32
+typedef struct { BYTE os, face, kind, ps; WORD piece; } DavRj;
+static DavRj g_davrj[DAVRJ_MAX];
+static int g_davrj_n, g_davrj_on = -1;
+static volatile LONG g_davrj_nmask, g_davrj_nput, g_davrj_nback;
+static const int DAVRJ_D[4][2] = { { -1, 0 }, { 0, -1 }, { 1, 0 }, { 0, 1 } };     /* side -> neighbour offset */
+
+static void davrj_line(const char *path, const char *line) {      /* davxr <os> <face> <kind> <piece> <state> */
+    unsigned long os, face, kind, v, st;
+    if (sscanf(line + 6, "%lu %lu %lu %lu %lu", &os, &face, &kind, &v, &st) != 5 || os > 3 || face > 3 || kind > 1 ||
+        !v || v > 0xffff || st > 3 || !g_base[v]) {
+        logf("### dav: %s: bad davxr line or piece not a variant: '%s'", path, line);
+        return;
+    }
+    if (g_davrj_n >= DAVRJ_MAX) { logf("### dav: %s: too many davxr lines - ignored", path); return; }
+    g_davrj[g_davrj_n].os = (BYTE)os; g_davrj[g_davrj_n].face = (BYTE)face; g_davrj[g_davrj_n].kind = (BYTE)kind;
+    g_davrj[g_davrj_n].piece = (WORD)v; g_davrj[g_davrj_n].ps = (BYTE)st;
+    g_davrj_n++;
+}
+
+static int davrj_on(void) {
+    if (g_davrj_on < 0) {
+        g_davrj_on = g_davrj_n && !env_off("SC3NETMOD_DAVRAMPJ");
+        logf("dav: DAVRAMPJ %s (on-ramp ends against a diagonal avenue: the avenue stays an avenue, joint pieces on its "
+             "outer cells, %d davxr line(s), SC3NETMOD_DAVRAMPJ)", g_davrj_on ? "on" : "off", g_davrj_n);
+    }
+    return g_davrj_on;
+}
+
+static WORD davrj_base(WORD id) { return g_base[id] ? g_base[id] : id; }
+static int davrj_kind(WORD id) {                  /* a ramp's road-end piece: 0 entry, 1 exit, -1 not one */
+    WORD b = davrj_base(id);
+    return b == 15139 ? 0 : b == 15138 ? 1 : -1;
+}
+static const DavRj *davrj_joint(WORD id, int st) {          /* a joint piece at this state -> its table line */
+    int k;
+    for (k = 0; k < g_davrj_n; k++) if (g_davrj[k].piece == id && g_davrj[k].ps == st) return &g_davrj[k];
+    return NULL;
+}
+static const DavRj *davrj_find(int os, int face, int kind) {
+    int k;
+    for (k = 0; k < g_davrj_n; k++)
+        if (g_davrj[k].os == os && g_davrj[k].face == face && g_davrj[k].kind == kind) return &g_davrj[k];
+    return NULL;
+}
+
+/* the band writer wants 20505.s where a joint of outer state s stands: keep it (davrj_post judges it) */
+static int davrj_keeps(DWORD cur, DWORD want) {
+    const DavRj *j;
+    if (!cur || (want >> 8) != 20505 || !davrj_on()) return 0;
+    j = davrj_joint((WORD)(cur & 0xffff), (int)((cur >> 16) & 3));
+    return j && j->os == (want & 3);
+}
+
+/* (1) in DAV's read buffer, every ramp road-end piece reads as no road */
+static void davrj_mask(RbBuf *b) {
+    int i, n = b->w * b->h, nm = 0;
+    if (!davrj_on()) return;
+    for (i = 0; i < n; i++)
+        if (b->c[i] && davrj_kind((WORD)(b->c[i] & 0xffff)) >= 0) { b->c[i] = 0; nm++; }
+    if (nm) InterlockedExchangeAdd(&g_davrj_nmask, nm);
+}
+
+/* (2) after a write pass: joints where a ramp end meets a plain outer cell, back to 20505 where the ramp is gone */
+static void davrj_post(BYTE *mgr, void *lay, int x0, int z0, int x1, int z1, int W, int H, const char *who) {
+    int x, z;
+    if (!davrj_on()) return;
+    for (z = z0; z <= z1; z++)
+        for (x = x0; x <= x1; x++) {
+            DWORD v = rb_read(mgr, lay, x, z, W, H), ov, want;
+            WORD id = (WORD)(v & 0xffff), oid;
+            int st = (int)((v >> 16) & 3), kind, side, nx, nz, os, ost;
+            const DavRj *j;
+            int pos[3];
+            if (!v) continue;
+            kind = davrj_kind(id);
+            if (kind >= 0) {                                   /* a ramp end: its road end side and that neighbour */
+                side = st & 3;                                 /* rot(x-, st): x- z- x+ z+ */
+                nx = x + DAVRJ_D[side][0]; nz = z + DAVRJ_D[side][1];
+                ov = rb_read(mgr, lay, nx, nz, W, H);
+                if (!ov) continue;
+                oid = (WORD)(ov & 0xffff); ost = (int)((ov >> 16) & 3);
+                if (oid == 20505) os = ost;
+                else if ((j = davrj_joint(oid, ost)) != NULL) os = j->os;
+                else continue;
+                j = davrj_find(os, (side + 2) & 3, kind);
+                if (!j) continue;
+                if (oid == j->piece && ost == j->ps) continue;
+                want = ((DWORD)j->piece << 8) | j->ps;
+                pos[0] = nx << 8; pos[1] = nz << 8; pos[2] = 0;
+                ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
+                InterlockedIncrement(&g_davrj_nput);
+                logf("dav: %s: (%d,%d) outer cell %u.%d beside the %s ramp end at (%d,%d) -> joint %u.%d (DAVRAMPJ)", who,
+                     nx, nz, oid, ost, kind ? "exit" : "entry", x, z, j->piece, j->ps);
+            } else if ((j = davrj_joint(id, st)) != NULL) {     /* a joint: is its ramp end still there? */
+                int f = j->face;
+                DWORD rv = rb_read(mgr, lay, x + DAVRJ_D[f][0], z + DAVRJ_D[f][1], W, H);
+                if (rv && davrj_kind((WORD)(rv & 0xffff)) == j->kind && ((((rv >> 16) & 3) + 2) & 3) == f) continue;
+                pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
+                ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, ((DWORD)20505 << 8) | j->os, -1, 8, 0);
+                InterlockedIncrement(&g_davrj_nback);
+                logf("dav: %s: (%d,%d) joint %u.%d has no ramp end beside it any more -> 20505.%d (DAVRAMPJ)", who, x, z,
+                     id, st, j->os);
+            }
+        }
+}
+/* ==== DAVRAMPJ end =============================================================================================== */

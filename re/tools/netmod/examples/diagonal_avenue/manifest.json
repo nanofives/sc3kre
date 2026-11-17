@@ -1490,258 +1490,6 @@
    "trblkatt": "copy_base"
   },
   {
-   "id": 22430,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22430"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22431,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22431"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22432,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22432"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22435,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22435"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22436,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22436"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22437,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22437"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22438,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22438"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22441,
-   "base": 35,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue bend",
-    "ENGLISH": "Curva de avenida diagonal"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22441"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22600,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22600"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22601,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22601"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22602,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22602"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22603,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22603"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22604,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22604"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22605,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22605"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22606,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22606"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22607,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22607"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22608,
-   "base": 18004,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22608"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 22609,
-   "base": 1999,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue corner",
-    "ENGLISH": "Esquina de avenidas"
-   },
-   "art": {
-    "from": 35,
-    "png_dir": "art/22609"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
    "id": 22370,
    "base": 35,
    "network": "ROAD",
@@ -1990,6 +1738,258 @@
    "art": {
     "from": 35,
     "png_dir": "art/22387"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22430,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22430"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22431,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22431"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22432,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22432"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22435,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22435"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22436,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22436"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22437,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22437"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22438,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22438"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22441,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22441"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22600,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22600"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22601,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22601"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22602,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22602"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22603,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22603"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22604,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22604"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22605,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22605"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22606,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22606"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22607,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22607"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22608,
+   "base": 18004,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22608"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22609,
+   "base": 1999,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue corner",
+    "ENGLISH": "Esquina de avenidas"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22609"
    },
    "trblkatt": "copy_base"
   },
@@ -2718,6 +2718,62 @@
    "art": {
     "from": 35,
     "png_dir": "art/22661"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30400,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue ramp joint",
+    "ENGLISH": "Union de rampa en avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/30400"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30401,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue ramp joint",
+    "ENGLISH": "Union de rampa en avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/30401"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30402,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue ramp joint",
+    "ENGLISH": "Union de rampa en avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/30402"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 30403,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue ramp joint",
+    "ENGLISH": "Union de rampa en avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/30403"
    },
    "trblkatt": "copy_base"
   }
@@ -10216,6 +10272,22 @@
   "davw 21832 20502",
   "davw 21833 20503",
   "davw 21834 20504",
-  "davw 21835 20505"
+  "davw 21835 20505",
+  "davxr 0 2 0 30400 0",
+  "davxr 0 1 0 30402 0",
+  "davxr 0 2 1 30401 0",
+  "davxr 0 1 1 30403 0",
+  "davxr 1 3 0 30400 1",
+  "davxr 1 2 0 30402 1",
+  "davxr 1 3 1 30401 1",
+  "davxr 1 2 1 30403 1",
+  "davxr 2 0 0 30400 2",
+  "davxr 2 3 0 30402 2",
+  "davxr 2 0 1 30401 2",
+  "davxr 2 3 1 30403 2",
+  "davxr 3 1 0 30400 3",
+  "davxr 3 0 0 30402 3",
+  "davxr 3 1 1 30401 3",
+  "davxr 3 0 1 30403 3"
  ]
 }

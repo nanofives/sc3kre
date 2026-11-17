@@ -1431,6 +1431,7 @@ static DWORD WINAPI watcher(LPVOID param) {
     if (g_savebase) sv = patch_save(m);
     ld = patch_load(m);
     bridge_patch(m);                 /* task netbridge, sc3netmod_bridge.c */
+    davramp_install(m);              /* task diagfix 80: DAVRAMP, after INHERIT (sc3netmod_dav.c) */
     logf("### READY: SIMNTWRK at 0x%08lX, variants=%d, cross=%d (%d site(s)), savebase=%d (%s), load=%s",
          (DWORD)m, g_nvariants, cross, nc, g_savebase, sv ? "patched" : "off", ld ? "patched" : "FAILED");
     for (k = 0;; k++) {
