@@ -89,3 +89,13 @@ image file name followed by its caption, ready to paste on Simtropolis. Phone-si
 the orchestrator.
 
 Model / effort: opus / medium (captions go out under Mariano's name, recipes for D12 / slopes need judgement).
+
+## Owner calls 2026-11-17 (from the gallery child's findings)
+
+- "English only": the release's `mods\netmod\overlay\Apps\Res\Text\ENGLISH\` held the Spanish piece names and the
+  Spanish Engineer's Report question (the manifests' "ENGLISH" values were written for the owner's install). US-English
+  games read that folder. `netpack.py` `_names` now gives the ENGLISH folder the "*" text. Applied to stage/src.
+- "Take it out": highway_core uninstalled from stage/src (25 packs). Backup `stage/src_netmod_backup_20261117c`.
+- Offline check (merge rebuilt from the ledger): old names + highway_core = the old overlay byte for byte (130 files);
+  new names alone change only the 2 ENGLISH text files; removing highway_core changes 57 (its sprites, lanes,
+  occupant attributes); the new stage overlay = the rebuild, 0 differ. Both ship with the dbvx49 release.

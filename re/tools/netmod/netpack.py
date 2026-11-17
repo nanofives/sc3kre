@@ -585,7 +585,13 @@ def _names(v, langs):
         return {lang: nm for lang in langs}
     out = {}
     for lang in langs:
-        t = nm.get(lang, nm.get(lang.upper(), nm.get("*")))
+        # Owner 2026-11-17 ("English only"): the manifests' "ENGLISH" values are Spanish, written for the owner's
+        # install, which keeps Spanish text in the ENGLISH folder. US-English games read that folder too, so it
+        # takes the "*" (English) text. The other per-language keys still apply.
+        if lang.upper() == "ENGLISH":
+            t = nm.get("*", nm.get("English-UK"))
+        else:
+            t = nm.get(lang, nm.get(lang.upper(), nm.get("*")))
         if t is not None:
             out[lang] = t
     return out
