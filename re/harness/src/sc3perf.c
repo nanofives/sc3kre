@@ -104,7 +104,7 @@
  *    (node+8 == object, next->prev == node, prev->next == node) drops the index and falls back to the walk.
  *
  * Config: perf.ini beside the DLL, [perf] overlay=1 profile=0 sysmem=0 clock_ms=50 spr_budget=40
- * spr_sleep_us=1000 spr_follow=1 transit_clear=1 fast_ftol=1 busy=1 busy_show=1; overlay and busy_show are also
+ * spr_sleep_us=1000 spr_follow=1 spr_imgref=1 transit_clear=1 fast_ftol=1 busy=1 busy_show=1; overlay and busy_show are also
  * written by the Preferences checkboxes (PERFPREFS, sc3perf_show_set). Env SC3PERF_<KEY> overrides any key at
  * startup (SC3PERF_OVERLAY, SC3PERF_BUSY_SHOW, SC3PERF_PROFILE, ...); SC3PERF_LOG=<path> (default sc3perf.log beside the DLL).
  */
@@ -2343,6 +2343,43 @@ static void patch_sprrefcount(DWORD spr) {
     logf("SPR_REFCOUNT> SIMSPR AddRef 0x10021551 / 0x1003cf95 and the six Releases of their classes are atomic");
 }
 
+/* ---------------------------------------------------------------- SPR_IMGREF (child rotleak, 2026-11-17)
+   Showcase report: every view rotation leaked 10-14 MB, the game died of address space after ~100 rotations.
+   Stock bug (verify/rotleak/RESULTS.md): cISC3CitySpriteImageMgr::PrepareImage (SIMSPR 0x10012b98, iface slot 0x38) gets
+   a sprite image from sc3spr_provider_make_bitmap (0x10012d91, its only caller), which returns the provider's new
+   image (sc3spr_make_image_from_record 0x1001daf5, a fresh object each time) holding one reference that the caller
+   owns. PrepareImage then AddRefs it again (0x10012bf0 record kept / image re-made, 0x10012c5e new record) and
+   UnprepareImage (0x10012cd7) releases once when the cache count reaches 0 (0x10012d25) and zeroes record+0xc.
+   Measured with Frida, 8 rotations: that AddRef returned 2 on all 9,831 re-made images, the last Release returned 1 on
+   8,610 of them, and 9,407 decoded QFS pixel buffers (operator new at 0x1001dd0f, 95.8 MB) were allocated, 0 freed.
+   Every rotation / zoom unprepares the old view's art and decodes the new view's, so each one leaked. sc3perf's sprite
+   loader (SPRITES, spr_budget 40) decodes far more per rotation, so with it the leak was ~5x the stock rate.
+   Fix: the two AddRefs are jumped over (`eb 05` + 5 nops over `mov edx,[eax]; mov ecx,eax; call [edx+4]`), so the cache
+   adopts make_bitmap's reference and UnprepareImage's Release destroys the image, as its zeroing of record+0xc
+   already assumes. Images prepared before the patch keep their extra reference (they leak once, as before; no image
+   is ever released one time too many). spr_imgref=0 (SC3PERF_SPR_IMGREF=0) keeps the shipped code. */
+static int g_imgref = 1;
+static void patch_imgref(DWORD spr) {
+    static const BYTE w[] = {0x8b, 0x10, 0x8b, 0xc8, 0xff, 0x52, 0x04};
+    static const BYTE wa_pre[] = {0x89, 0x46, 0x0c, 0x85, 0xc0};   /* 0x10012be4 mov [esi+0xc],eax / test eax,eax */
+    static const BYTE wb_pre[] = {0x89, 0x46, 0x0c};               /* 0x10012c59 mov [esi+0xc],eax */
+    static const BYTE skip[] = {0xeb, 0x05, 0x90, 0x90, 0x90, 0x90, 0x90};
+    BYTE *a = (BYTE *)spr + 0x12bf0, *b = (BYTE *)spr + 0x12c5e;
+    DWORD old;
+    if (memcmp(a, w, 7) || memcmp(b, w, 7) || memcmp((BYTE *)spr + 0x12be4, wa_pre, 5) || memcmp((BYTE *)spr + 0x12c59, wb_pre, 3) ||
+        (DWORD)(spr + 0x12d91) != (DWORD)((BYTE *)spr + 0x12be3) + *(DWORD *)((BYTE *)spr + 0x12bdf) ||
+        (DWORD)(spr + 0x12d91) != (DWORD)((BYTE *)spr + 0x12c53) + *(DWORD *)((BYTE *)spr + 0x12c4f)) {
+        logf("SPR_IMGREF> PrepareImage 0x10012b98 differs from shipped - not patched");
+        return;
+    }
+    if (!VirtualProtect(a, 0x75, PAGE_EXECUTE_READWRITE, &old)) { logf("SPR_IMGREF> VirtualProtect failed (%lu)", GetLastError()); return; }
+    memcpy(a, skip, 7);
+    memcpy(b, skip, 7);
+    FlushInstructionCache(GetCurrentProcess(), a, 0x75);
+    logf("SPR_IMGREF> PrepareImage keeps make_bitmap's reference (AddRefs at 0x10012bf0 / 0x10012c5e skipped): "
+         "UnprepareImage now frees the sprite image and its decoded pixels");
+}
+
 /* Same bug in SIMSERV (exit crash at SIMSERV+0xCAD3, 1 in 4 closes with traffic_mt on AND off): class vtable
    0x1001f2c8 counts on +0x38 with AddRef `inc [ecx+0x38]` (0x1000c3df) and Release 0x1000cab6 `if (n) n--; if n == 0:
    vt+0x44(1)` - the destroy call landed on an already destroyed object (null vtable). */
@@ -2644,6 +2681,8 @@ static DWORD WINAPI spr_watcher(LPVOID p) {
     if (g_spr_budget > 0) patch_sprites(spr);
     if (g_spr_follow) patch_follow(spr);
     if (g_sprref) patch_sprrefcount(spr);
+    if (g_imgref) patch_imgref(spr);   /* SPR_IMGREF block: rotation / zoom sprite leak */
+    else logf("SPR_IMGREF> off (spr_imgref=0): shipped PrepareImage, sprite images leak on rotation / zoom");
     return 0;
 }
 
@@ -3723,6 +3762,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_fastftol = cfg("fast_ftol", 1);
         g_fastceil = cfg("fast_ceil", 1);
         g_sprref = cfg("spr_refcount", 1);
+        g_imgref = cfg("spr_imgref", 1);    /* SPR_IMGREF, SC3PERF_SPR_IMGREF=0 */
         g_layerref = cfg("layer_refcount", 1);
         g_rczero = cfg("rc_zero", 1);           /* RCZERO, SC3PERF_RC_ZERO=0 */
         g_valveguard = cfg("valve_guard", 1);   /* VALVESHUT parts, SC3PERF_VALVE_GUARD / _HOLD / _LOCK=0 */
@@ -3764,7 +3804,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
              g_overlay, g_profile, g_sysmem, g_cap, g_clock_ms, g_spr_budget, g_spr_sleep_us, g_busy, g_busy_show);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
         if (g_clock_ms || g_busy || g_listcount || g_listfind) CreateThread(NULL, 0, clock_watcher, NULL, 0, NULL);
-        if (g_spr_budget > 0 || g_spr_follow || g_sprref) CreateThread(NULL, 0, spr_watcher, NULL, 0, NULL);
+        if (g_spr_budget > 0 || g_spr_follow || g_sprref || g_imgref) CreateThread(NULL, 0, spr_watcher, NULL, 0, NULL);
         if (g_sprref) CreateThread(NULL, 0, ss_watcher, NULL, 0, NULL);
         if (g_layerref) CreateThread(NULL, 0, rc_watcher, NULL, 0, NULL);
         logf("CRASHGUARD> rc_zero=%d (with layer_refcount=%d) valve_guard=%d valve_hold=%d valve_lock=%d",

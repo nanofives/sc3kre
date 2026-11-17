@@ -13,7 +13,7 @@
   (mods_launch.exe is retired 2026-10-25: launch with sc3wait.launch_game, direct Apps\SC3U.exe + SC3MODS_* env.)
 #>
 param(
-    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'sc3autosave', 'sc3landfill', 'sc3dataview', 'sc3restore', 'sc3mods')]
+    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'sc3autosave', 'sc3landfill', 'sc3dataview', 'sc3restore', 'sc3mods', 'sc3winonly')]
     [string] $Mod,
     [Parameter(Mandatory)] [string] $Src,
     [Parameter(Mandatory)] [string] $Out,
@@ -47,7 +47,7 @@ if (-not $NoVersionInfo) {
         sc3overscroll = 'camera past the map edge'; sc3simrun = 'simulation keeps running while the camera moves'
         sc3perf = 'performance and stability fixes'; sc3netmod = 'roads, avenues and highways'
         sc3cartrips = 'car trips'; sc3undo = 'undo'; sc3autosave = 'autosave'; sc3landfill = 'landfill tool'
-        sc3dataview = 'extra data views'; sc3restore = 'restore tool'; sc3mods = 'mod loader'
+        sc3dataview = 'extra data views'; sc3restore = 'restore tool'; sc3mods = 'mod loader'; sc3winonly = 'test control: windowed only'
     }[$Mod]
     $d = Get-Date
     $rc = Join-Path $obj "$Mod.rc"
