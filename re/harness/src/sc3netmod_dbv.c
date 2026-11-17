@@ -238,6 +238,8 @@ typedef struct {
     int nstub;                  /* task dbvtouch: one-cell stub arms of the last accepted band */
     int xout;                   /* task diagfix DBVX: a template could match but its window leaves the read buffer */
     int xdbg, xbest, xbid, xbx, xbz, xba, xbzz;   /* task diagfix DBVX: SC3NETMOD_DBVXDBG nearest miss */
+    int shortc;                 /* task diagarm DBVSHORT: the chain had fewer than DBV_MIN_CLEAN clean rows */
+    int shortn;                 /* task diagarm DBVSHORT: ... and fewer than DBVSHORT_MIN_ROWS rows (template only) */
 } DbvPass;
 
 #define DBV_RX(p, cx, cz) ((p)->axis ? -(cz) - 1 : (cx))
@@ -555,12 +557,66 @@ static int dbv_rd_any(DbvPass *p, int cx, int cz) {                /* task diagf
     return 0;
 }
 
+/* task diagarm (2026-11-17, showcase ISSUES 4): DBVSHORT. A diagonal boulevard arm only 3 or 4 rows long past a junction
+   or a bend (players draw them; the showcase city's 4-row arms) has fewer than DBV_MIN_CLEAN rows with nothing beside
+   them: band discovery skipped the chain without a word (xsect 49..55 at 4 rows: the DB arm stays the stock 43 ladder
+   against the converted diagonal avenue) and dbv_band refused it ("fewer than 3 clean rows (1 clean, end kinds top 18
+   bottom 11)": 19 34 43 45, 42 44 at 3 rows). The anchor guards against accidental 4-wide road clusters. When the band's
+   shape is fully known anyway (a crossing template matched, or both ends are stamps DBV knows, neither ragged), one
+   clean row is enough; discovery hands such chains (at least one clean row on the unmasked map) to the rule, which
+   still refuses the rest.
+   An axis-1 stem is shorter still in the turned frame (a 5-row drag from a T is 2 full rows): a chain of 2..3 rows
+   is tried too, but only a crossing template can accept it (refused quietly otherwise, no log line).
+   Off: SC3NETMOD_DBVSHORT=0. */
+#define DBVSHORT_MIN_ROWS 4
+static const char DBVSHORT_QUIET[] = "short chain, no crossing template";
+static int g_dbv_short = -1;
+static int dbv_short_on(void) {
+    if (g_dbv_short < 0) {
+        g_dbv_short = !env_off("SC3NETMOD_DBVSHORT");
+        logf("dbv: DBVSHORT %s (a short diagonal boulevard arm with known ends or a crossing template needs 1 clean "
+             "row, SC3NETMOD_DBVSHORT)", g_dbv_short ? "on" : "off");
+    }
+    return g_dbv_short;
+}
+/* a relaxed (short-arm) match skips the window cells farther than DBVSHORT_CTX from every cell the template writes or
+   fills: the arms' run-on, which a 3..4-row arm does not have (xsect 50 at 4 rows: template 3 missed only at the
+   diagonal avenue's 5th row past the centre), and what lies past a short arm (the showcase city's street grid 2 rows
+   past the arm ends, 54). Those cells are counted instead: of the templates that match, only the ones with the fewest
+   such mismatches are kept (a T's box also fits a short L, 52: T 3 misses 4 run-on cells, the corner 5 misses 2). */
+#define DBVSHORT_CTX 1
+#define DBVSHORT_ABS(v) ((v) < 0 ? -(v) : (v))
+static BYTE g_dbvx_near[DBVX_MAX][DBVX_MAX_GRID];
+static BYTE g_dbvx_near_ok[DBVX_MAX];
+static int dbvx_near(int t, int i, int j) {
+    const DbvX *q = &g_dbvx[t];
+    if (!g_dbvx_near_ok[t]) {
+        int a, b, k;
+        for (b = 0; b < q->h; b++)
+            for (a = 0; a < q->w; a++) {
+                BYTE nr = q->grid[b * q->w + a] == 'f';
+                for (k = q->w0; k < q->w0 + q->nw && !nr; k++)
+                    nr = DBVSHORT_ABS(g_dbvxw[k].dx - (q->x0 + a)) <= DBVSHORT_CTX && DBVSHORT_ABS(g_dbvxw[k].dz - (q->z0 + b)) <= DBVSHORT_CTX;
+                g_dbvx_near[t][b * q->w + a] = nr;
+            }
+        g_dbvx_near_ok[t] = 1;
+    }
+    return g_dbvx_near[t][j * q->w + i];
+}
+static volatile LONG g_dbvx_n_relax;
+
+static int dbv_chain_tried(int clean, int n) {                    /* discovery: is the chain handed to dbv_band? */
+    return clean >= DBV_MIN_CLEAN || (clean >= 1 && n >= 2 && dbv_short_on());   /* >= 1: not a solid block (xsect 63:
+                                                     four straight roads side by side are 4-wide rows with road on both
+                                                     sides, no clean row; DBVTOUCH's masks then carved bands out of it) */
+}
+
 /* the rule on one anchored chain (x0, z0, n rows), canonical; -> 1 accepted (cells in p->cell), 0 refused */
 static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     DbvUse use[DBV_MAX_USES];
     BYTE endrow[DBV_MAX_ROWS], jbrow[DBV_MAX_ROWS];                      /* task diagfix: DBVJBV rows */
     BYTE jxrow[DBV_MAX_ROWS];                                            /* task diagfix: DBVX rows */
-    int nxm = 0, xmt[8], xma[8], xmz[8], m;                              /* task diagfix: DBVX matches */
+    int nxm = 0, xmt[8], xma[8], xmz[8], m, relax, relax_used, xfm[8];   /* task diagfix: DBVX matches */
     int nu = 0, e, k, j, i, cx, cz, nclean = 0, armx[256], armz[256], armo[256], na = 0;
     int sw, se, na0, tbad = 0;                                           /* task dbvtouch */
     int ekind[2] = { DK_NONE, DK_NONE };                                 /* task diagfix: DBVCAPCLEAN */
@@ -591,19 +647,24 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
         p->xdbg = dbg;
         p->xbest = 1 << 30;
     }
-    for (k = 0; k < n && nxm < 8 && g_dbvx_n && dbvx_on(); k++) {
+    for (relax = 0; relax < (dbv_short_on() ? 2 : 1) && !nxm; relax++)   /* task diagarm DBVSHORT: relaxed */
+    for (k = 0; k < n && nxm < 8 && g_dbvx_n && dbvx_on(); k++) {    /* windows only when no strict match */
         int z = z0 + k, a = LEFT(z), t2;
         /* every row is tried (task diagfix DBVXFILL: a template anchored on a band's end row stops being an end row
            once its fill cell lengthens the chain, 52) */
         for (t2 = 0; t2 < g_dbvx_n && nxm < 8; t2++) {
             const DbvX *q = &g_dbvx[t2];
             int i2, j2, ok = q->got == q->h && q->nw, dup = 0, outside = 0;
-            int miss = 0, mx = 0, mz = 0;
+            int miss = 0, mx = 0, mz = 0, fm = 0;                       /* fm: diagarm DBVSHORT far misses */
             for (j2 = 0; j2 < q->h && (ok || p->xdbg); j2++)
                 for (i2 = 0; i2 < q->w && (ok || p->xdbg); i2++) {
                     char g = q->grid[j2 * q->w + i2];
                     int cx2 = a + q->x0 + i2, cz2 = z + q->z0 + j2, rx2 = DBV_RX(p, cx2, cz2), rz2 = DBV_RZ(p, cx2, cz2);
                     if (g == '-' || g == 'f') continue;               /* f: a fill cell, see DBVXFILL */
+                    if (relax && !dbvx_near(t2, i2, j2)) {           /* diagarm DBVSHORT: the arms' run-on and */
+                        fm += (g == 'r') != (dbv_rd(p, cx2, cz2) != 0);  /* what lies past it: counted, the best */
+                        continue;                                    /* fit wins below */
+                    }
                     if (rx2 < p->b.x0 || rz2 < p->b.z0 || rx2 >= p->b.x0 + p->b.w || rz2 >= p->b.z0 + p->b.h) {
                         if (g == 'r') outside = 1;               /* not read: a wider pass decides (as DAV's) */
                         continue;
@@ -620,16 +681,35 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             if (!ok) continue;
             for (m = 0; m < nxm; m++) if (xmt[m] == t2) dup = 1;
             if (dup) continue;
-            xmt[nxm] = t2; xma[nxm] = a; xmz[nxm] = z; nxm++;
+            xmt[nxm] = t2; xma[nxm] = a; xmz[nxm] = z; xfm[nxm] = relax ? fm : 0; nxm++;
             if (p->xdbg)
                 logf("dbv: DBVXDBG band axis %d from canonical (%d,%d): template %u matched at canonical (%d,%d)%s",
                      p->axis, x0, z0, q->id, a, z, outside ? " (window leaves the read buffer)" : "");
-            for (j2 = 0; j2 < q->h; j2++) {
-                int zz = z + q->z0 + j2;
-                if (IN_CHAIN(zz)) jxrow[zz - z0] = 1;
-                for (i2 = 0; i2 < q->w; i2++)
-                    if (q->grid[j2 * q->w + i2] == 'r') MARK(a + q->x0 + i2, zz) |= 2;
-            }
+        }
+    }
+    relax_used = nxm && relax >= 2;                                      /* the loop ran a 2nd, relaxed pass */
+    /* (offline twin of this match: MAIN/verify/diagarm/xsim2.py, checked on xsect 49..55 at 3 / 4 / 6 rows and the
+       showcase city's blocks) */
+    if (relax_used) {                                                    /* task diagarm DBVSHORT: after a relaxed */
+        int best = 1 << 30, keep = 0;                                    /* pass keep only the best fit (fewest */
+        for (m = 0; m < nxm; m++) if (xfm[m] < best) best = xfm[m];      /* run-on road cells missing): a T's box */
+        for (m = 0; m < nxm; m++)                                        /* matches a short L too (xsect 52) */
+            if (xfm[m] == best) { xmt[keep] = xmt[m]; xma[keep] = xma[m]; xmz[keep] = xmz[m]; xfm[keep] = xfm[m]; keep++; }
+        nxm = keep;
+    }
+    for (m = 0; m < nxm; m++) {                                          /* the matched windows' rows and road */
+        const DbvX *q = &g_dbvx[xmt[m]];
+        int j2, i2;
+        if (relax_used) {
+            InterlockedIncrement(&g_dbvx_n_relax);
+            logf("dbv: band axis %d from canonical (%d,%d): crossing template %u matched with its window cut to the box "
+                 "(short arm, %d run-on cell(s) missing, DBVSHORT)", p->axis, x0, z0, q->id, xfm[m]);
+        }
+        for (j2 = 0; j2 < q->h; j2++) {
+            int zz = xmz[m] + q->z0 + j2;
+            if (IN_CHAIN(zz)) jxrow[zz - z0] = 1;
+            for (i2 = 0; i2 < q->w; i2++)
+                if (q->grid[j2 * q->w + i2] == 'r') MARK(xma[m] + q->x0 + i2, zz) |= 2;
         }
     }
     if (p->xdbg && !nxm) {                                               /* SC3NETMOD_DBVXDBG: what was tried */
@@ -641,6 +721,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     if (p->xdbg && !nxm && p->xbest < (1 << 30))
         logf("dbv: DBVXDBG band axis %d from canonical (%d,%d): no template; nearest %d (%d cell(s) off, first at real "
              "(%d,%d)), anchor canonical (%d,%d)", p->axis, x0, z0, p->xbid, p->xbest, p->xbx, p->xbz, p->xba, p->xbzz);
+    if (p->shortn && !nxm) { *why = DBVSHORT_QUIET; return 0; }        /* task diagarm DBVSHORT: template only */
     /* ---- ends */
     for (e = 1; e >= 0; e--) {
         int z_e = e ? z0 + n - 1 : z0, a_e = LEFT(z_e), kind, sgn = e ? 1 : -1, dx, dz;
@@ -839,10 +920,11 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             }
         if (!jr && !dbv_rd(p, a - 1, z) && !dbv_rd(p, a + 4, z)) nclean++;
     }
-    if (nclean < DBV_MIN_CLEAN) {                                        /* task diagfix: say what the rule saw */
-        static char wb[96];
-        _snprintf(wb, sizeof(wb), "fewer than 3 clean rows (%d clean, end kinds top %d bottom %d)", nclean, ekind[0],
-                  ekind[1]);
+    if (nclean < (dbv_short_on() && (nxm || (ekind[0] != DK_RAGGED && ekind[1] != DK_RAGGED)) ? 1 : DBV_MIN_CLEAN)) {
+        static char wb[96];                                              /* task diagarm DBVSHORT: 1 when known */
+        _snprintf(wb, sizeof(wb), "fewer than %d clean rows (%d clean, end kinds top %d bottom %d)",
+                  dbv_short_on() && (nxm || (ekind[0] != DK_RAGGED && ekind[1] != DK_RAGGED)) ? 1 : 3, nclean,
+                  ekind[0], ekind[1]);
         wb[sizeof(wb) - 1] = 0;
         *why = wb;
         return 0;
@@ -1038,7 +1120,9 @@ static int dbv_cut_sides(DbvPass *P, int W, int H) {
                         }
                     if (ours) sd |= cd;
                 }
-                if (clean >= DBV_MIN_CLEAN) {
+                P->shortc = clean < DBV_MIN_CLEAN;             /* task diagarm DBVSHORT */
+                P->shortn = P->shortc && n < DBVSHORT_MIN_ROWS;
+                if (dbv_chain_tried(clean, n)) {
                     if (dbv_band_t(P, cx, cz, n, &why, NULL))   /* task dbvtouch */
                         for (k = 0; k < P->n; k++)
                             sd |= dbv_bside(P, W, H, DBV_RX(P, P->cell[k].x, P->cell[k].z),
@@ -1123,9 +1207,12 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 while (dbv_full(&P, cx + n, cz + n) && n < DBV_MAX_ROWS) n++;
                 for (k = 0; k < n; k++)
                     clean += !dbv_rd(&P, cx + k - 1, cz + k) && !dbv_rd(&P, cx + k + 4, cz + k);
-                if (clean < DBV_MIN_CLEAN) continue;
+                if (!dbv_chain_tried(clean, n)) continue;      /* task diagarm DBVSHORT */
+                P.shortc = clean < DBV_MIN_CLEAN;
+                P.shortn = P.shortc && n < DBVSHORT_MIN_ROWS;
                 okb = dbv_band_t(&P, cx, cz, n, &why, &ntry);              /* task dbvtouch */
                 if (P.xout) { border = 1; dbv_clear(&P); continue; }      /* task diagfix DBVX: a wider read decides */
+                if (!okb && why == DBVSHORT_QUIET) { dbv_clear(&P); continue; }   /* task diagarm DBVSHORT */
                 if (!okb) {
                     logf("dbv: %s: band axis %d from canonical (%d,%d), %d row(s) left to the stock tiler: %s%s", who, axis,
                          cx, cz, n, why, ntry ? " (DBVTOUCH: still refused with the touching road masked)" : "");
@@ -1269,6 +1356,6 @@ static void dbv_stats(void) {
     if (!g_dbv_on || n == last) return;
     last = n;
     logf("stats: dbv bands seen=%ld, cells written=%ld, cells reverted=%ld, windows grown=%ld (to the whole map %ld), "
-         "kept with touching road=%ld, stub arms=%ld", g_dbv_n_bands, g_dbv_n_cells, g_dbv_n_rev, g_dbv_n_grow,
-         g_dbv_n_full, g_dbv_n_touch, g_dbv_n_stub);                        /* task avslow, task dbvtouch */
+         "kept with touching road=%ld, stub arms=%ld, short-arm template matches=%ld", g_dbv_n_bands, g_dbv_n_cells,
+         g_dbv_n_rev, g_dbv_n_grow, g_dbv_n_full, g_dbv_n_touch, g_dbv_n_stub, g_dbvx_n_relax);   /* diagarm DBVSHORT */
 }
