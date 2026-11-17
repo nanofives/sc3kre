@@ -26,6 +26,16 @@ same treatment (avenue crossing follows its 2+2 lanes, one underpass), orthfix.*
 
 **Owner decisions 2026-11-15: 68 / 69 / 72 / 73 = `verify/diagxnet/owner_shots/mock_sheet_v1.png`, stop lines kept.**
 
+**Owner review 2026-11-16 of the mocks / in-game shots:** 80 "not looking right, ramp is only one way, underneath the
+highway there's only 2 tiles needed, and the road is not looking like an avenue"; 15 "both options are wrong, but option A
+is better, you still need to fix the median and the road lines starting way further than they should"; 19 "almost
+perfect, there's a minor glitch on the end of the avenue and the beginning of the 1 tile road". All three to diagfix.
+
+**Owner decision 2026-11-16: case 80 diamond = "Yes, build it"** (`verify/diagfix/owner_shots/c80_diamond.jpg`, DAVRAMPJ).
+
+**Owner answers 2026-11-16 for 80:** "Underpass too big" (make the diagonal underpass smaller; diagfix may edit
+diagxnet's xnet builders) and "Yes, diamond" (entry + exit ramps on each side, median closed at the joints).
+
 **Owner decision 2026-11-16: rail / highway drawn ACROSS an existing diagonal = "Fix it"** (diagxnet; today the line is
 cut, as stock does over a plain diagonal road).
 
@@ -45,9 +55,28 @@ Also still open from before: 49 drawn diagonal boulevard first is timing-sensiti
   need arms of 10+ cells). 35eb5ed diagxnet (68 69 72 73 crossings / underpasses, package diagonal_xnet 30000..30069).
   47dab82 diagxnet DAVXHEAL (rail / highway drawn across an existing diagonal). diagxnet CLOSED, ship set kept
   (dev/diagxnet/ship + SHIP.md, KEEP). Merged sc3netmod compiles.
-- Open: diagfix 15 / 19 (owner card), 80 dedicated joint (owner card A / B), 49 DB-first. Then integration again
+- orthfix CLOSED 2026-11-16 (worktree removed; dev/orthfix kept by KEEP: the only copy of its ship art in
+  dev/orthfix/ship + SHIP.md; after the stage/src install delete KEEP and `sc3dev remove orthfix`).
+- 8e8a6b3 diagfix 14 (52 / 55 corner boxes as T, no empty-art cells; dbvx_build guard).
+- dc06270 diagfix 15 (case 19 glitch), 7d8cff7 diagfix 16 (case 15 A fixed), d3ea8ce diagfix 17 (case 80: DAVRAMP +
+  DAVRAMPJ diamond, pieces 30400..30403, shapes 29120..29129). Merged sc3netmod compiles.
+- INSTALL ORDER for the next stage (diagfix): the new sc3netmod.dll + netpack.py / schema from main BEFORE reinstalling
+  diagonal_avenue (16 davxr lines expected); diagonal_xnet 0.1.1 (dev/diagxnet/ship) must be installed or every
+  build shows the stock underpass.
+- Owner 2026-11-16: underpass size "Yes, that's right" (diagonal_xnet 0.1.1 as is). Integration waits for 49:
+  "Fix 49 first" (49 drawn DB first must hold over 10+ fresh reverse builds). Then integration again
   (orthfix ship 11-15b: boulevard 0.5.0, boulevard_diagonal 0.2.0, avenue_diagonal_t, avenue_dbv_t; diagfix
   diagonal_boulevard update; diagxnet diagonal_xnet), re-stage, final check, owner sheet.
+
+## Integration 2026-11-17
+
+- b6281ac diagfix 18 (DBVREPASS, case 49 reverse order: 16 / 16).
+- stage/src: backup `stage/src_netmod_backup_20261117`; 11 netpack steps (boulevard 0.5.0, boulevard_diagonal 0.2.0,
+  diagonal_avenue, diagonal_boulevard, avenue_diagonal_t, avenue_dbv_t, diagonal_xnet 0.1.1), ledger 26 packs, all 12
+  SHIP table counts match. `stage/bins_1117` = DLLs from main b6281ac (dev/integ1117).
+- `stage/release` = 2026-11-17 (3,679 files; vs 11-15: 117 changed, 15 added, 0 removed); old copy
+  `stage/release_1115_old`. NOT deployed.
+- Final check on fresh `dev/final1117` by diagfix: sweep, reverse orders, diamond, reverse rail, owner sheet.
 
 ## File / block ownership
 
