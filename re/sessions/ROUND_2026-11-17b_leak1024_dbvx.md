@@ -60,3 +60,32 @@ Model / effort: opus / high (junction rule and template work in `sc3netmod_dbv.c
 
 Windowed game, posted input only (never the real mouse, keyboard or foreground), test slot for long runs, kill only
 PIDs you started, delete BMP dumps once converted, STATUS file at every milestone, no `git add` / `git commit`.
+
+## gallery (owner 2026-11-17: "Complete the current one", "Forum-ready images")
+
+Complete the transport-only gallery the showcase child made this morning (`verify/showcase/`: `shots_clean/`,
+`forum_clean/`, `sheets_clean/`, `gifs_clean/`, `CAPTIONS.md`, `INVENTORY.md`). Keep its 82 items as they are. Same
+setting (each item alone on the flat sandbox, `stage/sandbox_1117c/showcase_clean1_nz.sc3` / `showcase_clean2.sc3`,
+or a fresh copy of `xsect_sandbox_clear.sc3`), same camera rules (zoom 4 close-up + zoom 3 wider, best view), English
+text, no HUD. Its scripts are in `verify/showcase/` (`shoot.py`, `shots_clean.py`, `sheets.py`, `cam.py`, `layout.py`,
+`build_city.py`), and its traps in memory `project-showcase-gallery-traps`.
+
+Add:
+1. The six not shot (INVENTORY.md has the reasons): A12 avenue on a slope, B12 boulevard on a slope, G1 rounded road
+   end on a slope (a hilly site: a shipped hilly city copy or raised terrain in your sandbox), D12 diagonal boulevard
+   turning into a straight boulevard (find the drag that makes it in the diagonal_boulevard pack / DBV code, or say
+   it is not something a player can build and drop it with the reason), F9 the Engineer's Report question (a picture
+   of the dialog, answered afterwards by posted input), G2 ramp-down past a highway end (highway_core wrote 0 cells in
+   the morning's build: find out if a player can get it in the 2026-11-17c build. If not, report it to the
+   orchestrator as an issue, do not fix it).
+2. Short arms: 19 34 43 45 50 52 54 55 with 4-row arms (DBVSHORT, in 2026-11-17c), and 49 51 53 with 3 / 4-row arms
+   once dbvx49 is merged (the orchestrator sends the build).
+
+Deliver (forum-ready): for every new item `shots_clean/` PNGs, `forum_clean/<family>/` JPEG 1280 px wide quality 88,
+an English caption in `CAPTIONS.md` (same rules: facts and the drag that builds it, never a number that was not
+measured, no em-dashes, semicolons, emoji, ellipsis or intensifiers), the family contact sheets in `sheets_clean/`
+(+ `phone/`) rebuilt, INVENTORY.md status updated, and `FORUM_POST.md`: the post in order, family by family, each
+image file name followed by its caption, ready to paste on Simtropolis. Phone-sized previews of each rebuilt sheet to
+the orchestrator.
+
+Model / effort: opus / medium (captions go out under Mariano's name, recipes for D12 / slopes need judgement).
