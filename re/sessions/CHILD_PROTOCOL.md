@@ -28,6 +28,7 @@ touch another child's folder or game, and never write under MAIN's `Apps`, `Citi
 ```
 pwsh re/scripts/sc3dev.ps1 build <name> [-Mods sc3resize,sc3perf]
 pwsh re/scripts/sc3dev.ps1 run <name> [-City "Europolis 1024.sc3"] [-Stock]
+# 2026-11-17 (rotleak, main fd32aff): -Stock now loads only the test DLL sc3winonly.dll, so the stock control is windowed.
 ```
 
 `run` sets `SC3MODS_DIR` (or `SC3MODS_OFF=1` with `-Stock`), `SC3MODS_MULTI=1` and `SC3RESIZE_WINMEM=0` (always

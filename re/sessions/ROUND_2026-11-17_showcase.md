@@ -44,6 +44,15 @@ orchestrator before shooting.
 - `INVENTORY.md` (above).
 - Phone-sized JPEG previews of the sheets to the orchestrator as you finish each family.
 
+## Owner decisions 2026-11-17
+
+- "Yes, reshoot": transport-only on the flat xsect sandbox, each junction alone, 6-row arms, GIFs without traffic.
+  (He had asked why the child grew buildings when the gallery is about transport.)
+- "Yes, investigate": the 17 diagonal junctions that broke in the developed city (arms cut to 4 rows) go to diagfix
+  in `dev/diagarm` as a player-facing bug class.
+- Rotation leak found by this child (ISSUES.md item 1) -> child rotleak: stock SIMSPR extra AddRef in
+  PrepareImage, made ~5x worse by sc3perf's sprite budget; fix SPR_IMGREF in progress.
+
 ## Rules
 
 - No code or package changes: this is shooting what the build ships. If a junction looks broken in the showcase
