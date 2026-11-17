@@ -284,7 +284,7 @@ def selftest():
         gp, _, frame = grid_plane(city)
         check("%s: zone plane length == N*N" % os.path.basename(sample), len(zp), n * n)
         check("%s: grid plane length == N*N" % os.path.basename(sample), len(gp), n * n)
-        agree = all(city.zone_get(x, y) == zp[y * n + x]
+        agree = all(city.zone_get(x, y) == zp[(n - 1 - x) * n + y]       # game cell (x, z): row N-1-x, column z
                     for x, y in ((0, 0), (n // 3, n // 2), (n - 1, n - 1)))
         check("zone_get agrees with the plane at 3 coords", agree, True)
         # The grid frame must have parsed as a real frame, else grid_plane would have raised.

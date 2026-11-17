@@ -8,8 +8,8 @@ that into an editing API: load a city, change something decoded, write a valid f
     from city_write import City
     c = City.load("Cities/Berlin, Germany.sc3")
     c.n                              # 256 -- the map dimension
-    c.zone_get(10, 20)               # the tile's zone-developer SLOT INDEX
-    c.zone_set(10, 20, 0)            # 0 = unzoned
+    c.zone_get(10, 20)               # the zone-developer SLOT INDEX at the game cell x=10, z=20
+    c.zone_set(10, 20, 0)            # 0 = unzoned (game cell coords, same as network tiles)
     c.save("out.sc3")
 
 WHAT IS SAFE TO CHANGE, and it is deliberately narrow. Only the zone raster is decoded to a
@@ -186,24 +186,39 @@ class City:
             raise CityError("zone section %d bytes, shorter than N*N = %d" % (len(z.data), n * n))
         return z, n
 
-    def zone_get(self, x, y):
-        """The zone-developer slot index at (x, y). Row-major, stride N."""
-        z, n = self._zone()
-        if not (0 <= x < n and 0 <= y < n):
-            raise CityError("(%d,%d) outside 0..%d" % (x, y, n - 1))
-        return z.data[y * n + x]
+    @staticmethod
+    def zone_index(x, z, n):
+        """Raster byte index of the GAME cell (x, z): the cell coordinates network tiles, occupants and the game's own
+        calls use. The saved raster stores row N-1-x, column z (the zone writer emits rows in reverse, formats/
+        CITY_SAVE.md). Measured 2026-11-17 (task roadloss, verify/roadloss/RESULTS.md):
+          - live, through the zone layer's own getter (vt+0x34, as SIMRCI 0x1003372a picks the developer):
+            35,990 of 36,864 cells equal data[(N-1-x)*N + z] of the loaded file, the rest changed by growth;
+          - on game-zoned shipped cities, network cells zoned 1..21 under this index: Berlin 0 of 19,220,
+            Madrid 0 of 17,253, Farmsville 0 of 2,232, Seoul 3 of 12,431; data[z*N+x] / data[x*N+z] give thousands;
+          - re/tools/query_id_check.py: 12 of 12 query readings in Berlin.
+        Until 2026-11-17 zone_get/zone_set took (col, row) = data[y*N + x] and callers had to flip by hand.
+        verify/showcase/zone.py called zone_set(z, x) (no N-1-x): every zone landed mirrored in x, 1,773 road and
+        highway cells were zoned, and the stock developer bulldozed them (SIMRCI 0x10032dfc)."""
+        return (n - 1 - x) * n + z
 
-    def zone_set(self, x, y, slot):
-        """Set the tile's slot index. Refuses a slot this city does not declare.
+    def zone_get(self, x, z):
+        """The zone-developer slot index at the GAME cell (x, z) (network tile x, z). See zone_index."""
+        zs, n = self._zone()
+        if not (0 <= x < n and 0 <= z < n):
+            raise CityError("(%d,%d) outside 0..%d" % (x, z, n - 1))
+        return zs.data[self.zone_index(x, z, n)]
+
+    def zone_set(self, x, z, slot):
+        """Set the slot index of the GAME cell (x, z) (see zone_index). Refuses a slot this city does not declare.
 
         The bound is the loader's own: it accepts tile values `< 0x17` (23)
         `[CONFIRMED @0x10031c85:144-163]`. On top of that, this refuses values the file has no
         developer section for, because a raster byte is an index into that table and every one
         of the 59 shipped files keeps its non-zero values inside its own declared set.
         """
-        z, n = self._zone()
-        if not (0 <= x < n and 0 <= y < n):
-            raise CityError("(%d,%d) outside 0..%d" % (x, y, n - 1))
+        zs, n = self._zone()
+        if not (0 <= x < n and 0 <= z < n):
+            raise CityError("(%d,%d) outside 0..%d" % (x, z, n - 1))
         if not 0 <= slot < 0x17:
             raise CityError("slot %d outside the loader's own bound 0..22" % slot)
         if slot == 22:
@@ -217,7 +232,7 @@ class City:
             raise CityError("slot %d is not declared by this city (declared: %s); a raster byte "
                             "indexes the developer table, so an undeclared slot has no developer"
                             % (slot, sorted(self.declared_slots())))
-        z.data[y * n + x] = slot
+        zs.data[self.zone_index(x, z, n)] = slot
 
     def zone_histogram(self):
         z, n = self._zone()
@@ -303,6 +318,28 @@ def cmd_info(path):
     return 0
 
 
+def zone_orientation_check(target):
+    """zone_get must answer 0 (or 22, plopped) on the network cells of game-zoned shipped cities: the zone tool
+    refuses an occupied cell (SIMRCI 0x1003559f CanZone). Returns 1 on failure, 0 on pass or no sample."""
+    import network_layer as nl
+    tried = 0
+    for name in ("Berlin, Germany.sc3", "Madrid, Spain.sc3", "Farmsville.sc3"):
+        p = os.path.join(target, name) if os.path.isdir(target) else None
+        if not p or not os.path.exists(p):
+            continue
+        tried += 1
+        c = City.load(p)
+        nets, _ = nl.read_networks(p)
+        cells = {(t[0], t[1]) for t in nets.get(1, [])}
+        zoned = sum(1 for x, z in cells if c.zone_get(x, z) not in (0, 22))
+        print("zone orientation: %-22s %d of %d network cells zoned (want 0)" % (name, zoned, len(cells)))
+        if zoned:
+            return 1
+    if not tried:
+        print("zone orientation: no Berlin / Madrid / Farmsville in %s, check SKIPPED" % target)
+    return 0
+
+
 def cmd_selftest(target):
     ok = bad = 0
     for p in city_parse.walk(target):
@@ -318,6 +355,7 @@ def cmd_selftest(target):
         print("%-36s %s" % (os.path.basename(p)[:36], "identical" if same else "DIFFERS"))
     print()
     print("load -> save with NO edits: %d/%d byte-identical" % (ok, ok + bad))
+    bad += zone_orientation_check(target)
     print("This proves the container survives a rewrite. It does NOT prove the game accepts an")
     print("EDITED file -- that has never been tested. See the module docstring.")
     return 1 if bad else 0
