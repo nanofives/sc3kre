@@ -34,3 +34,5 @@ manifest, 1 differs by design (overlay SYS.PAK), README.txt not in it. `sc3mods_
 SHA-256 48B0628786D6607DBA7E91D6DDE9F86AC1600C4181620FE06AF5A82277E1EDAF.
 
 Not checked (owner): macOS, a real Steam exe with the .sh, the mods page rows in a language other than Spanish.
+
+GitHub: `sc3mods-2026-11-17`, target a62e8cc, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-17, asset downloaded back, SHA-256 matches. The 10d notes start with a "superseded" line.
