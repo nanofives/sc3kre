@@ -71,9 +71,9 @@ def kv(s, key):
 
 def zone_at(c, x, z):
     """Zone byte at the game's cell (x, z). The raster row is N-1-x and the column z: 12 of 12 query readings in
-    Berlin matched this and no other of the 8 axis orders (verify/queryid/RESULTS.md). city_write.zone_get(X, Y) reads
-    data[Y*N + X], so the game cell (x, z) is zone_get(z, N-1-x)."""
-    return c.zone_get(z, c.n - 1 - x)
+    Berlin matched this and no other of the 8 axis orders (verify/queryid/RESULTS.md). Since 2026-11-17 (task roadloss)
+    city_write.zone_get takes the game cell itself and does the flip."""
+    return c.zone_get(x, z)
 
 
 def check(city_path, f, cache):

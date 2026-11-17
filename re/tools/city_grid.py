@@ -19,6 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import network_layer as nl
+from city_write import City as _City
 
 STATE = 0x3000
 # mask bits follow network_layer._DIRS = W, N, E, S
@@ -86,7 +87,9 @@ def build(src, dst, x0, y0, size, spacing, z, mix, seed=1, gaps=True, plant_hole
     class _Z:
         @staticmethod
         def zone_set(x, y, slot):
-            zdata[y * n + x] = slot
+            # game cell (x, y) = network tile (x, y) -> raster row N-1-x, column y (city_write.City.zone_index).
+            # Was zdata[y * n + x] until 2026-11-17 (task roadloss): zones landed on other cells than the lattice.
+            zdata[_City.zone_index(x, y, n)] = slot
     c = _Z
     for (x, y) in gap:
         if x0 < x < last and y0 < y < y0 + (last - x0):     # interior gaps only; the outer ring stays road
