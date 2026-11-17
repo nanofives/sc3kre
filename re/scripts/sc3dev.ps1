@@ -18,6 +18,7 @@
     new    <name> [-From main] [-Base <dir>] [-NoBuild]   worktree + tree + loader + all mods
     build  <name> [-Mods a,b]                             build from the worktree (default: every mod the loader loads)
     run    <name> [-City <file in tree\Cities>] [-Stock]  windowed, per-pid mutex, prints the PID (set SC3_PID to it)
+                                                          -Stock = no mods, windowed through sc3winonly.dll (built on first use)
     status [-Size]                                        one row per child: branch, merged, ahead, dirty, game running
     remove <name> [-Force]                                refuses if unmerged, dirty, or its game is running
     prune                                                 remove every child that is merged and clean
@@ -145,7 +146,20 @@ switch ($Cmd) {
         $exe = "$($p.Tree)\Apps\SC3U.exe"
         $env:SC3MODS_MULTI = '1'
         $env:SC3RESIZE_WINMEM = '0'                  # always windowed (memory feedback-always-windowed)
-        if ($Stock) { $env:SC3MODS_OFF = '1' } else { $env:SC3MODS_DIR = $p.Inst }
+        if ($Stock) {
+            # Stock control, WINDOWED (child rotleak, 2026-11-17). SC3MODS_OFF=1 runs the stock exe in EXCLUSIVE
+            # fullscreen: on LIVING-PC it switched the display to 800x600, then sat as a topmost 3840x2160 popup.
+            # sc3winonly.dll (test control, never shipped) only sets GZGraphicD's windowed byte, FIX16 and DPI
+            # awareness, so the stock game runs in an 800x600 window and takes posted 800x600 coordinates.
+            $wo = Join-Path $p.Inst 'sc3winonly.dll'
+            if (-not (Test-Path $wo)) {
+                $env:CL = $null
+                & (Join-Path $p.Wt 're\scripts\build_mod.ps1') -Mod sc3winonly -Src (Join-Path $p.Wt 're\harness\src') -Out $p.Inst
+            }
+            Remove-Item Env:SC3MODS_OFF -ErrorAction SilentlyContinue
+            $env:SC3MODS_DIR = $p.Inst
+            $env:SC3MODS_LIST = 'sc3winonly.dll'
+        } else { $env:SC3MODS_DIR = $p.Inst }
         $sp = @{ FilePath = $exe; WorkingDirectory = "$($p.Tree)\Apps"; PassThru = $true }
         if ($City) { $sp.ArgumentList = "`"$($p.Tree)\Cities\$City`"" }
         $proc = Start-Process @sp
