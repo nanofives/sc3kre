@@ -76,7 +76,14 @@ Also still open from before: 49 drawn diagonal boulevard first is timing-sensiti
   SHIP table counts match. `stage/bins_1117` = DLLs from main b6281ac (dev/integ1117).
 - `stage/release` = 2026-11-17 (3,679 files; vs 11-15: 117 changed, 15 added, 0 removed); old copy
   `stage/release_1115_old`. NOT deployed.
-- Final check on fresh `dev/final1117` by diagfix: sweep, reverse orders, diamond, reverse rail, owner sheet.
+- Final check on fresh `dev/final1117` by diagfix: sweep 0 off m21, reverse orders hold, diamond OK; sheet 39 green,
+  3 amber (31 32 33 short arms + 32 wedge), 0 red (`verify/final1117`, main 532e65e).
+- Owner 2026-11-17: "Fix 31-33 first" -> orthfix in `dev/shortarm`, merged 73826b8 (avenue_dbv_t 0.2.0).
+- stage/src: backup `stage/src_netmod_backup_20261117b`, avenue_dbv_t 0.1.0 -> 0.2.0 (32 dbvx / 40 avlj).
+  `stage/release` = 2026-11-17b (3,680 files; vs 11-17: 94 changed, 1 added, all mods/netmod; DLLs = bins_1117);
+  old copy `stage/release_1117_old`. NOT deployed.
+- Showcase gallery child (`dev/showcase`, brief ROUND_2026-11-17_showcase.md) shoots every junction family on this
+  build; its ISSUES.md doubles as a last visual check before release.
 
 ## File / block ownership
 
