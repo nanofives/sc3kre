@@ -31,3 +31,5 @@ lines, as in 11-17), README.txt not in it. `sc3mods_2026-11-17c.zip` 92,360,034 
 SHA-256 FD2033E28457F1DD1FE1903A1B2B5C64A2F7F34BAC0338D8B8974801D583E6EA.
 
 Not checked (owner): a hand session turning the view many times on the released build, 1024 cities for the leak.
+
+GitHub: `sc3mods-2026-11-17c`, target 325ed16, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-17c, asset downloaded back, SHA-256 matches. The 11-17 notes start with a "superseded" line.
