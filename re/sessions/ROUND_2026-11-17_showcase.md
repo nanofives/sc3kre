@@ -53,6 +53,14 @@ orchestrator before shooting.
 - Rotation leak found by this child (ISSUES.md item 1) -> child rotleak: stock SIMSPR extra AddRef in
   PrepareImage, made ~5x worse by sc3perf's sprite budget; fix SPR_IMGREF in progress.
 
+## Result 2026-11-17
+
+Transport-only reshoot done: 82 junctions, each alone on the flat sandbox, z4 + z3, every one with the mod's pieces
+(the 17 that broke in the grown city included). `verify/showcase/`: shots_clean (164 PNG), forum_clean (1280 px JPEG),
+sheets_clean (+ phone), gifs_clean (7 view-turn GIFs), CAPTIONS.md. Not shot: A12, B12, G1 (slopes), D12, F9, G2
+(reasons in INVENTORY.md). Gallery page for the owner: https://claude.ai/artifact/NCF88aqLw2ikntjGqnm19E (private).
+Child closed; nothing committed from it (the assets stay local, gitignored).
+
 ## Rules
 
 - No code or package changes: this is shooting what the build ships. If a junction looks broken in the showcase
