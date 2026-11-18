@@ -99,3 +99,15 @@ Model / effort: opus / medium (captions go out under Mariano's name, recipes for
 - Offline check (merge rebuilt from the ledger): old names + highway_core = the old overlay byte for byte (130 files);
   new names alone change only the 2 ENGLISH text files; removing highway_core changes 57 (its sprites, lanes,
   occupant attributes); the new stage overlay = the rebuild, 0 differ. Both ship with the dbvx49 release.
+
+## Results 2026-11-17
+
+- leak1024 (main 77b864c, verify/leak1024): the leak depends on zoom. Europolis 1024 loads at a far zoom (0.16 MB per
+  rotation, fix on or off). At the closest zoom, 40 rotations: 6.98 MB per rotation with SPR_IMGREF off, 1.07 on.
+  Berlin control with the same scripts: 16.06 off, 0.93 on.
+- dbvx49 (main 6af72fe, verify/dbvx49): 49 / 53 get their box at 3 / 4 / 6 rows and in the showcase, 51 reaches its
+  6-row look. diagonal_boulevard 0.3.1 installed in stage/src (table = the tested one byte for byte). Owner: ship 49 at
+  3 rows as is (1-row avenue stub stays stock, open), keep the new end caps.
+- gallery (verify/showcase, local only): A12 B12 G1 D12 F9 + short arms (4b, 13 tiles) added, G2 out with highway_core,
+  49 at 3 rows left out (ISSUES 7). FORUM_POST.md: 201 images.
+- Owner: release everything as sc3mods-2026-11-18.
