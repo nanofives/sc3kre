@@ -20,6 +20,13 @@ base buildings in that style, so you'll see mostly European (or Asian) with the 
 three-way mix, play a city saved with the North American (default) style, such as Madison or Sacramento, or a new
 city in that style.
 
+## Turning it off
+
+Untick "Building style mix" on the Turn mods on/off page (Preferences, Mod options, Turn mods on/off...) and
+restart the game. New buildings then grow in the North American style only, as without the mod, and the road mod
+keeps working. European and Asian buildings already in your city stay as they are and keep their look until the
+lot is rebuilt, which then picks a North American building. Same switch outside the game: `SC3NETMOD_STYLEMIX=0`.
+
 ## Saves
 
 Cities saved with style mix load fine without it. Each mixed building is swapped for another building of the same
