@@ -5,73 +5,65 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Custom buildings guide</title>
 <meta name="description" content="How to turn your own 3D models into buildings that grow in SimCity 3000 Unlimited, with a free sample pack to start from.">
+<link rel="stylesheet" href="../assets/sc3ui.css">
 <style>
-:root {
-  --bg: #f3f4f1; --surface: #ffffff; --fg: #1d2420; --muted: #5a665f; --line: #d9ded9;
-  --accent: #2f6b4b; --accent-fg: #ffffff; --chip: #e7ece8; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
-  --code: #eef1ee; --warn: #8a5a00; --warnbg: #fff4d6;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --bg: #121614; --surface: #1a201d; --fg: #e6ebe8; --muted: #9aa69f; --line: #2b3430;
-          --accent: #7cc49c; --accent-fg: #0f1512; --chip: #222a26; --shadow: none; --code: #222a26;
-          --warn: #f2c66d; --warnbg: #2e2614; color-scheme: dark; }
-}
-:root[data-theme="dark"] { --bg: #121614; --surface: #1a201d; --fg: #e6ebe8; --muted: #9aa69f; --line: #2b3430;
-          --accent: #7cc49c; --accent-fg: #0f1512; --chip: #222a26; --shadow: none; --code: #222a26;
-          --warn: #f2c66d; --warnbg: #2e2614; color-scheme: dark; }
-* { box-sizing: border-box; }
+/* page layout on top of sc3ui.css (the game's UI look, docs/assets/sc3ui.css) */
 html { scroll-padding-top: 64px; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font); }
-a { color: var(--accent); }
-header.top { max-width: 1000px; margin: 0 auto; padding: 40px 16px 20px; }
-h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.01em; text-wrap: balance; }
-.lead { max-width: 70ch; color: var(--muted); margin: 0 0 8px; }
-.meta { color: var(--muted); font-size: .92rem; margin: 14px 0 0; }
-nav.fams { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
-nav.fams ul { max-width: 1000px; margin: 0 auto; padding: 10px 16px; list-style: none; display: flex; gap: 8px;
+body { line-height: 1.6; }
+header.top { max-width: 1000px; margin: 0 auto; padding: 24px 16px 16px; }
+h1 { font-size: clamp(1.45rem, 4vw, 2.1rem); line-height: 1.2; margin: 0; text-wrap: balance; }
+.lead { max-width: 75ch; margin: 0 0 8px; }
+.meta { color: var(--ui-label); font-size: .92rem; font-weight: 700; margin: 12px 0 0; }
+nav.fams { position: sticky; top: 0; z-index: 5; }
+nav.fams ul { max-width: 1000px; margin: 0 auto; padding: 8px 16px 9px; list-style: none; display: flex; gap: 8px;
   overflow-x: auto; scrollbar-width: thin; }
-nav.fams a { display: inline-block; white-space: nowrap; padding: 6px 12px; border-radius: 999px; background: var(--chip);
-  color: var(--fg); text-decoration: none; font-size: .9rem; }
-nav.fams a:hover, nav.fams a:focus-visible { background: var(--accent); color: var(--accent-fg); }
+nav.fams a { display: inline-flex; align-items: center; white-space: nowrap; padding: 4px 11px; border-radius: 7px;
+  font: 700 13px/1.3 var(--ui-font); color: var(--ui-text); text-decoration: none;
+  background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face) 60%, var(--ui-lav-500));
+  border: 1px solid var(--ui-outline); box-shadow: inset 0 1px 0 var(--ui-hi), 1px 2px 0 var(--ui-navy-line); }
+nav.fams a:hover, nav.fams a:focus-visible { background: var(--ui-select); color: var(--ui-select-text); }
 main { max-width: 1000px; margin: 0 auto; padding: 8px 16px 48px; }
-section.fam { padding-top: 32px; }
-section.fam > h2 { font-size: 1.45rem; margin: 0 0 8px; }
-h3 { font-size: 1.08rem; margin: 22px 0 6px; }
+section.fam { padding-top: 30px; }
+section.fam > h2 { margin: 0 0 12px; padding: 4px 12px; background: var(--ui-blue); color: var(--ui-title-text);
+  font: 400 1.4rem/1.3 var(--ui-title-font); text-shadow: 1px 1px 0 rgba(49,52,123,.55);
+  box-shadow: 0 0 0 1px var(--ui-lav-500), 0 0 0 4px var(--ui-lav-50); }
+h3 { font-size: 1.05rem; margin: 22px 0 6px; color: var(--ui-label); }
 p, li { max-width: 75ch; }
 ol li, ul li { margin: 4px 0; }
-code, kbd { font-family: var(--mono); font-size: .9em; background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
-kbd { border: 1px solid var(--line); }
-.note { background: var(--warnbg); color: var(--fg); border-left: 4px solid var(--warn); padding: 10px 14px; border-radius: 6px; max-width: 75ch; }
-.dl { display: inline-block; background: var(--accent); color: var(--accent-fg); padding: 9px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
-.tablewrap { overflow-x: auto; margin: 10px 0 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-table { border-collapse: collapse; width: 100%; font-size: .93rem; }
-th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { background: var(--chip); font-weight: 600; white-space: nowrap; }
-tr:last-child td { border-bottom: 0; }
+kbd { background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face)); border: 1px solid var(--ui-outline); border-radius: 4px;
+  box-shadow: 1px 1px 0 var(--ui-navy-line); font-family: var(--ui-font); font-weight: 700; }
+.note { background: var(--ui-warn-bg); color: var(--ui-text); border: 1px solid var(--ui-warn-line); border-left-width: 5px;
+  padding: 9px 13px; max-width: 75ch; }
+.dl { font-size: 15px; min-height: 36px; padding: 8px 20px; }
+.tablewrap { overflow-x: auto; margin: 10px 0 6px; border: 1px solid var(--ui-blue-line); background: var(--ui-face);
+  box-shadow: 0 0 0 3px var(--ui-face2); }
+table { font-size: .93rem; }
+table th, table td { padding: 6px 10px; }
 td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-figure { margin: 16px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
-figure img { display: block; width: 100%; height: auto; background: #4a5a3c; }
+figure { margin: 16px 0; background: var(--ui-face); border: 1px solid var(--ui-blue-line); padding: 6px;
+  box-shadow: inset 1px 1px 0 var(--ui-hi), 0 0 0 3px var(--ui-face2), 3px 4px 0 2px rgba(24,32,57,.22); }
+figure img { display: block; width: 100%; height: auto; background: #4a5a3c; border: 1px solid var(--ui-blue); }
 figure a { display: block; }
-figcaption { padding: 10px 12px; font-size: .92rem; color: var(--muted); }
-.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+figcaption { padding: 8px 4px 2px; font-size: .92rem; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px; }
 .pair figure { margin: 0; }
-footer { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; color: var(--muted); font-size: .88rem;
-  border-top: 1px solid var(--line); }
-footer p { max-width: 80ch; }
+.pair { align-items: start; }
+footer { margin: 0; padding: 0 0 8px; font-size: .88rem; }
+footer .in { max-width: 1000px; margin: 0 auto; padding: 14px 16px 24px; }
+footer p { max-width: 80ch; margin: 0 0 10px; font-weight: 400; }
+footer a { color: var(--ui-info-text); }
 </style>
 </head>
 <body>
-<header class="top">
-  <h1>Your own buildings in SimCity 3000 Unlimited</h1>
+<header class="top"><div class="ui-window">
+  <div class="ui-titlebar"><h1>Your own buildings in SimCity 3000 Unlimited</h1></div>
+  <div class="ui-panel">
   <p class="lead">Turn a 3D model into a building that grows in your zones next to the stock ones. You classify the models in a page that opens in your browser (<a href="importer/index.html">the building importer</a>), and the same page installs them into the game and takes them out again. No Python, no Building Architect, no other tool to install.</p>
   <p class="lead">To get you started there is a free sample pack of 18 buildings: houses, shops, offices, towers and factories, from 1x1 to 3x3 lots. Install it as it is, or use it as a template for your own.</p>
   <p class="meta">By nanofives, sc3kre project, November 2026. Needs the sc3mods road mod (sc3netmod) installed.</p>
-</header>
-<nav class="fams" aria-label="Sections"><ul>
+  </div>
+</div></header>
+<nav class="fams ui-infobar" aria-label="Sections"><ul>
   <li><a href="#what">What it does</a></li>
   <li><a href="#pack">Sample pack</a></li>
   <li><a href="#model">Making a model</a></li>
@@ -101,7 +93,7 @@ footer p { max-width: 80ch; }
 <section class="fam" id="pack">
 <h2>The sample pack</h2>
 <p>18 buildings: 16 from Kenney's free city kits and 2 test models of ours. They cover residential, commercial and industrial classes from low to high wealth, on 1x1, 2x2 and 3x3 lots, with weight 2 each, near the stock weights of 1 to 3. In our tests in Sacramento and Berlin all 18 grew on their own. The Skyscraper (class 6700, dense high-wealth commercial) grew only after we made Berlin rebuild its commercial lots more often, because that class otherwise changes few lots.</p>
-<p><a class="dl" href="https://github.com/nanofives/sc3kre/releases/download/sample-buildings-2026-11-18/sc3-sample-buildings-2026-11-18.zip">Download the sample pack (zip)</a></p>
+<p><a class="dl ui-btn primary" href="https://github.com/nanofives/sc3kre/releases/download/sample-buildings-2026-11-18/sc3-sample-buildings-2026-11-18.zip">Download the sample pack (zip)</a></p>
 <figure><a href="img/pack_sheet.jpg"><img src="img/pack_sheet.jpg" alt="The 18 buildings of the sample pack at zoom 3, with their class and lot size" loading="lazy" width="1284" height="727"></a>
 <figcaption>The whole pack at zoom 3, with each building's class and lot size.</figcaption></figure>
 <div class="pair">
@@ -302,9 +294,9 @@ footer p { max-width: 80ch; }
 </section>
 
 </main>
-<footer>
+<footer class="ui-infobar"><div class="in">
   <p>The mods and this tool are free and come as a zip on the <a href="https://github.com/nanofives/sc3kre/releases/latest">sc3kre releases page</a>. Road junction pictures are in the <a href="../gallery/">road mod gallery</a>. Bug reports are welcome as GitHub issues or on Simtropolis.</p>
   <p>Sample models by Kenney (www.kenney.nl), CC0. SimCity 3000 Unlimited is the property of Electronic Arts / Maxis. This is an independent project, not affiliated with or endorsed by Electronic Arts or Maxis.</p>
-</footer>
+</div></footer>
 </body>
 </html>

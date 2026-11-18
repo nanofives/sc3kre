@@ -4,83 +4,275 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SC3 Model Classifier</title>
+<style id="sc3ui">
+/* ==== sc3ui.css begin (copy of docs/assets/sc3ui.css, re/tools/bldimport/sync_css.py) ==== */
+/* sc3ui.css - the SimCity 3000 Unlimited UI look for every page the project publishes (round 2026-11-18f).
+   CSS only: no game bitmaps, icons or extracted art. Every colour is measured off the running game,
+   see re/analysis/UI_STYLE.md for the screenshot and pixel each one came from.
+   Fonts: Comic Neue (title bars) and Arimo (everything else) from Google Fonts, with local fallbacks. */
+@import url("https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400;0,700;1,400&family=Comic+Neue:wght@400;700&display=swap");
+
+:root {
+  /* measured palette (UI_STYLE.md) */
+  --ui-blue: #7b92ff; --ui-blue-line: #7b8aff; --ui-blue-dark: #7382ff; --ui-blue-deep: #636dc6;
+  --ui-navy-line: #4a599c; --ui-shadow: #182039; --ui-outline: #313863;
+  --ui-lav-50: #e7e7ff; --ui-lav-100: #dedfff; --ui-lav-150: #dedbff; --ui-lav-200: #d6dbff; --ui-lav-250: #d8dcf8;
+  --ui-lav-300: #c6c7ff; --ui-lav-400: #bdc3ff; --ui-lav-500: #adb6ff; --ui-cloud-hi: #f0f4f8; --ui-cloud-mid: #e0e4f8;
+  --ui-cloud-lo: #c8d0f8; --ui-hi: #ffffff; --ui-grey-edge: #848284;
+  --ui-text: #31347b; --ui-label: #7b7db5; --ui-info-text: #18288c; --ui-title-text: #dedfff;
+  --ui-select: #0000ff; --ui-select-text: #ffffff; --ui-ticker-bg: #000000; --ui-ticker: #fffb00;
+  /* roles */
+  --ui-page: var(--ui-lav-250); --ui-face: var(--ui-lav-100); --ui-face2: var(--ui-lav-200); --ui-frame: var(--ui-lav-300);
+  --ui-field: #ffffff; --ui-btn-face: var(--ui-lav-150); --ui-btn-hi: var(--ui-lav-50); --ui-plate: var(--ui-blue);
+  --ui-on-plate: var(--ui-text); --ui-link: #2a3fc4; --ui-warn-bg: #fffbc2; --ui-warn-line: #8a7a00;
+  --ui-font: Arimo, Arial, "Liberation Sans", Helvetica, sans-serif;
+  --ui-title-font: "Comic Neue", "Comic Sans MS", "Chalkboard SE", cursive;
+  --ui-mono: "Cascadia Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+  --ui-clouds:
+    radial-gradient(ellipse 38% 22% at 18% 12%, rgba(240,244,248,.9), rgba(240,244,248,0) 70%),
+    radial-gradient(ellipse 30% 18% at 82% 30%, rgba(224,228,248,.95), rgba(224,228,248,0) 70%),
+    radial-gradient(ellipse 34% 20% at 30% 62%, rgba(184,192,248,.55), rgba(184,192,248,0) 70%),
+    radial-gradient(ellipse 40% 24% at 74% 84%, rgba(240,244,248,.85), rgba(240,244,248,0) 70%),
+    radial-gradient(ellipse 26% 16% at 60% 48%, rgba(200,208,248,.6), rgba(200,208,248,0) 70%);
+  color-scheme: light;
+}
+/* Dark variant: the game has none, so it is built from the game's own darker colours (UI_STYLE.md, Dark variant). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ui-page: #10142e; --ui-face: #1c2152; --ui-face2: #262c66; --ui-frame: #31347b; --ui-field: #10142e;
+    --ui-btn-face: #31347b; --ui-btn-hi: #4a599c; --ui-text: #dedfff; --ui-label: #adb6ff; --ui-info-text: #dedfff;
+    --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-hi: #636dc6; --ui-outline: #0a0d20; --ui-link: #adb6ff;
+    --ui-warn-bg: #2e2a0c; --ui-warn-line: #fffb00; --ui-on-plate: #10142e; --ui-lav-50: #4a599c; --ui-lav-500: #636dc6; --ui-lav-300: #262c66;
+    --ui-clouds:
+      radial-gradient(ellipse 38% 22% at 18% 12%, rgba(49,52,123,.55), rgba(49,52,123,0) 70%),
+      radial-gradient(ellipse 34% 20% at 70% 70%, rgba(74,89,156,.25), rgba(74,89,156,0) 70%);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ui-page: #10142e; --ui-face: #1c2152; --ui-face2: #262c66; --ui-frame: #31347b; --ui-field: #10142e;
+  --ui-btn-face: #31347b; --ui-btn-hi: #4a599c; --ui-text: #dedfff; --ui-label: #adb6ff; --ui-info-text: #dedfff;
+  --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-hi: #636dc6; --ui-outline: #0a0d20; --ui-link: #adb6ff;
+  --ui-warn-bg: #2e2a0c; --ui-warn-line: #fffb00; --ui-on-plate: #10142e; --ui-lav-50: #4a599c; --ui-lav-500: #636dc6; --ui-lav-300: #262c66;
+  --ui-clouds:
+    radial-gradient(ellipse 38% 22% at 18% 12%, rgba(49,52,123,.55), rgba(49,52,123,0) 70%),
+    radial-gradient(ellipse 34% 20% at 70% 70%, rgba(74,89,156,.25), rgba(74,89,156,0) 70%);
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------- base elements */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; color: var(--ui-text); font: 15px/1.55 var(--ui-font);
+  background-color: var(--ui-page); background-image: var(--ui-clouds); background-attachment: fixed; overflow-x: hidden; }
+a { color: var(--ui-link); text-underline-offset: 2px; }
+a:hover { color: var(--ui-select); }
+:root[data-theme="dark"] a:hover { color: var(--ui-ticker); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) a:hover { color: var(--ui-ticker); } }
+h1, h2, h3 { color: var(--ui-text); }
+img { max-width: 100%; }
+::selection { background: var(--ui-select); color: var(--ui-select-text); }
+:focus-visible { outline: 2px dotted var(--ui-select); outline-offset: 2px; }
+code, kbd, samp { font-family: var(--ui-mono); font-size: .88em; background: var(--ui-face2); color: var(--ui-text);
+  padding: 1px 5px; border: 1px solid var(--ui-blue-line); overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------- pill button (S3 "Opciones de mods...") */
+button, .ui-btn {
+  font: 700 13px/1.2 var(--ui-font); color: var(--ui-text); cursor: pointer; display: inline-flex; align-items: center;
+  justify-content: center; gap: 6px; min-height: 28px; padding: 5px 14px; border-radius: 999px; text-decoration: none;
+  background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face) 45%, var(--ui-btn-face) 80%, var(--ui-lav-500));
+  border: 1px solid var(--ui-outline);
+  box-shadow: inset 0 1px 0 var(--ui-hi), inset 0 -1px 0 rgba(123,138,255,.6), 2px 3px 0 -1px var(--ui-navy-line), 3px 4px 0 -1px var(--ui-shadow);
+  transition: transform .05s;
+}
+button:hover:not(:disabled), .ui-btn:hover { background: linear-gradient(var(--ui-hi), var(--ui-lav-50) 45%, var(--ui-btn-face)); color: var(--ui-text); }
+button:active:not(:disabled), .ui-btn:active, button[aria-pressed="true"], .ui-btn.is-on {
+  transform: translate(1px, 2px); box-shadow: inset 1px 1px 0 var(--ui-blue-line), 1px 1px 0 -1px var(--ui-shadow);
+  background: var(--ui-lav-300); color: var(--ui-text); }
+:root[data-theme="dark"] button[aria-pressed="true"] { background: var(--ui-blue); color: #10142e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button[aria-pressed="true"] { background: var(--ui-blue); color: #10142e; } }
+button:disabled, .ui-btn[aria-disabled="true"] { cursor: default; color: var(--ui-label); opacity: .75;
+  background: var(--ui-face2); box-shadow: inset 0 1px 0 var(--ui-hi); border-color: var(--ui-label); }
+button:focus-visible, .ui-btn:focus-visible { outline: 2px dotted var(--ui-select); outline-offset: 3px; }
+/* primary = the button the dialog wants you to press: on a blue plate, like the OK tick */
+button.primary, .ui-btn.primary { background: linear-gradient(#a5b4ff, var(--ui-blue) 50%, #6b80f0); color: #10142e;
+  box-shadow: inset 0 1px 0 #cfd8ff, 2px 3px 0 -1px var(--ui-navy-line), 3px 4px 0 -1px var(--ui-shadow); }
+button.primary:hover:not(:disabled), .ui-btn.primary:hover { background: linear-gradient(#bcc8ff, #8ea2ff 50%, var(--ui-blue)); color: #10142e; }
+button.primary:disabled { background: var(--ui-face2); color: var(--ui-label); }
+.ui-plate { display: inline-flex; flex-wrap: wrap; gap: 8px; padding: 5px 8px 7px; background: var(--ui-plate); }
+
+/* ---------------------------------------------------------------- form fields (S3 list face + inset bevel) */
+input[type=text], input[type=number], input[type=search], input[type=url], select, textarea, .ui-field {
+  font: 14px/1.3 var(--ui-font); color: var(--ui-text); background: var(--ui-field); padding: 5px 7px; border-radius: 0;
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-hi) var(--ui-hi) var(--ui-blue-line);
+  box-shadow: inset 1px 1px 0 var(--ui-lav-500); max-width: 100%; }
+select { padding-right: 26px; appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ui-text) 50%), linear-gradient(135deg, var(--ui-text) 50%, transparent 50%),
+    linear-gradient(var(--ui-blue), var(--ui-blue));
+  background-position: right 11px top 50%, right 6px top 50%, right 0 top 0;
+  background-size: 5px 5px, 5px 5px, 22px 100%; background-repeat: no-repeat; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--ui-select); outline-offset: 0; }
+input[type=checkbox], input[type=radio] { appearance: none; -webkit-appearance: none; margin: 0 6px 0 0; width: 14px; height: 14px;
+  flex: none; vertical-align: -2px; cursor: pointer; background: var(--ui-field); border: 1px solid var(--ui-text);
+  box-shadow: inset 1px 1px 0 var(--ui-lav-500); display: inline-grid; place-content: center; }
+input[type=radio] { border-radius: 50%; }
+input[type=checkbox]::before { content: ""; width: 9px; height: 9px; transform: scale(0);
+  clip-path: polygon(14% 44%, 0 62%, 40% 100%, 100% 22%, 84% 6%, 38% 66%); background: var(--ui-text); }
+input[type=radio]::before { content: ""; width: 6px; height: 6px; border-radius: 50%; transform: scale(0); background: var(--ui-text); }
+input[type=checkbox]:checked::before, input[type=radio]:checked::before { transform: scale(1); }
+input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .5; cursor: default; }
+input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2px dotted var(--ui-select); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- progress bar (inset well, blue fill) */
+progress, .ui-progress { appearance: none; -webkit-appearance: none; height: 14px; border-radius: 0; overflow: hidden;
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-hi) var(--ui-hi) var(--ui-blue-line); background: var(--ui-field); }
+progress::-webkit-progress-bar { background: var(--ui-field); }
+progress::-webkit-progress-value { background: repeating-linear-gradient(90deg, var(--ui-blue) 0 10px, #6b80f0 10px 12px); }
+progress::-moz-progress-bar { background: var(--ui-blue); }
+
+/* ---------------------------------------------------------------- details / summary (group heading look) */
+summary { cursor: pointer; color: var(--ui-label); font-weight: 700; }
+summary:hover { color: var(--ui-text); }
+
+/* ---------------------------------------------------------------- window: frame, title bar, body (S3) */
+.ui-window { background: var(--ui-frame); border: 1px solid var(--ui-grey-edge); box-shadow: inset 0 0 0 1px var(--ui-hi), 3px 4px 0 rgba(24,32,57,.35); padding: 5px; }
+.ui-titlebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 6px; padding: 4px 10px; min-height: 34px;
+  background: var(--ui-blue); color: var(--ui-title-text); box-shadow: 0 0 0 1px var(--ui-lav-500), 0 0 0 4px var(--ui-lav-50);
+  font: 400 1.25rem/1.25 var(--ui-title-font); text-shadow: 1px 1px 0 rgba(49,52,123,.55); }
+.ui-titlebar h1, .ui-titlebar h2, .ui-titlebar h3 { color: inherit; font: inherit; margin: 0; }
+.ui-window > .ui-titlebar { margin: 4px 4px 9px; }
+.ui-close { width: 22px; height: 20px; min-height: 0; padding: 0; border-radius: 0; margin-left: auto; font: 700 14px/1 var(--ui-font);
+  background: var(--ui-lav-200); border: 1px solid var(--ui-outline); box-shadow: inset 1px 1px 0 var(--ui-hi), 1px 1px 0 var(--ui-shadow); }
+.ui-panel { background-color: var(--ui-face); border: 1px solid var(--ui-blue-line); box-shadow: inset 1px 1px 0 var(--ui-hi); padding: 12px 14px; }
+.ui-body { background-color: var(--ui-page); background-image: var(--ui-clouds); border: 1px solid var(--ui-blue-line); padding: 12px 14px; }
+
+/* group box: face, heading in the label colour (S3 "Efectos sonido") */
+.ui-group { background: var(--ui-face); border: 1px solid var(--ui-blue-line); box-shadow: inset 1px 1px 0 var(--ui-hi), 0 0 0 4px var(--ui-face2); padding: 10px 12px; margin: 4px; }
+.ui-group > .ui-label:first-child, .ui-label { color: var(--ui-label); font-weight: 700; }
+
+/* blue strip heading (the "Escuchar eleccion" bar / a title bar inside a page) */
+.ui-strip { background: var(--ui-blue); color: var(--ui-on-plate); padding: 4px 10px; font-weight: 700; }
+
+/* ---------------------------------------------------------------- chips (toolbar-style rounded squares) */
+.ui-chip { display: inline-flex; align-items: center; white-space: nowrap; padding: 4px 11px; border-radius: 7px; font: 700 13px/1.3 var(--ui-font);
+  color: var(--ui-text); text-decoration: none; background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face) 60%, var(--ui-lav-500));
+  border: 1px solid var(--ui-outline); box-shadow: inset 0 1px 0 var(--ui-hi), 1px 2px 0 var(--ui-navy-line); }
+.ui-chip:hover, .ui-chip:focus-visible { background: var(--ui-select); color: var(--ui-select-text); }
+
+/* ---------------------------------------------------------------- info bar + ticker (S1/S3 bottom bar) */
+.ui-infobar { background: var(--ui-lav-400); color: var(--ui-info-text); font-weight: 700;
+  border-top: 1px solid var(--ui-hi);
+  box-shadow: 0 -1px 0 #a5aeb5, inset 0 1px 0 #cecfff, inset 0 2px 0 var(--ui-lav-500), inset 0 3px 0 #8c92ff, inset 0 4px 0 var(--ui-blue-deep); padding-top: 4px; }
+.ui-ticker { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: 700 13px/1.5 var(--ui-font); padding: 1px 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-fields { display: flex; flex-wrap: wrap; gap: 1px; background: #7b86ff; border-top: 2px solid var(--ui-blue-line); }
+.ui-fields > * { flex: 1 1 auto; background: var(--ui-lav-400); text-align: center; padding: 2px 10px; }
+
+/* ---------------------------------------------------------------- card (group-box face, picture in a blue frame like S5) */
+.ui-card { background: var(--ui-face); border: 1px solid var(--ui-blue-line); box-shadow: inset 1px 1px 0 var(--ui-hi), 2px 3px 0 rgba(24,32,57,.25); padding: 6px; }
+.ui-card img { display: block; border: 1px solid var(--ui-blue); }
+
+/* ---------------------------------------------------------------- log box (the ticker colours) */
+.ui-log, pre.ui-log { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: 12px/1.4 var(--ui-mono); padding: 6px 8px;
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-hi) var(--ui-hi) var(--ui-blue-line); white-space: pre-wrap; overflow: auto; }
+
+/* ---------------------------------------------------------------- tables (blue header plate, lavender rows) */
+.ui-table, table { border-collapse: collapse; width: 100%; font-size: .93rem; background: var(--ui-face); }
+table th, table td { text-align: left; padding: 6px 10px; border: 1px solid var(--ui-lav-500); vertical-align: top; }
+table th { background: var(--ui-blue); color: var(--ui-on-plate); font-weight: 700; white-space: nowrap; border-color: var(--ui-blue-line); }
+table tbody tr:nth-child(even) td { background: var(--ui-face2); }
+table tbody tr:hover td { background: var(--ui-select); color: var(--ui-select-text); }
+table tbody tr:hover td code { color: var(--ui-text); }
+
+/* ---------------------------------------------------------------- lightbox (a game window over a dark navy veil) */
+.ui-lightbox { border: 0; padding: 0; background: rgba(16,20,46,.94); color: var(--ui-title-text); }
+.ui-lightbox::backdrop { background: rgba(16,20,46,.94); }
+
+/* ---------------------------------------------------------------- note (yellow of the ticker, softened) */
+.ui-note { background: var(--ui-warn-bg); color: var(--ui-text); border: 1px solid var(--ui-warn-line); border-left-width: 5px; padding: 9px 13px; }
+
+/* ---------------------------------------------------------------- page frame helpers */
+.ui-wrap { max-width: 1180px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+@media (max-width: 600px) { body { font-size: 15px; } .ui-titlebar { font-size: 1.1rem; } }
+/* ==== sc3ui.css end ==== */
+</style>
 <style>
+/* importer layout on top of sc3ui.css (the game's UI look). --canvas and --accent stay plain colours: the 3D view reads them. */
 :root{
-  --bg:#f4f5f7; --panel:#ffffff; --panel2:#eceef2; --text:#1d2330; --muted:#5d6678; --line:#d3d8e0;
-  --accent:#2563eb; --accent-text:#ffffff; --warn:#b45309; --warnbg:#fef3c7; --ok:#15803d;
-  --canvas:#e6e9ef; --sel:#dbe7ff; --r:#2f9e44; --c:#1c7ed6; --i:#e8590c; --o:#7048e8;
+  --bg:var(--ui-page); --panel:var(--ui-face); --panel2:var(--ui-face2); --text:var(--ui-text); --muted:var(--ui-label); --line:var(--ui-blue-line);
+  --accent:#0000ff; --accent-text:#ffffff; --warn:#8a5a00; --warnbg:var(--ui-warn-bg); --ok:#15803d;
+  --canvas:#d8dcf8; --sel:#c6c7ff; --r:#2f8a3c; --c:#1c5fd6; --i:#b8560c; --o:#6040d0;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#14171d; --panel:#1d222b; --panel2:#262c37; --text:#e6e9ef; --muted:#9aa4b5; --line:#343b49;
-    --accent:#5b8def; --accent-text:#0b1020; --warn:#fbbf24; --warnbg:#3a2f12; --ok:#4ade80;
-    --canvas:#242a35; --sel:#243556; --r:#51cf66; --c:#4dabf7; --i:#ff922b; --o:#9775fa;
+    --accent:#7b92ff; --accent-text:#10142e; --warn:#fffb00; --ok:#4ade80;
+    --canvas:#1c2152; --sel:#31347b; --r:#51cf66; --c:#7ab8ff; --i:#ffb44a; --o:#b79cff;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#14171d; --panel:#1d222b; --panel2:#262c37; --text:#e6e9ef; --muted:#9aa4b5; --line:#343b49;
-  --accent:#5b8def; --accent-text:#0b1020; --warn:#fbbf24; --warnbg:#3a2f12; --ok:#4ade80;
-  --canvas:#242a35; --sel:#243556; --r:#51cf66; --c:#4dabf7; --i:#ff922b; --o:#9775fa;
+  --accent:#7b92ff; --accent-text:#10142e; --warn:#fffb00; --ok:#4ade80;
+  --canvas:#1c2152; --sel:#31347b; --r:#51cf66; --c:#7ab8ff; --i:#ffb44a; --o:#b79cff;
 }
-*{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif}
-header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-header h1{font-size:16px;margin:0 8px 0 0}
-button,select,input,textarea{font:inherit;color:var(--text)}
-button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
-button:hover{border-color:var(--accent)}
-button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
-button:disabled{opacity:.45;cursor:default}
-input[type=text],input[type=number],select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:100%}
-#status{color:var(--muted);flex:1 1 220px;min-width:160px}
-.app{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;padding:16px;align-items:start}
+html,body{font-size:14px;line-height:1.4}
+header{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:7px 16px 9px;background:var(--ui-blue);color:var(--ui-on-plate);
+  border-bottom:1px solid var(--ui-lav-500);box-shadow:0 3px 0 var(--ui-lav-50),0 4px 0 var(--ui-blue-line);position:sticky;top:0;z-index:5}
+header h1{font:400 21px/1.2 var(--ui-title-font);color:var(--ui-title-text);text-shadow:1px 1px 0 rgba(49,52,123,.55);margin:0 8px 0 0}
+input[type=text],input[type=number],select,textarea{width:100%}
+#status{color:var(--ui-on-plate);font-weight:700;flex:1 1 220px;min-width:160px}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;padding:18px 16px 16px;align-items:start}
 .left{min-width:0}
-.tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+.tools{display:flex;flex-wrap:wrap;gap:8px 10px;margin-bottom:12px;align-items:center}
 .tools input[type=text]{max-width:220px}
-#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.card{background:var(--panel);border:2px solid var(--line);border-radius:8px;padding:6px;cursor:pointer;position:relative;user-select:none}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.card{background:var(--panel);border:2px solid var(--line);padding:6px;cursor:pointer;position:relative;user-select:none;
+  box-shadow:inset 1px 1px 0 var(--ui-hi),2px 3px 0 rgba(24,32,57,.22)}
 .card.sel{border-color:var(--accent);background:var(--sel)}
-.card.focus{outline:2px solid var(--accent);outline-offset:1px}
-.card img{width:100%;aspect-ratio:4/3;display:block;border-radius:5px;background:var(--canvas);object-fit:contain}
-.card .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.card.focus{outline:2px dotted var(--accent);outline-offset:2px}
+.card img{width:100%;aspect-ratio:4/3;display:block;background:var(--canvas);object-fit:contain;border:1px solid var(--ui-blue)}
+.card .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
 .card .fl{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card input[type=checkbox]{position:absolute;top:10px;left:10px;width:18px;height:18px}
+.card input[type=checkbox]::before{width:12px;height:12px}
 .badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
-.b{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid var(--line);background:var(--panel2)}
+.b{font-size:11px;font-weight:700;padding:0 6px;border-radius:5px;border:1px solid var(--ui-outline);background:linear-gradient(var(--ui-btn-hi),var(--ui-btn-face))}
 .b.R{border-color:var(--r);color:var(--r)} .b.C{border-color:var(--c);color:var(--c)}
 .b.I{border-color:var(--i);color:var(--i)} .b.O{border-color:var(--o);color:var(--o)}
 .b.warn{background:var(--warnbg);color:var(--warn);border-color:var(--warn)}
 .b.off{opacity:.55;text-decoration:line-through}
-.side{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto}
-#view{width:100%;aspect-ratio:4/3;background:var(--canvas);border-radius:8px;display:block;touch-action:none}
+.side{background:var(--panel);border:6px solid var(--ui-frame);box-shadow:0 0 0 1px var(--ui-hi),0 0 0 2px var(--ui-grey-edge),inset 0 0 0 1px var(--ui-blue-line),4px 5px 0 1px rgba(24,32,57,.3);
+  padding:12px;position:sticky;top:72px;max-height:calc(100vh - 88px);overflow:auto}
+#view{width:100%;aspect-ratio:4/3;background:var(--canvas);display:block;touch-action:none;border:1px solid var(--ui-blue)}
 .row{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center;margin:7px 0}
-.row label{color:var(--muted);font-size:13px}
+.row label{color:var(--muted);font-weight:700;font-size:13px}
 .measure{color:var(--muted);font-size:12.5px;margin:8px 0}
-.sugg{background:var(--panel2);border-radius:8px;padding:8px;margin:10px 0;font-size:13px}
+.sugg{background:var(--panel2);border:1px solid var(--line);padding:8px;margin:10px 0;font-size:13px}
 .sugg .why{color:var(--muted);font-size:12px;margin-top:3px}
-.btnrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 details{margin-top:12px}
-summary{cursor:pointer;color:var(--muted)}
-textarea#rules{height:260px;font:12px/1.35 ui-monospace,Consolas,monospace;white-space:pre}
+textarea#rules{height:260px;font:12px/1.35 var(--ui-mono);white-space:pre}
 .hint{color:var(--muted);font-size:12px;margin:4px 0}
-.empty{padding:40px 10px;text-align:center;color:var(--muted);grid-column:1/-1;border:2px dashed var(--line);border-radius:10px}
+label.hint{font-weight:700}
+.empty{padding:40px 10px;text-align:center;color:var(--muted);grid-column:1/-1;border:2px dashed var(--line);background:var(--panel)}
 pre#selftest,pre#bldtest{display:none}
-.gamebox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px}
-.gamebox .tools{margin-bottom:6px}
-.gamebox h2{font-size:14px;margin:0 6px 0 0}
+.gamebox{background:var(--panel);border:1px solid var(--line);padding:0 12px 10px;margin-bottom:16px;box-shadow:inset 1px 1px 0 var(--ui-hi),0 0 0 4px var(--panel2),3px 5px 0 3px rgba(24,32,57,.22)}
+.gamebox > .tools:first-child{margin:0 -12px 8px;padding:6px 12px 8px;background:var(--ui-blue);box-shadow:0 1px 0 var(--ui-lav-500),0 4px 0 var(--ui-lav-50)}
+.gamebox > .tools:first-child .hint{color:var(--ui-on-plate)}
+.gamebox h2{font:400 18px/1.2 var(--ui-title-font);color:var(--ui-title-text);text-shadow:1px 1px 0 rgba(49,52,123,.55);margin:0 6px 0 0}
 #prog{display:flex;gap:8px;align-items:center;margin:6px 0}
+#prog[hidden]{display:none}
 #prog progress{flex:0 1 260px;height:14px}
 #progText{color:var(--muted);font-size:13px}
 #results{display:grid;gap:6px;margin-top:6px}
-.res{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel2);border-radius:8px;padding:6px 8px;font-size:13px}
+.res{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);padding:6px 8px;font-size:13px}
 .res .t{flex:1 1 220px;min-width:0}
 .res .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .res .t span{color:var(--muted)}
 .res .fr{display:flex;gap:4px;align-items:flex-end}
-.res canvas{background:#3c643c;border-radius:3px;image-rendering:pixelated;max-height:72px}
+.res canvas{background:#3c643c;image-rendering:pixelated;max-height:72px;border:1px solid var(--ui-blue)}
 .res.skip{opacity:.75}
 .res.err{border:1px solid var(--warn)}
-pre#log{max-height:240px;overflow:auto;font:12px/1.35 ui-monospace,Consolas,monospace;white-space:pre-wrap;background:var(--bg);border-radius:6px;padding:6px;margin:6px 0 0}
+pre#log{max-height:240px;overflow:auto;font:12px/1.4 var(--ui-mono);white-space:pre-wrap;background:var(--ui-ticker-bg);color:var(--ui-ticker);padding:6px 8px;margin:6px 0 0;
+  border:1px solid;border-color:var(--ui-blue-line) var(--ui-hi) var(--ui-hi) var(--ui-blue-line)}
 @media (max-width:860px){
   .app{grid-template-columns:minmax(0,1fr);padding:12px 16px}
   .side{position:static;max-height:none}
