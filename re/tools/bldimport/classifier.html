@@ -64,13 +64,30 @@ summary{cursor:pointer;color:var(--muted)}
 textarea#rules{height:260px;font:12px/1.35 ui-monospace,Consolas,monospace;white-space:pre}
 .hint{color:var(--muted);font-size:12px;margin:4px 0}
 .empty{padding:40px 10px;text-align:center;color:var(--muted);grid-column:1/-1;border:2px dashed var(--line);border-radius:10px}
-pre#selftest{display:none}
+pre#selftest,pre#bldtest{display:none}
+.gamebox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.gamebox .tools{margin-bottom:6px}
+.gamebox h2{font-size:14px;margin:0 6px 0 0}
+#prog{display:flex;gap:8px;align-items:center;margin:6px 0}
+#prog progress{flex:0 1 260px;height:14px}
+#progText{color:var(--muted);font-size:13px}
+#results{display:grid;gap:6px;margin-top:6px}
+.res{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel2);border-radius:8px;padding:6px 8px;font-size:13px}
+.res .t{flex:1 1 220px;min-width:0}
+.res .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .t span{color:var(--muted)}
+.res .fr{display:flex;gap:4px;align-items:flex-end}
+.res canvas{background:#3c643c;border-radius:3px;image-rendering:pixelated;max-height:72px}
+.res.skip{opacity:.75}
+.res.err{border:1px solid var(--warn)}
+pre#log{max-height:240px;overflow:auto;font:12px/1.35 ui-monospace,Consolas,monospace;white-space:pre-wrap;background:var(--bg);border-radius:6px;padding:6px;margin:6px 0 0}
 @media (max-width:860px){
   .app{grid-template-columns:minmax(0,1fr);padding:12px 16px}
   .side{position:static;max-height:none}
   header{position:static}
 }
 </style>
+<script src="bldweb.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -87,9 +104,29 @@ pre#selftest{display:none}
   <span id="status">Open a folder with OBJ, glTF, GLB or FBX models or Building Architect .bld files. An existing models.json is read back.</span>
 </header>
 <input type="file" id="fileFallback" webkitdirectory multiple hidden>
+<input type="file" id="gameFallback" webkitdirectory multiple hidden>
 
 <div class="app">
   <section class="left">
+    <div class="gamebox" id="gameBox">
+      <div class="tools">
+        <h2>Game</h2>
+        <button id="btnGame" title="The SimCity 3000 Unlimited folder: the one that holds Apps, Cities and Buildings">Game folder</button>
+        <span id="gameName" class="hint">not chosen</span>
+        <label class="hint" title="How OBJ models are drawn when models.json names no style (x_bldrender.style)">Look
+          <select id="styleSel" style="width:auto"><option value="stock">stock (default)</option><option value="stock_sharp">stock, sharp zoom 4</option><option value="clean">clean</option></select></label>
+        <button id="btnInstall" class="primary" disabled>Install into the game</button>
+        <button id="btnRemove" disabled>Remove from the game</button>
+      </div>
+      <div class="hint" id="gameHint">Open the models folder, choose the game folder, then Install. Close the game first. The page renders every enabled model (20 pictures each), adds them to the road mod's files in <code>mods\netmod\overlay</code> with backups, and keeps the building ids in <code>sc3build\ids.json</code> next to the models. Remove puts every file back as it was.</div>
+      <details id="zipBox"><summary>No folder access (other browsers, or a game folder the browser refuses)?</summary>
+        <p class="hint">The page reads the game folder (the browser asks first, nothing leaves the computer) and downloads a .zip of the files to put into it: unpack it into the game folder and let it replace files. A folder the page cannot write to also gets <code>ids.json</code> as a download: put it in the models folder's <code>sc3build</code> folder so the next install keeps the same building ids.</p>
+        <div class="btnrow"><button id="btnZipInstall">Make the install .zip</button><button id="btnZipRemove">Make the removal .zip</button></div>
+      </details>
+      <div id="prog" hidden><progress id="progBar" max="1" value="0"></progress><span id="progText"></span></div>
+      <div id="results"></div>
+      <details id="logBox"><summary>Log</summary><pre id="log"></pre></details>
+    </div>
     <div class="tools">
       <input type="text" id="filter" placeholder="Filter by name or file">
       <button id="btnAll">Select all</button>
@@ -116,6 +153,7 @@ pre#selftest{display:none}
   </aside>
 </div>
 <pre id="selftest"></pre>
+<pre id="bldtest"></pre>
 
 <script type="module">
 import * as THREE from 'three';
@@ -586,6 +624,7 @@ async function openFiles(files, jsonFile) {
   renderGrid();
   if (recs[0]) select([recs[0]]);
   $('btnSave').disabled = !recs.length;
+  refreshGameButtons();
   const nf = recs.filter(r => r.fresh).length;
   setStatus(`${recs.length} models from ${S.folderName || 'folder'}` + (S.hadJson ? `, models.json read (${recs.length - nf} entries, ${nf} new, ${S.orphans.length} for missing files)` : ', no models.json yet: suggestions shown, save to create it'));
 }
@@ -600,7 +639,7 @@ async function pickFolder() {
         if (MODEL_EXT.test(name)) models.push(f);
         if (name.toLowerCase() === 'models.json') json = f;
       }
-      S.dirHandle = dir; S.folderName = dir.name;
+      S.dirHandle = dir; S.folderName = dir.name; S.allFiles = null;
       await openFiles({ all, models }, json);
       return;
     } catch (e) { if (e.name === 'AbortError') return; console.warn('directory picker failed, using fallback', e); }
@@ -609,6 +648,7 @@ async function pickFolder() {
 }
 $('btnOpen').onclick = pickFolder;
 $('fileFallback').onchange = async ev => {
+  S.allFiles = [...ev.target.files];        // every file, subfolders too (textures): the importer reads them
   const list = [...ev.target.files].filter(f => (f.webkitRelativePath || f.name).split('/').length <= 2);
   const models = list.filter(f => MODEL_EXT.test(f.name));
   const json = list.find(f => f.name.toLowerCase() === 'models.json') || null;
@@ -806,6 +846,175 @@ $('btnRulesApply').onclick = () => {
 };
 $('btnRulesReset').onclick = () => { rules = structuredClone(DEFAULT_RULES); showRules(); $('rulesMsg').textContent = 'Defaults restored.'; refreshPanel(); rebuildGround(); renderGrid(); };
 
+// ---------------------------------------------------------------- install into the game (task bldweb)
+// bldweb.js is bldimport.py in the browser: same render, same files, ids (sc3build\ids.json), backups and
+// state.json (webtest/golden.mjs proves it byte for byte). Rendering runs in a Web Worker built from bldweb.js.
+const BW = window.BLDWEB;
+const G = { handle: null, name: '', busy: false };
+const logEl = $('log');
+const log = t => { logEl.textContent += t + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+const idb = {
+  open() { return new Promise((res, rej) => { const r = indexedDB.open('sc3-classifier', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  async get(k) { try { const db = await this.open(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); }); } catch (e) { return undefined; } },
+  async set(k, v) { try { const db = await this.open(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = res; }); } catch (e) {} },
+};
+try { const st = localStorage.getItem('bc-style'); if (st) $('styleSel').value = st; } catch (e) {}
+$('styleSel').onchange = () => { try { localStorage.setItem('bc-style', $('styleSel').value); } catch (e) {} };
+function refreshGameButtons() {
+  const ready = !!G.handle && !G.busy;
+  $('btnInstall').disabled = !ready || !S.recs.length;
+  $('btnRemove').disabled = !ready;
+  $('btnGame').disabled = G.busy;
+  $('btnZipInstall').disabled = G.busy || !S.recs.length;
+  $('btnZipRemove').disabled = G.busy;
+  $('gameName').textContent = G.handle ? G.name : 'not chosen';
+}
+async function checkGame(game) {
+  if (!(await game.exists('Apps/Sys/SYS.PAK'))) return 'it has no Apps\\Sys\\SYS.PAK: choose the folder that holds Apps, Cities and Buildings';
+  if (!(await game.exists(BW.OVL + 'Apps/Res/Occupant/OccupantAttribs_Korea.IXF'))) return 'the road mod (sc3mods, mods\\netmod) is not installed there: install sc3mods first';
+  return null;
+}
+async function useGame(h, quiet) {
+  const why = await checkGame(BW.handleFS(h));
+  if (why) { if (!quiet) setStatus('That folder is not a game folder the importer can use: ' + why + '.'); return false; }
+  G.handle = h; G.name = h.name; await idb.set('game', h); refreshGameButtons();
+  if (!quiet) setStatus('Game folder: ' + h.name + '.');
+  return true;
+}
+$('btnGame').onclick = async () => {
+  if (!window.showDirectoryPicker) { setStatus('This browser cannot write into folders: use Chrome or Edge, or the .zip route below.'); $('zipBox').open = true; return; }
+  try { const h = await window.showDirectoryPicker({ id: 'sc3game', mode: 'readwrite' }); await useGame(h); }
+  catch (e) { if (e.name !== 'AbortError') setStatus('Could not open that folder: ' + e.message + '. The .zip route below works with any folder.'); }
+};
+(async () => { const h = await idb.get('game'); if (h) { G.handle = h; G.name = h.name + ' (remembered)'; refreshGameButtons(); } })();
+async function permitted(h) {
+  if (!h || !h.queryPermission) return true;
+  if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+  return (await h.requestPermission({ mode: 'readwrite' })) === 'granted';
+}
+async function saveModelsJsonIfNeeded() {
+  if (!S.dirty) return true;
+  if (!S.dirHandle) return false;
+  const fh = await S.dirHandle.getFileHandle('models.json', { create: true });
+  const w = await fh.createWritable(); await w.write(toJSONText()); await w.close();
+  S.dirty = false; S.hadJson = true;
+  log('saved models.json (' + (S.recs.length + S.orphans.length) + ' entries)');
+  return true;
+}
+function modelsFolder() {                  // the importer's view of the models folder
+  if (S.dirHandle) return BW.handleFS(S.dirHandle);
+  const list = S.allFiles || [];
+  const map = new Map(); const names = [];
+  for (const f of list) {
+    const parts = String(f.webkitRelativePath || f.name).split('/'); if (parts.length > 1) parts.shift();
+    const rel = parts.join('/'); map.set(rel.toLowerCase(), f); names.push(rel);
+  }
+  const text = toJSONText();                // the page's current entries are what an install uses
+  map.set('models.json', new TextEncoder().encode(text)); if (!names.includes('models.json')) names.push('models.json');
+  map._names = names;
+  return BW.filesFS(map);
+}
+const lastLot = new Map();
+function frameCanvas(im) {
+  const c = document.createElement('canvas'); c.width = im.w; c.height = im.h;
+  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(im.d), im.w, im.h), 0, 0);
+  c.style.height = Math.min(72, im.h) + 'px';
+  return c;
+}
+function resultRow(title, sub, frames, cls) {
+  const d = document.createElement('div'); d.className = 'res' + (cls ? ' ' + cls : '');
+  const t = document.createElement('div'); t.className = 't';
+  const b = document.createElement('b'); b.textContent = title; b.title = title;
+  const s = document.createElement('span'); s.textContent = sub;
+  t.append(b, s); d.appendChild(t);
+  if (frames) { const f = document.createElement('div'); f.className = 'fr'; for (let r = 0; r < 4; r++) f.appendChild(frameCanvas(frames.get('2,' + r)[0])); d.appendChild(f); }
+  $('results').appendChild(d);
+}
+function setProgress(v, text) { $('prog').hidden = false; $('progBar').value = v; $('progText').textContent = text; }
+// One install: the same call the golden test makes (BLDWEB.install), with the worker renderer.
+async function installWith(folder, game, opt = {}) {
+  const renderer = opt.noWorker ? null : BW.makeWorkerRenderer((job, k, n) => {
+    const m = installWith.cur; if (!m) return;
+    setProgress((m.i - 1 + k / n) / m.n, `Model ${m.i} of ${m.n}: ${job.file}, picture ${k} of ${n}`);
+  });
+  $('results').textContent = '';
+  const t0 = performance.now();
+  try {
+    const r = await BW.install(folder, game, {
+      renderer, envStyle: opt.style || $('styleSel').value, log,
+      onModel: (i, n, e) => { installWith.cur = { i, n }; setProgress((i - 1) / n, `Model ${i} of ${n}: ${e.file}`); },
+      onFrames: (e, frames, info) => resultRow(`${e.name} (${e.id})`, `${e.file}: class ${e.class}, ${BW.CLASS_LABEL[e.class]}, lot ${e.lot}x${e.lot}, weight ${e.weight}. ${BW.describe(info)}`, frames),
+    });
+    for (const line of r.rep) { log(line); if (line.startsWith('skip')) resultRow(line.replace(/^skip\s+/, ''), 'not installed', null, 'skip'); }
+    setProgress(1, `Done in ${((performance.now() - t0) / 1000).toFixed(1)} s: ${r.rep[r.rep.length - 1]}`);
+    return r;
+  } finally { if (renderer) renderer.terminate(); installWith.cur = null; }
+}
+async function runBusy(fn) {
+  if (G.busy) return; G.busy = true; refreshGameButtons();
+  try { await fn(); }
+  catch (e) { console.error(e); setStatus('Stopped: ' + (e.message || e)); log('ERROR ' + (e.stack || e)); resultRow('Stopped', String(e.message || e), null, 'err'); }
+  finally { G.busy = false; refreshGameButtons(); }
+}
+$('btnInstall').onclick = () => runBusy(async () => {
+  if (!S.recs.length) { setStatus('Open the models folder first.'); return; }
+  if (!S.dirHandle) { setStatus('The models folder was opened read-only (this browser or the fallback picker): use the .zip route, or open it again with Open folder in Chrome or Edge.'); $('zipBox').open = true; return; }
+  if (!(await permitted(G.handle)) || !(await permitted(S.dirHandle))) { setStatus('The page needs write access to the game folder and the models folder.'); return; }
+  const why = await checkGame(BW.handleFS(G.handle));
+  if (why) { setStatus('Game folder: ' + why + '.'); return; }
+  G.name = G.handle.name; refreshGameButtons();
+  await saveModelsJsonIfNeeded();
+  log('--- install into ' + G.handle.name + ' from ' + S.folderName + ' (' + new Date().toLocaleString() + ')');
+  setStatus('Installing. Keep this page open.');
+  const r = await installWith(BW.handleFS(S.dirHandle), BW.handleFS(G.handle));
+  const n = Object.keys(r.state.files).length;
+  setStatus(`Installed into ${G.handle.name}: ${r.rep[r.rep.length - 1]}, ${n} game files written (backups in mods\\netmod\\bldimport). Start the game and zone land of these classes: the buildings grow over time.`);
+});
+$('btnRemove').onclick = () => runBusy(async () => {
+  if (!(await permitted(G.handle))) { setStatus('The page needs write access to the game folder.'); return; }
+  log('--- remove from ' + G.handle.name);
+  const n = await BW.restore(BW.handleFS(G.handle), log);
+  $('results').textContent = ''; $('prog').hidden = true;
+  setStatus(n ? `Removed: ${n} game files put back as they were before the first install.` : 'Nothing to remove: no install by this tool is recorded in that game folder.');
+});
+// .zip route: read the game folder from a file list, keep the writes in memory, download them
+let zipMode = null;
+$('btnZipInstall').onclick = () => { zipMode = 'install'; $('gameFallback').click(); };
+$('btnZipRemove').onclick = () => { zipMode = 'remove'; $('gameFallback').click(); };
+function download(name, bytes, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+$('gameFallback').onchange = ev => runBusy(async () => {
+  const files = [...ev.target.files]; ev.target.value = '';
+  const game = BW.listFS(files);
+  const why = await checkGame(game);
+  if (why) { setStatus('That folder: ' + why + '.'); return; }
+  const gname = (files[0] && files[0].webkitRelativePath || '').split('/')[0] || 'game';
+  let r = null;
+  if (zipMode === 'install') {
+    if (!S.recs.length) { setStatus('Open the models folder first.'); return; }
+    const folder = modelsFolder();
+    if (S.dirHandle) { if (!(await permitted(S.dirHandle))) return; await saveModelsJsonIfNeeded(); }
+    log('--- install .zip for ' + gname);
+    r = await installWith(folder, game);
+    if (!S.dirHandle && folder.written.size) {
+      const ids = folder.written.get('sc3build/ids.json');
+      if (ids) download('ids.json', ids, 'application/json');
+    }
+  } else {
+    log('--- removal .zip for ' + gname);
+    await BW.restore(game, log);
+  }
+  const entries = [...game.writes.values()].sort((a, b) => a[0] < b[0] ? -1 : 1);
+  const gone = [...game.removed.values()].sort();
+  if (gone.length) entries.push(['DELETE_THESE_FILES.txt', new TextEncoder().encode('Delete these files from the game folder:\r\n' + gone.map(x => x.replace(/\//g, '\\')).join('\r\n') + '\r\n')]);
+  download(zipMode === 'install' ? 'sc3-buildings-install.zip' : 'sc3-buildings-removal.zip', BW.zipOf(entries), 'application/zip');
+  setStatus(`Downloaded a .zip with ${entries.length} files for ${gname}. Close the game, unpack the .zip into the game folder and let it replace files` +
+    (gone.length ? `, then delete the files listed in DELETE_THESE_FILES.txt.` : '.') + (r && !S.dirHandle ? ' Put the downloaded ids.json into the models folder\'s sc3build folder.' : ''));
+});
+refreshGameButtons();
+
 // ---------------------------------------------------------------- demo + test hooks
 const DEMO_FILES = ['house_a.obj', 'shop_a.obj', 'factory_a.obj'];
 async function loadDemo(base = qs.get('base') || 'samples/') {
@@ -842,10 +1051,13 @@ async function roundTrip() {
   res.savedText = saved;
   return res;
 }
-window.bc = { S, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES };
+window.bc = { S, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW };
 
 // ---------------------------------------------------------------- start
 buildForm(); showRules(); sizeView(); applyThemeToScene(); refreshPanel(); loop();
+if (qs.get('bldtest')) {                   // headless page test (webtest/pagetest.mjs): fetch-backed folders, real worker
+  const sc = document.createElement('script'); sc.src = 'webtest/pagetest.js'; document.body.appendChild(sc);
+}
 if (qs.get('demo')) {
   loadDemo().then(() => {
     const pick = qs.get('select');
