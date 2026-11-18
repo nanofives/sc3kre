@@ -5,84 +5,78 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sc3mods road gallery</title>
 <meta name="description" content="Every junction the sc3mods road mod builds in SimCity 3000 Unlimited, with the drag that makes each one.">
+<link rel="stylesheet" href="../assets/sc3ui.css">
 <style>
-:root {
-  --bg: #f3f4f1; --surface: #ffffff; --fg: #1d2420; --muted: #5a665f; --line: #d9ded9;
-  --accent: #2f6b4b; --accent-fg: #ffffff; --chip: #e7ece8; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #121614; --surface: #1a201d; --fg: #e6ebe8; --muted: #9aa69f; --line: #2b3430;
-          --accent: #7cc49c; --accent-fg: #0f1512; --chip: #222a26; --shadow: none; color-scheme: dark; }
-}
-* { box-sizing: border-box; }
+/* page layout on top of sc3ui.css (the game's UI look, docs/assets/sc3ui.css) */
 html { scroll-padding-top: 64px; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 var(--font); }
-a { color: var(--accent); }
-header.top { max-width: 1180px; margin: 0 auto; padding: 40px 16px 20px; }
-h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.01em; text-wrap: balance; }
-.lead { max-width: 70ch; color: var(--muted); margin: 0 0 8px; }
-.meta { color: var(--muted); font-size: .92rem; margin: 14px 0 0; }
-nav.fams { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
-nav.fams ul { max-width: 1180px; margin: 0 auto; padding: 10px 16px; list-style: none; display: flex; gap: 8px;
+header.top { max-width: 1180px; margin: 0 auto; padding: 24px 16px 16px; }
+header.top .ui-window { padding: 5px; }
+h1 { font-size: clamp(1.45rem, 4vw, 2.1rem); line-height: 1.2; margin: 0; text-wrap: balance; }
+.lead { max-width: 75ch; margin: 0 0 8px; }
+.meta { color: var(--ui-label); font-size: .92rem; font-weight: 700; margin: 12px 0 0; }
+nav.fams { position: sticky; top: 0; z-index: 5; }
+nav.fams ul { max-width: 1180px; margin: 0 auto; padding: 8px 16px 9px; list-style: none; display: flex; gap: 8px;
   overflow-x: auto; scrollbar-width: thin; }
-nav.fams a { display: inline-block; white-space: nowrap; padding: 6px 12px; border-radius: 999px; background: var(--chip);
-  color: var(--fg); text-decoration: none; font-size: .9rem; }
-nav.fams a:hover, nav.fams a:focus-visible { background: var(--accent); color: var(--accent-fg); }
+nav.fams a { display: inline-flex; align-items: center; white-space: nowrap; padding: 4px 11px; border-radius: 7px;
+  font: 700 13px/1.3 var(--ui-font); color: var(--ui-text); text-decoration: none;
+  background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face) 60%, var(--ui-lav-500));
+  border: 1px solid var(--ui-outline); box-shadow: inset 0 1px 0 var(--ui-hi), 1px 2px 0 var(--ui-navy-line); }
+nav.fams a:hover, nav.fams a:focus-visible { background: var(--ui-select); color: var(--ui-select-text); }
 main { max-width: 1180px; margin: 0 auto; padding: 8px 16px 48px; }
-section.fam { padding-top: 28px; }
-section.fam h2 { font-size: 1.35rem; margin: 0 0 4px; }
-section.fam .count { color: var(--muted); font-size: .9rem; margin: 0 0 14px; }
+section.fam { padding-top: 26px; }
+section.fam h2 { margin: 0 0 6px; padding: 4px 12px; background: var(--ui-blue); color: var(--ui-title-text);
+  font: 400 1.35rem/1.3 var(--ui-title-font); text-shadow: 1px 1px 0 rgba(49,52,123,.55);
+  box-shadow: 0 0 0 1px var(--ui-lav-500), 0 0 0 4px var(--ui-lav-50); }
+section.fam .count { color: var(--ui-label); font-weight: 700; font-size: .9rem; margin: 10px 0 12px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
-  box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.card { background: var(--ui-face); border: 1px solid var(--ui-blue-line); padding: 6px;
+  box-shadow: inset 1px 1px 0 var(--ui-hi), 0 0 0 3px var(--ui-face2), 3px 4px 0 2px rgba(24,32,57,.22); display: flex; flex-direction: column; }
 .card button { all: unset; cursor: zoom-in; display: block; }
-.card button:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
-.card img { display: block; width: 100%; height: auto; background: #4a5a3c; }
-.card .txt { padding: 10px 12px 12px; }
+.card button:focus-visible { outline: 3px solid var(--ui-select); outline-offset: -3px; }
+.card img { display: block; width: 100%; height: auto; background: #4a5a3c; border: 1px solid var(--ui-blue); }
+.card .txt { padding: 8px 6px 6px; }
 .card h3 { font-size: 1rem; margin: 0 0 4px; }
-.card p { margin: 0; color: var(--muted); font-size: .9rem; }
+.card p { margin: 0; font-size: .9rem; }
 .gifs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
-.gifs figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.gifs img { display: block; width: 100%; height: auto; }
-.gifs figcaption { padding: 10px 12px; font-size: .92rem; }
-footer { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; color: var(--muted); font-size: .88rem;
-  border-top: 1px solid var(--line); }
-footer p { max-width: 80ch; }
-dialog.lb { border: 0; padding: 0; max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; background: rgba(8,10,9,.94);
-  color: #eef2ef; }
-dialog.lb::backdrop { background: rgba(8,10,9,.94); }
+.gifs figure { margin: 0; background: var(--ui-face); border: 1px solid var(--ui-blue-line); padding: 6px;
+  box-shadow: inset 1px 1px 0 var(--ui-hi), 0 0 0 3px var(--ui-face2), 3px 4px 0 2px rgba(24,32,57,.22); }
+.gifs img { display: block; width: 100%; height: auto; border: 1px solid var(--ui-blue); }
+.gifs figcaption { padding: 8px 6px 4px; font-size: .92rem; font-weight: 700; }
+footer { margin: 0; padding: 0 0 8px; font-size: .88rem; }
+footer .in { max-width: 1180px; margin: 0 auto; padding: 14px 16px 24px; }
+footer p { max-width: 80ch; margin: 0 0 10px; font-weight: 400; }
+footer a { color: var(--ui-info-text); }
+dialog.lb { max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; }
 .lb .wrap { height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
-.lb .bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 12px; flex-wrap: wrap; }
-.lb .views { display: flex; gap: 6px; }
-.lb button { font: 500 .92rem var(--font); color: #eef2ef; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
-  border-radius: 8px; padding: 7px 12px; cursor: pointer; }
-.lb button[aria-pressed="true"] { background: #7cc49c; color: #0f1512; border-color: #7cc49c; }
-.lb button:focus-visible { outline: 2px solid #7cc49c; outline-offset: 2px; }
-.lb .stage { min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 8px; position: relative; }
-.lb .stage img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
-.lb .nav { position: absolute; top: 50%; transform: translateY(-50%); font-size: 1.3rem; padding: 10px 14px; }
+.lb .bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 7px 10px 9px; flex-wrap: wrap;
+  background: var(--ui-blue); box-shadow: 0 1px 0 var(--ui-lav-500), 0 4px 0 var(--ui-lav-50); }
+.lb .views { display: flex; gap: 8px; flex-wrap: wrap; }
+.lb .stage { min-height: 0; display: flex; align-items: center; justify-content: center; padding: 10px 8px 0; position: relative; }
+.lb .stage img { max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--ui-blue); }
+.lb .nav { position: absolute; top: 50%; transform: translateY(-50%); font-size: 1.3rem; width: 40px; height: 40px; padding: 0; }
+.lb .nav:active:not(:disabled) { transform: translate(1px, calc(-50% + 2px)); }
 .lb .prev { left: 10px; } .lb .next { right: 10px; }
 .lb .cap { padding: 10px 16px 16px; max-width: 900px; margin: 0 auto; text-align: center; }
-.lb .cap h3 { margin: 0 0 4px; font-size: 1.05rem; } .lb .cap p { margin: 0; color: #b9c4bd; font-size: .95rem; }
+.lb .cap h3 { margin: 0 0 4px; font: 400 1.25rem/1.3 var(--ui-title-font); color: #dedfff; }
+.lb .cap p { margin: 0; color: #adb6ff; font-size: .95rem; }
 @media (max-width: 600px) { .lb .nav { display: none; } }
 </style>
 </head>
 <body>
-<header class="top">
-  <h1>Road mod gallery for SimCity 3000 Unlimited</h1>
+<header class="top"><div class="ui-window">
+  <div class="ui-titlebar"><h1>Road mod gallery for SimCity 3000 Unlimited</h1></div>
+  <div class="ui-panel">
   <p class="lead">Every piece below is built with the stock tools. The mod recognises the roads you drew and swaps in its own pieces. No new tool, no new menu item. A game without the mod opens the same city with the stock pieces. Each junction is shown alone on flat ground (the slopes on a small hill), a close-up at zoom 4 and a wider view at zoom 3.</p>
   <p class="meta">101 junctions from the sc3mods road mod, release 2026-11-18. Select a picture to see it large and to switch between the close-up (zoom 4) and the wider view (zoom 3).</p>
-</header>
-<nav class="fams" aria-label="Families"><ul id="navlist"></ul></nav>
+  </div>
+</div></header>
+<nav class="fams ui-infobar" aria-label="Families"><ul id="navlist"></ul></nav>
 <main id="main"></main>
-<footer>
+<footer class="ui-infobar"><div class="in">
   <p>The mods are free and come as a zip on the <a href="https://github.com/nanofives/sc3kre/releases/latest">sc3kre releases page</a>. The README in the zip lists every junction's off switch. Bug reports are welcome as <a href="https://github.com/nanofives/sc3kre/issues">issues on GitHub</a>.</p>
   <p>SimCity 3000 Unlimited is the property of Electronic Arts / Maxis. The screenshots show the game with the mods installed. This is an independent project, not affiliated with or endorsed by Electronic Arts or Maxis.</p>
-</footer>
-<dialog class="lb" id="lb" aria-label="Picture">
+</div></footer>
+<dialog class="lb ui-lightbox" id="lb" aria-label="Picture">
   <div class="wrap">
     <div class="bar">
       <div class="views" role="group" aria-label="Zoom">
