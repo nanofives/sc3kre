@@ -1,3 +1,89 @@
+# stylemix switch: "Building style mix" can be turned off (2026-11-18)
+
+Asked on Simtropolis (NicoMT): turn off the building style mix like the other features, to keep one consistent
+style. Verdict: **done, the best of the three outcomes the brief allowed.** With the switch off no new European or
+Asian copies grow, and the copies already in a save load as themselves with their own art. Nothing crashed in 6
+starts.
+
+## What it does
+
+- Row **"Building style mix"** (es "Mezcla de estilos") at the bottom of the Features column of Turn mods on/off,
+  default on. Unticked = `[env] SC3NETMOD_STYLEMIX=0` in `sc3mods.ini`, applied at the next start, as for every
+  feature row. The env var does the same outside the game.
+- Off: sc3netmod writes a copy of the overlay `Apps\Res\BUILDFAM.IXF` to `%TEMP%\sc3netmod_nomix_<pid>.IXF` with the
+  weight of every family Key line whose id is above 65535 set to `0`, and serves that copy instead. Only style_sets
+  give ids that high (`netpack_stylesets.py` requires offset > 0xFFFF, growables and BAT growables must fit 16 bits).
+  The copy has the same length, so the IXF index stays valid. SIMGEOM `0x10001250` reads a Key line with weight 0 as
+  "skip it and lower BuildingCount" `[CONFIRMED @ 0x1000136f]`, so each family lists only the stock members and other
+  packages' growables. Copies left by dead processes are deleted at the next start with the switch off.
+- What it leaves alone: the copies' exemplars (`OccupantAttribs_Korea.IXF`), frame tables (`CSAttrib_Korea.IXF`) and
+  pixels (`*_netpack_set.DAT`) are still served, so a saved copy still resolves to its own attrib and art. The road
+  mod is untouched.
+- No package rebuild. It works with the netpacks already released (the release tree has no ledger, nothing to copy).
+- Feature column rows now 18 px apart (were 19): with 15 rows at 19 px the SALTFIX "Recalcular agua salada" checkbox
+  would have sat on Volver.
+
+## Evidence (dev/stylemix tree = LAN release 2026-11-18, Sacramento, windowed, posted input only)
+
+Arms ran 600 s at speed 4 with `simrun.ini [churn] anarchy_res=5000, anarchy_com=5000` (the 11-10 setting, so lots
+rebuild often) and autosave every 120 s. Counts from `stylemix_verify_count.py`.
+
+| Save | Switch | European (+400000) | Asian (+1500000) | Lots rebuilt vs shipped |
+|---|---|---|---|---|
+| Sacramento as shipped | | 0 | 0 | |
+| arm ON, first autosave | on | 2,481 | 2,190 | |
+| arm ON, last autosave | on | **2,808** | **2,291** | 9,398 |
+| arm OFF, first autosave | off (set from the ini row) | 0 | 0 | |
+| arm OFF, last autosave | off | **0** | **0** | 8,792 |
+| arm ON's last save loaded with the switch off, saved at once (paused) | off | **2,808** | **2,291** | |
+| same, about 15 game months later (10/7/2064 to the January 2066 budget window) | off | 477 | 328 | |
+
+1. **Off stops new mix buildings.** The OFF arm rebuilt 8,792 lots and every one is a stock building. Log:
+   `stylemix: OFF (SC3NETMOD_STYLEMIX=0): 299 family Key line(s) with ids above 65535 set to weight 0`, and
+   `GZResourceD.dll` opened `BuildFam.IXF` from the copy. Offline check of that copy: 836 Key lines, 299 changed,
+   all ids above 65535, all now weight 0, 299 bytes differ, none of the other 537 lines.
+2. **Saves with mix buildings load with the switch off**, no crash, and keep their copies: the save the game wrote
+   right after the load holds the same 2,808 + 2,291. In the 11-10 test a load **without** the package swapped every
+   copy for a stock building, so this is the better outcome.
+3. **They keep their look.** The same save loaded with the switch on and with it off gives the same first frame
+   except moving cars (`sw4_same_save_on_vs_off.jpg`, difference panel). The red-roofed house in that view, queried
+   with the switch off: `object.key 0x207EDC0E 0x0000057E 0x00061AF4` = **400116**, a European copy, "Casa Ambar",
+   drawn with its European art (`sw5_query_euro_copy_400116_switch_off.jpg`).
+4. **Copies disappear only when a lot rebuilds.** After 15 months the copies were down to 477 + 328. That is the
+   test's churn, not the switch: buildings grown during a run were rebuilt at the same rate whatever their style
+   (ON arm: copies 92.5%, North American buildings grown in the same run 89.9%, buildings as shipped 19.5%, between
+   its two autosaves). With the switch off a rebuilt lot picks a stock building. Players without the churn setting
+   keep their copies much longer.
+5. **The row:** shown unticked when the ini holds `SC3NETMOD_STYLEMIX=0`, ticked when not (`sw1_row_off_es.jpg`,
+   `sw2_row_on_es.jpg`). Ticking + OK: `MODTOGGLE> SC3NETMOD_STYLEMIX on at the next start`, key removed from the ini.
+   Unticking + OK: `off at the next start`, `SC3NETMOD_STYLEMIX=0` written. sc3mods.log at the next start:
+   `[env] SC3NETMOD_STYLEMIX=0 (sc3mods.ini)`.
+6. Strings: `resize.mt_stylemix` in all 7 tables (`sc3lang.py extract`, then `merge` for de/fr/it/nl/sv), `check`
+   clean (347 keys each). de "Baustil-Mischung", fr "Mélange des styles", it "Mix di stili", nl "Mix van bouwstijlen",
+   sv "Blandade byggstilar" (mine, for review).
+7. Stale copy sweep: a fake `sc3netmod_nomix_99991.IXF` was gone after one start with the switch off.
+
+Every start logs the known `0xC0000096 at SC3U.exe+0x84122` VEH line, nothing else.
+
+## Not checked
+
+- The page in the other 6 languages (only Spanish drawn). The longest new caption is 20 characters, shorter than
+  existing rows.
+- A player whose temp folder cannot be written: the log says `### stylemix: cannot write ...` and the mix stays on
+  (code path not run).
+- Style mix on but the switch off with a package that ships its own style_sets offset: any offset above 65535 is
+  treated the same, by design.
+
+## Files
+
+- Commit (from `dev/stylemix/wt`): `re/harness/src/sc3netmod.c` (STYLEMIX block in OVERLAY),
+  `re/harness/src/sc3resize.c` (row + 18 px pitch), `re/harness/lang/{de,en,es,fr,it,nl,sv}.txt`,
+  `re/tools/netmod/stylemix_switch_run.py` (the arm driver), `re/tools/netmod/examples/style_mix/README.md`
+  ("Turning it off"). MAIN: `verify/stylemix/RESULTS.md`, `re/sessions/STATUS_stylemix.md`.
+- Not committed: `verify/stylemix/owner_shots/sw1..sw5*.jpg` (game art), saves in `dev/stylemix/tree/Cities`.
+
+---
+
 # stylemix: the three building styles grow side by side, at random, in one city (2026-11-10)
 
 Verdict: **works, data only, no code.** A netpack package (`style_mix`) adds every European and Asian building that
