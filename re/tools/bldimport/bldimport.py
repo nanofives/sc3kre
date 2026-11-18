@@ -10,6 +10,17 @@ One command from a folder of models with a models.json (the classifier page's fo
   py -3.12 re/tools/bldimport/bldimport.py list    <folder> --game <g>              what each entry would become
   py -3.12 re/tools/bldimport/bldimport.py calibrate --game <g>                    ground diamond vs stock frames
   py -3.12 re/tools/bldimport/bldimport.py preview <folder> --game <g> --out x.jpg  models next to stock buildings
+  py -3.12 re/tools/bldimport/bldimport.py scan    <folder>                        models.json entries for .bld files
+
+Building Architect .bld files (task bldfile, 2026-11-18c) go in the same folder as the models. A .bld with no
+models.json entry gets defaults (name, lot and class from the file, bldfile.suggest_class; enabled only when the
+file's category is a house, shop or factory). Frames come from bldfile.frames(): the player's BAT.DAT frames when
+BAT.DAT holds the same building (all four views), else the file's 200x200 preview (slot 0, mirrored for slots 1
+and 3). Per-entry option `x_bld: {"art": "auto" | "bat" | "preview"}`. Format: re/analysis/BLD_FORMAT.md.
+
+Render style per entry: `x_bldrender: {"style": "stock" | "stock_sharp" | "clean"}` (bldrender.STYLES, task
+bldlook). OBJ models: unset = $SC3BLD_STYLE, else bldrender.DEFAULT_STYLE. .bld preview art: unset = the BA's own
+BAT.DAT look (bldfile.BA_LOOK), a named style applies its zoom-4 and palette steps. Part of the render cache key.
 
 What one enabled growable entry becomes (re/analysis/BUILDING_ART.md 6; recipe of BUILDING_PICK.md 6 C, the same
 containers as re/tools/batgrow.py, which is proven in game):
@@ -48,6 +59,7 @@ sys.path.insert(0, os.path.join(TOOLS, "netmod"))
 
 import batgrow as BG          # noqa: E402  IXF / TKB1 helpers, class table, Game
 import bldrender as R         # noqa: E402
+import bldfile as BF          # noqa: E402  .bld reader + frames (task bldfile)
 
 GROUP = 0xB1D10001                       # frame tables + pixels of this tool (no stock or tool container uses it)
 ID_FIRST, ID_LAST = 38000, 38999         # brief 2026-11-18b; 36xxx tests/slots, 37xxx BAT conversions
@@ -67,14 +79,39 @@ class ImportError_(Exception):
 
 # =================================================================== models.json
 
-def read_models(folder):
+def is_bld(f):
+    return f.lower().endswith(".bld")
+
+
+def bld_entry(folder, f):
+    """Default models.json entry for a .bld file (what `scan` writes and what an unlisted .bld gets)."""
+    try:
+        b = BF.read_bld(os.path.join(folder, f))
+    except (BF.BldError, OSError, struct.error) as e:
+        return {"file": f, "kind": "growable", "enabled": False, "x_bld": {"error": str(e)}}
+    cls = BF.suggest_class(b)
+    cat = "0x%X" % b["category"] if b["category"] is not None else None
+    e = {"file": f, "name": b["name"], "kind": "growable", "lot": [b["lot"], b["lot"]], "weight": 1,
+         "enabled": cls is not None, "x_bld": {"art": "auto", "architect": b["architect"], "category": cat}}
+    if cls is not None:
+        e["class"] = cls
+    return e
+
+
+def read_models(folder, with_bld=True):
+    """models.json entries, plus a default entry for every .bld in the folder that has none."""
     p = os.path.join(folder, "models.json")
+    blds = sorted(n for n in os.listdir(folder) if is_bld(n)) if with_bld and os.path.isdir(folder) else []
     if not os.path.isfile(p):
+        if blds:
+            return [bld_entry(folder, f) for f in blds]
         raise ImportError_("%s has no models.json (make one with classifier.html)" % folder)
     j = json.load(open(p, encoding="utf-8"))
     if j.get("sc3models") != 1:
         raise ImportError_("models.json: sc3models is %r, this tool reads version 1" % j.get("sc3models"))
-    return j.get("models", [])
+    models = j.get("models", [])
+    have = {m.get("file") for m in models}
+    return models + [bld_entry(folder, f) for f in blds if f not in have]
 
 
 def ids_for(folder, models):
@@ -113,7 +150,20 @@ def lot_of(m):
 def opts(m):
     x = m.get("x_bldrender") or {}
     return {"shadow": bool(x.get("shadow", True)), "ground": x.get("ground", "grass"),
-            "cell_m": float(x.get("cell_m", CELL_M))}
+            "cell_m": float(x.get("cell_m", CELL_M)), "style": style_name(m)}
+
+
+def style_name(m):
+    """bldrender style of an entry: x_bldrender.style, else $SC3BLD_STYLE, else bldrender.DEFAULT_STYLE (task
+    bldlook). Resolved here so the render cache key changes with it."""
+    return R.style_of((m.get("x_bldrender") or {}).get("style"))[0]
+
+
+def bld_style(m):
+    """.bld preview art: only a style named in the entry (x_bldrender.style), checked; None = the BA's own BAT.DAT
+    look (bldfile.BA_LOOK: zoom 4 doubled, no palette cut). $SC3BLD_STYLE is for bldrender's renders only."""
+    s = (m.get("x_bldrender") or {}).get("style")
+    return R.style_of(s)[0] if s else None
 
 
 # =================================================================== render (cached)
@@ -127,6 +177,8 @@ def model_files(folder, m):
     """The OBJ plus every MTL and texture it names (for the cache key)."""
     obj = os.path.join(folder, m["file"])
     out = [obj]
+    if is_bld(m["file"]):
+        return out
     for ln in open(obj, encoding="utf-8", errors="replace"):
         p = ln.split()
         if p[:1] == ["mtllib"]:
@@ -143,13 +195,22 @@ def model_files(folder, m):
     return out
 
 
-def render_key(folder, m, n):
+def bld_art(m):
+    return (m.get("x_bld") or {}).get("art", "auto")
+
+
+def render_key(folder, m, n, game=None):
     h = hashlib.sha256()
     for p in model_files(folder, m):
         _sha_file(p, h)
-    for p in (os.path.join(HERE, "bldrender.py"),):
+    for p in (os.path.join(HERE, "bldrender.py"), os.path.join(HERE, "bldfile.py")):
         _sha_file(p, h)
-    h.update(json.dumps([n, m.get("scale", 1.0), m.get("rotate_deg", 0), opts(m)], sort_keys=True).encode())
+    if is_bld(m["file"]):
+        if game is not None and bld_art(m) != "preview" and game.exists(BG.BAT_REL):
+            h.update(game.read(BG.BAT_REL))
+        h.update(json.dumps([n, bld_art(m), game is not None, bld_style(m)]).encode())
+    else:
+        h.update(json.dumps([n, m.get("scale", 1.0), m.get("rotate_deg", 0), opts(m)], sort_keys=True).encode())
     return h.hexdigest()
 
 
@@ -157,11 +218,12 @@ def frame_dir(folder, m):
     return os.path.join(folder, BUILD_DIR, os.path.splitext(m["file"])[0])
 
 
-def render_one(folder, m, n, force=False, log=print):
-    """-> (frames {(z, r): (image, (L, T))}, info). Cached in sc3build/<stem>/ (PNG + anchors.json + meta.json)."""
+def render_one(folder, m, n, force=False, log=print, game=None):
+    """-> (frames {(z, r): (image, (L, T))}, info). Cached in sc3build/<stem>/ (PNG + anchors.json + meta.json).
+    game: the game folder (batgrow.Game); a .bld entry looks its building up in that game's BAT.DAT."""
     from PIL import Image
     d = frame_dir(folder, m)
-    key = render_key(folder, m, n)
+    key = render_key(folder, m, n, game)
     meta_p = os.path.join(d, "meta.json")
     if not force and os.path.isfile(meta_p):
         meta = json.load(open(meta_p, encoding="utf-8"))
@@ -173,6 +235,12 @@ def render_one(folder, m, n, force=False, log=print):
                     nm = "z%d_r%d.png" % (z, r)
                     fr[(z, r)] = (Image.open(os.path.join(d, nm)).convert("RGBA"), tuple(anc[nm]))
             return fr, meta["info"]
+    if is_bld(m["file"]):
+        b = BF.read_bld(os.path.join(folder, m["file"]))
+        fr, src = BF.frames(b, game, bld_art(m), style=bld_style(m))
+        info = {"bld": True, "art": src, "style": bld_style(m) or "ba", "lot": b["lot"], "architect": b["architect"], "ident": "%08X" % b["ident"],
+                "grid": b["model"]["grid"], "height": b["model"]["height"]}
+        return _cache_frames(d, fr, key, info, n, m), info
     o = opts(m)
     mesh = R.load_obj(os.path.join(folder, m["file"]))
     mt, info = R.place(mesh, n, cell_m=o["cell_m"], scale=float(m.get("scale", 1.0)),
@@ -185,7 +253,15 @@ def render_one(folder, m, n, force=False, log=print):
     if not info["fits"]:
         log("  note: %s is %.1f x %.1f m, larger than its %dx%d lot (%.0f m): it will overhang the neighbours"
             % (m["file"], info["size_m"][0], info["size_m"][2], n, n, info["lot_m"]))
-    fr = R.render_model(mt, n, ground=None if o["ground"] == "none" else o["ground"], shadows=o["shadow"])
+    info["style"] = o["style"]
+    fr = R.render_model(mt, n, ground=None if o["ground"] == "none" else o["ground"], shadows=o["shadow"],
+                        style=o["style"])
+    return _cache_frames(d, fr, key, info, n, m), info
+
+
+def _cache_frames(d, fr, key, info, n, m):
+    """Write the frames, anchors.json, sheet.png and meta.json into the cache folder d; -> fr."""
+    meta_p = os.path.join(d, "meta.json")
     os.makedirs(d, exist_ok=True)
     anc = {}
     for (z, r), (im, LT) in fr.items():
@@ -197,7 +273,7 @@ def render_one(folder, m, n, force=False, log=print):
     R.sheet(fr, os.path.join(d, "sheet.png"), scale=2)
     with open(meta_p, "w", encoding="utf-8", newline="\n") as fh:
         json.dump({"key": key, "info": info, "lot": n, "file": m["file"]}, fh, indent=1)
-    return fr, info
+    return fr
 
 
 # =================================================================== validate
@@ -214,6 +290,15 @@ def plan(folder, game, log=print):
         name = (m.get("name") or os.path.splitext(f)[0]).strip()
         why = None
         n, lot_err = lot_of(m)
+        if is_bld(f) and os.path.isfile(os.path.join(folder, f)) and not lot_err:
+            try:
+                bl = BF.read_bld(os.path.join(folder, f))["lot"]
+            except (BF.BldError, OSError, struct.error) as e:
+                lot_err = "not a readable .bld file (%s)" % e
+            else:
+                if "lot" in m and n != bl:
+                    lot_err = "lot %dx%d in models.json, the .bld file is %dx%d" % (n, n, bl, bl)
+                n = bl
         cls = m.get("class")
         w = m.get("weight", 1)
         if not m.get("enabled", True):
@@ -222,8 +307,11 @@ def plan(folder, game, log=print):
             why = "kind %r: only growable buildings this round" % m.get("kind")
         elif not os.path.isfile(os.path.join(folder, f)):
             why = "file not in the folder"
-        elif not f.lower().endswith(".obj"):
-            why = "only .obj models this round"
+        elif not (f.lower().endswith(".obj") or is_bld(f)):
+            why = "only .obj models and .bld files"
+        elif cls is None and is_bld(f):
+            why = "no class: its category (%s) is not a house, shop or factory, set one in models.json" % (
+                (m.get("x_bld") or {}).get("category"))
         elif lot_err:
             why = lot_err
         elif not isinstance(w, int) or not 1 <= w <= 1000:
@@ -319,6 +407,15 @@ def buildfam_lines(bf, lines):
     return BG.replace(bf, new) if new else bf
 
 
+def describe(info):
+    if info.get("bld"):
+        return "%s art from the .bld (id %s, by %s)%s" % (
+            info["art"], info["ident"], info["architect"],
+            ", style %s" % info.get("style", "ba") if info["art"] == "preview" else "")
+    return "%d tris, %.1f x %.1f x %.1f m, style %s" % (info["triangles"], info["size_m"][0], info["size_m"][2],
+                                                       info["size_m"][1], info.get("style", "?"))
+
+
 def build_files(folder, game, src, log=print, force_render=False):
     """-> (files {rel: bytes}, report lines)."""
     from sprite_patch import record_from_image, anchor_payload
@@ -341,7 +438,7 @@ def build_files(folder, game, src, log=print, force_render=False):
         nid, n, lu = e["id"], e["lot"], e["class"]
         if nid in bld:
             raise ImportError_("id %d already has a stock building exemplar" % nid)
-        frames, info = render_one(folder, e["model"], n, force=force_render, log=log)
+        frames, info = render_one(folder, e["model"], n, force=force_render, log=log, game=game)
         base, bfile = table[lu]["bases"][n]
         ex = BG.base_exemplar(game, base, bfile)
         tab, tmpl = stock_table_and_template(game, ex)
@@ -363,11 +460,10 @@ def build_files(folder, game, src, log=print, force_render=False):
         names.append((TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
         for f in table[lu]["families"]:
             lines.setdefault(f, []).append(b"Key: 1406,545184782,%d,%d   %s\r\n" % (nid, e["weight"], nm))
-        rep.append("grow  [%d] %s: \"%s\", class %d (%s), %dx%d, weight %d, stats of stock %d, families %s, %d tris, "
-                   "%.1f x %.1f x %.1f m%s" % (nid, e["file"], e["name"], lu, BG.CLASS_LABEL[lu], n, n, e["weight"],
-                                               base, ",".join(map(str, table[lu]["families"])), info["triangles"],
-                                               info["size_m"][0], info["size_m"][2], info["size_m"][1],
-                                               ", %d magenta px nudged" % nudged if nudged else ""))
+        rep.append("grow  [%d] %s: \"%s\", class %d (%s), %dx%d, weight %d, stats of stock %d, families %s, %s%s" % (
+            nid, e["file"], e["name"], lu, BG.CLASS_LABEL[lu], n, n, e["weight"], base,
+            ",".join(map(str, table[lu]["families"])), describe(info),
+            ", %d magenta px nudged" % nudged if nudged else ""))
     files = {}
     keep = set(e["id"] for e in entries)
     if entries or src:
@@ -461,11 +557,11 @@ def cmd_build(a, render_only=False):
         entries, rep, _ = plan(folder, None)
         for r in rep:
             print(r)
+        game = BG.Game(a.game) if getattr(a, "game", None) else None
         for e in entries:
-            fr, info = render_one(folder, e["model"], e["lot"], force=a.force)
-            print("render [%s] %s -> %s (%d tris, %.1f x %.1f x %.1f m)" % (
-                e["id"], e["file"], os.path.join(frame_dir(folder, e["model"]), "sheet.png"), info["triangles"],
-                info["size_m"][0], info["size_m"][2], info["size_m"][1]))
+            fr, info = render_one(folder, e["model"], e["lot"], force=a.force, game=game)
+            print("render [%s] %s -> %s (%s)" % (
+                e["id"], e["file"], os.path.join(frame_dir(folder, e["model"]), "sheet.png"), describe(info)))
         return 0
     game = BG.Game(a.game)
     if not game.exists("Apps/Sys/SYS.PAK"):
@@ -487,6 +583,25 @@ def cmd_build(a, render_only=False):
     st = apply(game, files, src, state)
     for rel in sorted(st["files"]):
         print("installed %s" % rel)
+    return 0
+
+
+def cmd_scan(a):
+    """Add a models.json entry for every .bld in the folder that has none (other entries kept as they are)."""
+    folder = os.path.abspath(a.folder)
+    p = os.path.join(folder, "models.json")
+    j = json.load(open(p, encoding="utf-8")) if os.path.isfile(p) else {"sc3models": 1, "models": []}
+    if j.get("sc3models") != 1:
+        raise ImportError_("models.json: sc3models is %r, this tool reads version 1" % j.get("sc3models"))
+    have = {m.get("file") for m in j["models"]}
+    added = [bld_entry(folder, f) for f in sorted(os.listdir(folder)) if is_bld(f) and f not in have]
+    j["models"] += added
+    for e in added:
+        print("added %s: \"%s\" %s, class %s%s" % (e["file"], e.get("name", "?"), "x".join(map(str, e.get("lot", []))),
+                                              e.get("class"), "" if e["enabled"] else " (disabled: set a class)"))
+    with open(p, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(j, fh, indent=1)
+    print("%s: %d added, %d entries" % (p, len(added), len(j["models"])))
     return 0
 
 
@@ -578,7 +693,7 @@ def cmd_preview(a):
     z = a.zoom
     rows = []
     for e in entries:
-        fr, _ = render_one(folder, e["model"], e["lot"])
+        fr, _ = render_one(folder, e["model"], e["lot"], game=game)
         base = table[e["class"]]["bases"][e["lot"]][0]
         st = stock_building_frames(game, base)
         sz = min(z, 3)
@@ -709,6 +824,9 @@ def main(argv):
     s = sub.add_parser("render")
     s.add_argument("folder")
     s.add_argument("--force", action="store_true")
+    s.add_argument("--game", help=".bld files: look the building up in this game's BAT.DAT")
+    s = sub.add_parser("scan")
+    s.add_argument("folder")
     s = sub.add_parser("restore")
     s.add_argument("--game", required=True)
     s = sub.add_parser("list")
@@ -730,9 +848,9 @@ def main(argv):
     try:
         if a.cmd == "render":
             return cmd_build(a, render_only=True)
-        return {"build": cmd_build, "pack": cmd_build, "restore": cmd_restore, "list": cmd_list,
+        return {"build": cmd_build, "pack": cmd_build, "restore": cmd_restore, "list": cmd_list, "scan": cmd_scan,
                 "calibrate": cmd_calibrate, "preview": cmd_preview, "check": cmd_check}[a.cmd](a) or 0
-    except (ImportError_, BG.BatError, R.RenderError) as e:
+    except (ImportError_, BG.BatError, R.RenderError, BF.BldError) as e:
         print("bldimport: %s" % e)
         return 1
 

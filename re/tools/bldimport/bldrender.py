@@ -17,7 +17,12 @@ Model +X -> tile u, +Z -> tile v, +Y -> up. So the model's front (+Z, the side f
 front view after export) lands on the lot's +v edge, the lower-right face in slot 0, where the stock houses have
 their front doors (BUILDING_ART.md 3).
 
-Public: load_obj, place, render_model -> {(z, r): (RGBA image, (L, T))}, CALIB.
+Render styles (task bldlook 2026-11-18c, BUILDING_ART.md 4.1): `stock` (default: the stock art's axis wall light,
+zoom 4 = zoom 3 doubled, 255-colour palette per frame, stock contrast / saturation / lawn per zoom, surface grain,
+darker front lawn edge), `stock_sharp` (the same with a native zoom 4), `clean` (the 2026-11-18b look, byte for
+byte). Pick one with render_model(..., style=) or $SC3BLD_STYLE.
+
+Public: load_obj, place, render_model -> {(z, r): (RGBA image, (L, T))}, CALIB, STYLES, DEFAULT_STYLE.
 """
 import math
 import os
@@ -59,6 +64,66 @@ SUN = SUN / np.linalg.norm(SUN)
 AMBIENT = 0.50
 DIFFUSE = 0.62
 SHADOW_KEEP = 0.65          # fraction of the direct light a shadowed sample LOSES (stock shadows are soft)
+
+# ============================================================================================== styles (task bldlook)
+# Measured on 75 stock growables x 16 frames (verify/bldlook/RESULTS.md, BUILDING_ART.md 4.1). The `stock` style's
+# numbers are fitted to that table; `clean` is the 2026-11-18b look, unchanged.
+#   light    "sun": one directional sun fixed to the screen (clean).
+#            "axis": stock wall light follows the model's axis, not the screen: the model's +-u walls are the light
+#            ones and the +-v walls the dark ones in EVERY slot, so the lit side swaps with each view rotation
+#            (stock right/left luminance 0.81 / 1.27 / 0.81 / 1.23 in slots 0-3; the same world-axis rule as the
+#            stock highway walls). Roof light from the up component.
+#   zoom4    "native": own zoom-4 render. "double": zoom 3 pixel-doubled, as 1,908 of 1,936 stock zoom-4 frames are.
+#   palette  None, or the colour count per frame: every stock frame holds <= 255 colours (1,200 of 1,200 frames,
+#            zoom 3 median 248): the art went through an 8-bit palette per frame before the RGB565 export.
+#   shadow_sun  the sun the shadow map uses (v, u, h), fixed to the screen; None = SUN. In "axis" light only
+#            surfaces facing it take shadow (lawn, roofs), never a wall turned away from it.
+#   rim      the stock lawn is darker along the lot's two FRONT edges (heat map of the dark lawn pixels over every
+#            stock 1x1 / 2x2 lot), not in a cast shadow beside the building: a patchy band `width` cells deep.
+#   values given as {zoom: value} change per zoom: stock contrast, saturation and lawn shadows all fall at the
+#   smaller zooms (contrast 1.23 / 0.94 / 0.70 / 0.51, dark-lawn share 0.18 / 0.10 / 0.04 / 0.00 at zooms 3..0).
+STYLES = {
+    "clean": {"light": "sun", "ambient": AMBIENT, "diffuse": DIFFUSE, "shadow_keep": SHADOW_KEEP, "zoom4": "native",
+              "palette": None, "dither": False, "sat": 1.0, "contrast": 1.0, "pivot": 0.45, "grain": 0.0,
+              "edge": 0.0, "grass": None, "grass_amp": 0.07},
+    "stock": {"light": "axis", "ambient": 0.47, "top": 0.42, "ku": 0.37, "kv": 0.20,
+              "shadow_sun": None, "shadow_keep": {0: 0.25, 1: 0.40, 2: 0.55, 3: 0.70},
+              "zoom4": "double", "palette": 255, "dither": False,
+              "sat": {0: 2.6, 1: 2.2, 2: 2.0, 3: 2.0}, "contrast": {0: 1.4, 1: 1.2, 2: 1.3, 3: 1.35}, "pivot": 0.42,
+              "grain": {0: 0.12, 1: 0.18, 2: 0.24, 3: 0.30}, "edge": 0.0,
+              "rim": {"width": 0.30, "dark": {0: 0.10, 1: 0.30, 2: 0.50, 3: 0.62}},
+              # lit lawn colour per zoom, fitted so the measured lit lawn = the stock median (zooms 0..3:
+              # 114/137/104, 104/131/90, 99/133/81, 94/136/73)
+              "grass": {0: (120, 144, 110), 1: (106, 134, 93), 2: (102, 138, 84), 3: (100, 145, 78)},
+              "grass_amp": 0.10},
+}
+STYLES["stock_sharp"] = dict(STYLES["stock"], zoom4="native")     # stock colours and light, zoom 4 drawn natively
+DEFAULT_STYLE = "stock"
+
+
+def _pz(v, z):
+    """A style value that may be given per zoom ({zoom: value}, the highest key <= z wins)."""
+    if isinstance(v, dict):
+        ks = [k for k in sorted(v) if k <= z]
+        return v[ks[-1]] if ks else v[min(v)]
+    return v
+
+
+def _sun(v):
+    if v is None:
+        return SUN
+    v = np.asarray(v, dtype=np.float64)
+    return v / np.linalg.norm(v)
+
+
+def style_of(style=None):
+    """-> (name, params). None = $SC3BLD_STYLE, else DEFAULT_STYLE. A dict is taken as the params."""
+    if isinstance(style, dict):
+        return style.get("name", "custom"), style
+    name = style or os.environ.get("SC3BLD_STYLE") or DEFAULT_STYLE
+    if name not in STYLES:
+        raise RenderError("render style %r: choose one of %s" % (name, ", ".join(sorted(STYLES))))
+    return name, STYLES[name]
 
 
 class RenderError(Exception):
@@ -280,9 +345,9 @@ def _face_normals(t):
     return nrm / ln
 
 
-def _shadow_map(t_all, res=0.004):
+def _shadow_map(t_all, res=0.004, sun=None):
     """Orthographic depth map along SUN over every triangle. -> (basis a, basis b, grid origin, res, depth map)."""
-    L = SUN
+    L = SUN if sun is None else sun
     a = np.cross(L, [0.0, 0.0, 1.0])
     a /= np.linalg.norm(a)
     b = np.cross(L, a)
@@ -293,18 +358,18 @@ def _shadow_map(t_all, res=0.004):
     H = int(math.ceil((pb.max() - bmin) / res)) + 8
     if W * H > 60e6:
         res *= math.sqrt(W * H / 60e6)
-        return _shadow_map(t_all, res)
+        return _shadow_map(t_all, res, sun)
     sx, sy = (pa - amin) / res, (pb - bmin) / res
     _, _, zb = rasterize(sx, sy, -pl, W, H)                      # nearest to the light = largest p . L
-    return a, b, amin, bmin, res, zb
+    return a, b, amin, bmin, res, zb, L
 
 
 def _in_shadow(pts, sm, bias):
-    a, b, amin, bmin, res, zb = sm
+    a, b, amin, bmin, res, zb, L = sm
     p = pts[..., [1, 0, 2]]
     i = np.clip(((p @ a - amin) / res).astype(int), 0, zb.shape[1] - 1)
     j = np.clip(((p @ b - bmin) / res).astype(int), 0, zb.shape[0] - 1)
-    return zb[j, i] < (-(p @ SUN) - bias)
+    return zb[j, i] < (-(p @ L) - bias)
 
 
 def _sample_tex(tex, uv):
@@ -314,19 +379,67 @@ def _sample_tex(tex, uv):
     return tex[np.clip(np.rint(y).astype(int), 0, h - 1), np.clip(np.rint(x).astype(int), 0, w - 1)]
 
 
-def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, ground_tex=None):
+def _hash_noise(p, freq, seed=0):
+    """Stable per-position value noise in [-1, 1]: one value per (1 / freq)-cell voxel of the slot-0 model space,
+    so the grain sticks to the surface in every slot."""
+    q = np.floor(p * freq).astype(np.int64)
+    h = (q[:, 0] * 73856093) ^ (q[:, 1] * 19349663) ^ (q[:, 2] * 83492791) ^ (seed * 2654435761)
+    h = (h ^ (h >> 13)) * 1274126177
+    h = h ^ (h >> 16)
+    return ((h & 0xFFFF).astype(np.float32) / 32767.5) - 1.0
+
+
+def _value_noise(p, freq, seed=0):
+    """Smooth (trilinear) value noise in about [-1, 1] over 3D points: soft blotches of 1 / freq cells, not salt."""
+    q = p * freq
+    i = np.floor(q)
+    f = q - i
+    f = f * f * (3 - 2 * f)
+    out = np.zeros(len(p), dtype=np.float32)
+    for c in range(8):
+        o = np.array([(c >> 0) & 1, (c >> 1) & 1, (c >> 2) & 1], dtype=np.float64)
+        w = np.prod(np.where(o == 1, f, 1 - f), axis=1)
+        out += w * _hash_noise((i + o) + 0.5, 1.0, seed)
+    return out
+
+
+def _grain(p, W, seed=0):
+    """Two octaves of smooth noise at about 6 and 2 px (at the frame's zoom) on the slot-0 surface position."""
+    return 0.65 * _value_noise(p, W / 6.0, seed) + 0.35 * _value_noise(p, W / 2.0, seed + 1)
+
+
+def _edge_mask(ib, nrm_buf, kind_buf, ss):
+    """Samples of the model next to (within ss / 2 samples) a sample of another face orientation, of the ground or
+    of nothing: the creases and the silhouette that the stock renders draw a shade lighter."""
+    model = (ib >= 0) & (kind_buf == 0)
+    out = np.zeros_like(model)
+    k = max(ss // 2, 1)
+    for dy, dx in ((0, k), (0, -k), (k, 0), (-k, 0)):
+        nb_i = np.roll(np.roll(ib, dy, 0), dx, 1)
+        nb_k = np.roll(np.roll(kind_buf, dy, 0), dx, 1)
+        nb_n = np.roll(np.roll(nrm_buf, dy, 0), dx, 1)
+        diff = (nb_i < 0) | (nb_k != 0) | ((nrm_buf * nb_n).sum(-1) < 0.8)
+        out |= model & diff
+    return out
+
+
+def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, ground_tex=None, style=None):
     """One frame. mesh tri in slot-0 tile coords (u, v, h). -> (RGBA PIL image, (L, T))."""
+    sname, st = style_of(style)
     W = 8 << z
     dx, dy, g_px = (calib or CALIB)[z]
     g_px = _growth(g_px, n)
     g = g_px / (W / 2.0)                                         # px of growth -> tile units along u / v
     parts = [_rot_slot(mesh["tri"], n, r)]
+    parts0 = [mesh["tri"]]
     kinds = [np.zeros(len(mesh["tri"]), dtype=np.int8)]
     if ground:
         gt, guv = ground_mesh(n, g)
         parts.append(_rot_slot(gt, n, r))
+        parts0.append(gt)
         kinds.append(np.ones(2, dtype=np.int8))
     t = np.concatenate(parts)
+    t0 = np.concatenate(parts0)                                  # the same triangles in slot 0 (model axes)
     kind = np.concatenate(kinds)
     X, Y = _screen(t, W)
     B = n * W // 4 + 1
@@ -343,18 +456,42 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
         bw = bb[cov]
         pts = (t[ids] * bw[:, :, None]).sum(1)                   # (u, v, h) of every covered sample
         nrm = _face_normals(t)[ids]
+        nrm0 = _face_normals(t0)[ids]                            # (v, u, h) of slot 0
         flip = (nrm @ F) > 0                                     # face points away from the camera: use its back
         nrm[flip] *= -1
-        nl = np.clip(nrm @ SUN, 0, None)
+        nrm0[flip] *= -1
+        sh = None
         if shadows and (kind == 0).any():
-            sm = _shadow_map(t[kind == 0])
+            sm = _shadow_map(t[kind == 0], sun=_sun(st.get("shadow_sun")))
             sh = _in_shadow(pts, sm, bias=0.02)
-            nl = np.where(sh, nl * (1 - SHADOW_KEEP), nl)      # a shadowed sample keeps part of its direct light
-        light = AMBIENT + DIFFUSE * nl
+            if st["light"] == "axis":           # shadows fall on what faces the shadow sun (ground, roofs), never
+                sh &= (nrm @ _sun(st.get("shadow_sun"))) > 0.05     # on a wall turned away from it
+        if st["light"] == "axis":
+            direct = st["top"] * np.clip(nrm0[:, 2], 0, None) + st["ku"] * np.abs(nrm0[:, 1]) \
+                + st["kv"] * np.abs(nrm0[:, 0])
+            if sh is not None:
+                direct = np.where(sh, direct * (1 - _pz(st["shadow_keep"], z)), direct)
+            light = st["ambient"] + direct
+        else:
+            nl = np.clip(nrm @ SUN, 0, None)
+            if sh is not None:
+                nl = np.where(sh, nl * (1 - _pz(st["shadow_keep"], z)), nl)   # a shadowed sample keeps part of its light
+            light = st["ambient"] + st["diffuse"] * nl
         alb = np.empty((len(ids), 3), dtype=np.float32)
         is_g = kind[ids] == 1
+        rim = st.get("rim")
+        if rim and is_g.any() and _pz(rim["dark"], z):
+            # stock lots are darker along their two FRONT edges (the lower-left u = 0 and lower-right v = n edges
+            # of the frame, in every slot): a patchy band about rim["width"] cells deep (BUILDING_ART.md 4.1)
+            pg = pts[is_g]
+            d = np.minimum(pg[:, 0], n - pg[:, 1])
+            fall = np.clip(1.0 - d / rim["width"], 0, 1) ** 1.5
+            patch = np.clip(0.55 + 0.6 * _value_noise(_rot_slot(pg, n, (4 - r) % 4), 4.0, 11), 0, 1)
+            lg = light[is_g] * (1.0 - _pz(rim["dark"], z) * fall * patch)
+            light = light.copy()
+            light[is_g] = lg
         if is_g.any():
-            gtex = ground_tex if ground_tex is not None else grass_texture()
+            gtex = ground_tex if ground_tex is not None else grass_texture(**_grass_args(st, z))
             # ground uv in slot-0 lot coordinates: undo the slot rotation of the sample position
             p0 = _rot_slot(pts[is_g], n, (4 - r) % 4)
             k_uv = GRASS_TEXELS_PER_CELL / gtex.shape[0]
@@ -371,8 +508,32 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
                 sel = (mids == k) & hu
                 if sel.any():
                     a2[sel] = _sample_tex(m["tex"], uvt[sel])
+            if _pz(st["sat"], z) != 1.0:
+                # vibrance: stock walls and roofs are more saturated, but a colour that is already saturated is
+                # pushed less (a plain gain turns a red roof pure red)
+                y = (a2 @ np.array([0.299, 0.587, 0.114], dtype=np.float32))[:, None]
+                s0 = (a2.max(1) - a2.min(1))[:, None] / np.maximum(a2.max(1), 1e-6)[:, None]
+                k = 1.0 + (_pz(st["sat"], z) - 1.0) * (1.0 - s0)
+                a2 = np.clip(y + (a2 - y) * k, 0, 1)
+            if _pz(st["grain"], z):                                      # surface grain of the stock textures
+                nz = _grain(_rot_slot(pts[mi], n, (4 - r) % 4), W)
+                a2 = np.clip(a2 * (1.0 + _pz(st["grain"], z) * nz)[:, None], 0, 1)
             alb[mi] = a2
+        if _pz(st["edge"], z):
+            nb = np.zeros(ib.shape + (3,), dtype=np.float32)
+            nb[cov] = nrm
+            kb = np.full(ib.shape, -1, dtype=np.int8)
+            kb[cov] = kind[ids]
+            em = _edge_mask(ib, nb, kb, ss)[cov]
+            light = np.where(em, light * (1.0 + _pz(st["edge"], z)), light)
         rgb[cov] = np.clip(alb * light[:, None], 0, 1)
+        if _pz(st["contrast"], z) != 1.0:
+            mo = kind[ids] == 0                                  # the model only: the lawn keeps its measured colour
+            v = rgb[cov]
+            y = v[mo] @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+            y2 = np.clip(st["pivot"] + (y - st["pivot"]) * _pz(st["contrast"], z), 0, 1)
+            v[mo] = np.clip(v[mo] * (y2 / np.maximum(y, 1e-4))[:, None], 0, 1)   # luminance only, hue kept
+            rgb[cov] = v
     # box filter ss x ss -> coverage alpha + mean colour of covered samples
     c = cov.reshape(Hh, ss, Ww, ss).sum((1, 3)).astype(np.float32)
     s = (rgb * cov[..., None]).reshape(Hh, ss, Ww, ss, 3).sum((1, 3))
@@ -385,7 +546,36 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
     rows = np.where(img[..., 3].any(1))[0]
     cut = min(int(rows[0]), top) if len(rows) else 0
     img = img[cut:]
+    if st["palette"]:
+        img = palette_cut(img, st["palette"], st["dither"])
     return quantize565(Image.fromarray(img, "RGBA")), (0, top - cut)
+
+
+def palette_cut(img, colours=255, dither=False):
+    """Opaque pixels through an adaptive palette of `colours` entries per frame (median cut), as the stock frames
+    were: <= 255 colours each. Transparent pixels untouched."""
+    op = img[..., 3] >= 128
+    if op.sum() == 0:
+        return img
+    px = np.ascontiguousarray(img[..., :3][op])
+    if len(np.unique(px[:, 0].astype(np.int32) << 16 | px[:, 1].astype(np.int32) << 8 | px[:, 2])) <= colours:
+        return img
+    strip = Image.fromarray(px.reshape(1, -1, 3), "RGB")
+    dm = Image.Dither.FLOYDSTEINBERG if dither else Image.Dither.NONE
+    q = strip.quantize(colors=colours, method=Image.Quantize.MEDIANCUT, dither=dm)
+    out = img.copy()
+    out[..., :3][op] = np.asarray(q.convert("RGB")).reshape(-1, 3)
+    return out
+
+
+def _grass_args(st, z):
+    """grass_texture() keywords for a style at zoom z: base = the style's lit lawn colour / the ground's light."""
+    g = st.get("grass")
+    if not g:
+        return {}
+    c = g[min(z, max(g))]
+    lit = st["ambient"] + (st["top"] if st["light"] == "axis" else st["diffuse"] * max(SUN[2], 0))
+    return {"base": tuple(min(x / 255.0 / lit, 1.0) for x in c), "amp": st.get("grass_amp", 0.07)}
 
 
 def quantize565(im):
@@ -402,15 +592,28 @@ def quantize565(im):
     return Image.fromarray(a, "RGBA")
 
 
-def render_model(mesh_tile, n, zooms=range(ZOOMS), ss=4, ground="grass", shadows=True, calib=None):
-    """-> {(z, r): (image, (L, T))} for every zoom x slot."""
-    out = {}
-    gt = grass_texture()
-    for z in zooms:
+def render_model(mesh_tile, n, zooms=range(ZOOMS), ss=4, ground="grass", shadows=True, calib=None, style=None):
+    """-> {(z, r): (image, (L, T))} for every zoom x slot. style: a STYLES name (None = $SC3BLD_STYLE, else
+    DEFAULT_STYLE `stock`). With zoom4 "double" the zoom-4 frame is the zoom-3 frame at twice the size, anchor x 2,
+    which is what the stock scale-2 frames draw."""
+    sname, st = style_of(style)
+    zooms = list(zooms)
+    need = sorted(set(zooms) | ({3} if 4 in zooms and st["zoom4"] == "double" else set()))
+    out, gts = {}, {}
+    for z in need:
+        if z == 4 and st["zoom4"] == "double":
+            for r in range(ROTS):
+                im, (L, T) = out[(3, r)]
+                out[(4, r)] = (im.resize((im.width * 2, im.height * 2), Image.NEAREST), (2 * L, 2 * T))
+            continue
+        ga = _grass_args(st, z)
+        key = tuple(sorted(ga.items()))
+        if key not in gts:
+            gts[key] = grass_texture(**ga)
         for r in range(ROTS):
             out[(z, r)] = render_frame(mesh_tile, n, z, r, ss=ss if z >= 2 else 8, ground=ground,
-                                       shadows=shadows, calib=calib, ground_tex=gt)
-    return out
+                                       shadows=shadows, calib=calib, ground_tex=gts[key], style=st)
+    return {k: out[k] for k in sorted(out) if k[0] in zooms}
 
 
 def sheet(frames, out_png, scale=1, bg=(60, 100, 60, 255), pad=6):

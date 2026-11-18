@@ -84,7 +84,7 @@ pre#selftest{display:none}
   <button id="btnOpen" class="primary">Open folder</button>
   <button id="btnSave" disabled>Save models.json</button>
   <button id="btnTheme" title="Switch light / dark">Theme</button>
-  <span id="status">Open a folder with OBJ, glTF, GLB or FBX models. An existing models.json is read back.</span>
+  <span id="status">Open a folder with OBJ, glTF, GLB or FBX models or Building Architect .bld files. An existing models.json is read back.</span>
 </header>
 <input type="file" id="fileFallback" webkitdirectory multiple hidden>
 
@@ -265,8 +265,98 @@ function loop() {
   renderer.render(scene, camera);
 }
 
+// ---------------------------------------------------------------- Building Architect .bld files (task bldfile)
+// BLD-BEGIN (plain JS, no DOM: re/tools/bldimport/bld_js_check.mjs runs this block under node)
+// A .bld is an IXF container (magic 0x80C381D7, 20-byte index {group, instance, type, offset, size}), group
+// 0xC3F8D4A9. Records used here (re/analysis/BLD_FORMAT.md): info 0xE3F87B0F (u8 lot, u8 len + name, u8 len +
+// architect, u32 len + string, u32 id), category 0x644D7179 (u32), preview 0xE3F87B0E (u16 format, u16 w, u16 h,
+// u32 packed length, QFS stream of w*h RGB565, key 0xF81F). The preview is the BA's render of view slot 0.
+const BLD_GROUP = 0xC3F8D4A9;
+const BLD_CATEGORY_ZONE = { 0x208: 'R', 0x209: 'C', 0x20A: 'I' };   // read from the 17 shipped names only
+const BLD_DEFAULT_CLASS = { R: { 1: 3300, 2: 3900, 3: 4500, 4: 4500 }, C: { 1: 5100, 2: 5700, 3: 6300, 4: 6700 },
+                            I: { 1: 8700, 2: 8700, 3: 8900, 4: 9100 } };   // = batgrow.DEFAULT_CLASS
+function qfsDecompress(u8, pos, end) {
+  // RefPack / QFS, transcribed from re/tools/qfs.py (sc3_qfs_decompress 0x10050d09)
+  let p = pos + ((u8[pos] & 1) ? 5 : 2);
+  const size = (u8[p] << 16) | (u8[p + 1] << 8) | u8[p + 2]; p += 3;
+  const out = new Uint8Array(size); let o = 0;
+  const lit = n => { if (p + n > end || o + n > size) throw new Error('QFS literal run overruns'); out.set(u8.subarray(p, p + n), o); o += n; p += n; };
+  const back = (off, n) => { if (off > o || o + n > size) throw new Error('QFS back-reference out of range'); for (let k = 0; k < n; k++, o++) out[o] = out[o - off]; };
+  for (;;) {
+    if (p >= end) throw new Error('QFS stream has no terminator');
+    const b0 = u8[p];
+    if (!(b0 & 0x80)) { const b1 = u8[p + 1]; p += 2; lit(b0 & 3); back(((b0 & 0x60) << 3) + b1 + 1, ((b0 >> 2) & 7) + 3); }
+    else if (!(b0 & 0x40)) { const b1 = u8[p + 1], b2 = u8[p + 2]; p += 3; lit(b1 >> 6); back(((b1 & 0x3f) << 8) + b2 + 1, (b0 & 0x3f) + 4); }
+    else if (!(b0 & 0x20)) { const b1 = u8[p + 1], b2 = u8[p + 2], b3 = u8[p + 3]; p += 4; lit(b0 & 3); back(((b0 & 0x10) << 12) + (b1 << 8) + b2 + 1, ((b0 & 0x0c) << 6) + b3 + 5); }
+    else { const n = (b0 & 0x1f) * 4 + 4; p += 1; if (n > 0x70) { lit(b0 & 3); break; } lit(n); }
+  }
+  return out;
+}
+function parseBld(buf) {
+  const u8 = new Uint8Array(buf), dv = new DataView(buf);
+  if (u8.length < 24 || dv.getUint32(0, true) !== 0x80C381D7) throw new Error('not an IXF container');
+  const rec = new Map();
+  for (let o = 4; o + 20 <= u8.length; o += 20) {
+    const g = dv.getUint32(o, true), i = dv.getUint32(o + 4, true), t = dv.getUint32(o + 8, true);
+    const off = dv.getUint32(o + 12, true), sz = dv.getUint32(o + 16, true);
+    if (!g && !i && !t) break;
+    if (t === 0xFFFFFFFF || off === 0xFFFFFFFF || sz === 0xFFFFFFFF) continue;
+    if (off + sz > u8.length) throw new Error('record runs past the end of the file');
+    const k = g + ':' + i + ':' + t; if (!rec.has(k)) rec.set(k, [off, sz]);
+  }
+  const get = (i, t) => rec.get(BLD_GROUP + ':' + i + ':' + t);
+  const info = get(0x63FBE1CC, 0xE3F87B0F); if (!info) throw new Error('no info record 0xE3F87B0F');
+  const dec = new TextDecoder('windows-1252');
+  let o = info[0];
+  const lot = u8[o++];
+  const nl = u8[o++], name = dec.decode(u8.subarray(o, o + nl)); o += nl;
+  const al = u8[o++], architect = dec.decode(u8.subarray(o, o + al)); o += al;
+  const sl = dv.getUint32(o, true); o += 4 + sl;
+  const ident = dv.getUint32(o, true);
+  const cr = get(0xA44D71AB, 0x644D7179), category = cr && cr[1] >= 4 ? dv.getUint32(cr[0], true) : null;
+  const pr = get(0xE3F8D655, 0xE3F87B0E); if (!pr) throw new Error('no preview record 0xE3F87B0E');
+  const w = dv.getUint16(pr[0] + 2, true), h = dv.getUint16(pr[0] + 4, true);
+  const px = qfsDecompress(u8, pr[0] + 10, pr[0] + pr[1]);
+  if (px.length !== w * h * 2) throw new Error('preview is not ' + w + 'x' + h + ' RGB565');
+  const rgba = new Uint8ClampedArray(w * h * 4);
+  for (let k = 0; k < w * h; k++) {
+    const v = px[2 * k] | (px[2 * k + 1] << 8);
+    rgba[4 * k] = ((v >> 11) & 31) * 255 / 31; rgba[4 * k + 1] = ((v >> 5) & 63) * 255 / 63;
+    rgba[4 * k + 2] = (v & 31) * 255 / 31; rgba[4 * k + 3] = v === 0xF81F ? 0 : 255;
+  }
+  return { lot, name, architect, ident, category, preview: { w, h, rgba } };
+}
+function bldSuggest(b) {
+  const zone = BLD_CATEGORY_ZONE[b.category];
+  const cat = b.category == null ? 'none' : '0x' + b.category.toString(16).toUpperCase();
+  const set = { kind: 'growable', lot: [b.lot, b.lot], class: zone ? BLD_DEFAULT_CLASS[zone][b.lot] : null };
+  const why = zone ? `Building Architect category ${cat}: ${({ R: 'residential', C: 'commercial', I: 'industrial' })[zone]}, ` +
+    `lot ${b.lot}x${b.lot} from the file: class ${set.class}`
+    : `Building Architect category ${cat} is not a house, shop or factory: pick a class (lot ${b.lot}x${b.lot} from the file)`;
+  return { set, why };
+}
+// BLD-END
+function bldCanvas(b) {
+  const c = document.createElement('canvas'); c.width = b.preview.w; c.height = b.preview.h;
+  c.getContext('2d').putImageData(new ImageData(b.preview.rgba, b.preview.w, b.preview.h), 0, 0);
+  return c;
+}
+function bldThumb(b) {
+  const c = document.createElement('canvas'); c.width = 240; c.height = 180;
+  const g = c.getContext('2d'); g.fillStyle = cssVar('--canvas'); g.fillRect(0, 0, 240, 180);
+  g.drawImage(bldCanvas(b), 30, 0, 180, 180);
+  return c.toDataURL('image/png');
+}
+function bldObject(b, cell) {
+  // The preview as a sprite standing on the lot: the 3D view shows the BA's own picture, it does not turn.
+  const tex = new THREE.CanvasTexture(bldCanvas(b)); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.5 }));
+  const s = b.lot * cell * 1.45; sp.scale.set(s, s, 1); sp.position.y = s * 0.42;
+  const g = new THREE.Group(); g.add(sp); return g;
+}
+
 // ---------------------------------------------------------------- loading models
-let urlMap = new Map();     // lowercase basename -> blob url, for MTL / textures / .bin next to a model
+let urlMap = new Map();    // lowercase basename -> blob url, for MTL / textures / .bin next to a model
 function modifier(url) {
   if (/^(blob:|data:)/.test(url)) return url;
   const base = decodeURIComponent(url.split(/[\\/]/).pop().split('?')[0]).toLowerCase();
@@ -314,6 +404,7 @@ function prettyName(file) {
 // Each record: file, rawEntry (unknown keys survive), meta (known keys), obj, wrap, base size at scale 1
 async function makeRecord(file, entry) {
   const rec = { file: file.name, f: file, raw: entry ? { ...entry } : null, fresh: !entry, err: null };
+  if (/\.bld$/i.test(file.name)) return makeBldRecord(rec, file, entry);
   try {
     const obj = await loadObject(file);
     const box = new THREE.Box3().setFromObject(obj);
@@ -334,7 +425,30 @@ async function makeRecord(file, entry) {
   return rec;
 }
 
+async function makeBldRecord(rec, file, entry) {
+  const cell = rules.cell_m || 16;
+  try {
+    rec.bld = parseBld(await file.arrayBuffer());
+    rec.wrap = bldObject(rec.bld, cell); rec.obj = rec.wrap;
+  } catch (e) { rec.err = String(e.message || e); }
+  const n = rec.bld ? rec.bld.lot : 1;
+  // A .bld has no metric size: the lot is its footprint; y = the sprite's height, so the view frames the picture.
+  rec.base = { x: n * cell, y: n * cell * 1.45 * 0.92, z: n * cell };
+  const e = entry || {};
+  rec.meta = {
+    name: e.name ?? (rec.bld ? rec.bld.name : prettyName(file.name)), kind: e.kind ?? 'growable', class: e.class ?? null,
+    lot: Array.isArray(e.lot) ? e.lot.slice() : [n, n], weight: e.weight ?? 1, height_m: e.height_m ?? null,
+    scale: e.scale ?? 1, rotate_deg: e.rotate_deg ?? 0, style: e.style ?? 'any', enabled: e.enabled ?? true, notes: e.notes ?? ''
+  };
+  if (!rec.raw) rec.raw = {};
+  if (rec.bld && !rec.raw.x_bld) rec.raw.x_bld = { art: 'auto', architect: rec.bld.architect,
+    category: rec.bld.category == null ? null : '0x' + rec.bld.category.toString(16).toUpperCase() };
+  if (!entry) { const s = suggest(rec); Object.assign(rec.meta, s.set); rec.why = s.why; if (rec.meta.class == null) rec.meta.enabled = false; }
+  return rec;
+}
+
 function thumbnail(rec) {
+  if (rec.bld) return bldThumb(rec.bld);
   if (!rec.wrap) return '';
   const saved = { s: rec.wrap.scale.clone(), r: rec.wrap.rotation.y };
   rec.wrap.scale.setScalar(1); rec.wrap.rotation.y = 0;
@@ -360,6 +474,7 @@ function measure(rec) {
 function hasWord(text, list) { return (list || []).find(w => text.includes(w.toLowerCase())); }
 
 function suggest(rec) {
+  if (rec.bld) return bldSuggest(rec.bld);
   const R = rules, m = measure(rec), cell = R.cell_m || 16, K = R.keywords || {};
   const text = (rec.file + ' ' + rec.meta.name).toLowerCase();
   const area = m.fx * m.fz, want = Math.max(1, Math.min(4, Math.ceil(Math.max(m.fx, m.fz) / cell - 0.15)));
@@ -415,6 +530,11 @@ function warnings(rec) {
     else if (!CLS.has(m.class)) w.push('class ' + m.class + ' is not in the lot class table');
     else if (m.lot && m.lot[0] === m.lot[1] && !CLS.get(m.class)[5].includes(m.lot[0])) w.push(`class ${m.class} offers ${CLS.get(m.class)[5].map(s => s + 'x' + s).join(', ')}, not ${m.lot[0]}x${m.lot[1]}`);
   }
+  if (rec.bld) {
+    if (m.lot && (m.lot[0] !== rec.bld.lot || m.lot[1] !== rec.bld.lot)) w.push(`the .bld file is a ${rec.bld.lot}x${rec.bld.lot} building: bldimport uses the file's lot`);
+    if ((m.scale || 1) !== 1 || (m.rotate_deg || 0) !== 0) w.push('scale and rotate do not apply to a .bld file (its art is drawn by the Building Architect)');
+    return w;
+  }
   if (m.lot && rec.base.x) {
     const ms = measure(rec);
     if (ms.fx > m.lot[0] * cell * 1.15 || ms.fz > m.lot[1] * cell * 1.15) w.push(`footprint ${ms.fx.toFixed(1)} x ${ms.fz.toFixed(1)} m is wider than the ${m.lot[0]}x${m.lot[1]} lot (${cell} m per cell)`);
@@ -448,7 +568,7 @@ async function applyJSON(text, files) {
 }
 
 // ---------------------------------------------------------------- folder opening
-const MODEL_EXT = /\.(obj|gltf|glb|fbx)$/i;
+const MODEL_EXT = /\.(obj|gltf|glb|fbx|bld)$/i;
 async function openFiles(files, jsonFile) {
   urlMap.forEach(u => URL.revokeObjectURL(u)); urlMap = new Map();
   for (const f of files.all) urlMap.set(f.name.toLowerCase(), URL.createObjectURL(f));
@@ -636,6 +756,7 @@ function refreshMeasure() {
   const cell = rules.cell_m || 16;
   if (recs.length === 1) {
     const r = recs[0], m = measure(r);
+    if (r.bld && !r.err) { $('measure').textContent = `${r.file}: Building Architect building "${r.bld.name}" by ${r.bld.architect || '?'}, ${r.bld.lot}x${r.bld.lot} lot. The picture is its own preview (one view).`; return; }
     $('measure').textContent = r.err ? 'Could not load: ' + r.err : `${r.file}: footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m (${(m.fx / cell).toFixed(2)} x ${(m.fz / cell).toFixed(2)} cells), height ${m.h.toFixed(1)} m.`;
   } else $('measure').textContent = `${recs.length} models selected. Edit a field to change it on all of them. Untouched fields stay as they are.`;
 }
@@ -687,9 +808,10 @@ $('btnRulesReset').onclick = () => { rules = structuredClone(DEFAULT_RULES); sho
 
 // ---------------------------------------------------------------- demo + test hooks
 const DEMO_FILES = ['house_a.obj', 'shop_a.obj', 'factory_a.obj'];
-async function loadDemo(base = 'samples/') {
+async function loadDemo(base = qs.get('base') || 'samples/') {
   const all = [], models = []; let json = null;
-  for (const n of DEMO_FILES) { const r = await fetch(base + n); const f = new File([await r.blob()], n); all.push(f); models.push(f); }
+  const names = qs.get('files') ? qs.get('files').split(',') : DEMO_FILES;   // e.g. &base=file:///x/&files=a.bld,b.obj
+  for (const n of names) { const r = await fetch(base + n); const f = new File([await r.blob()], n); all.push(f); models.push(f); }
   try { const r = await fetch(base + 'models.json'); if (r.ok) json = new File([await r.blob()], 'models.json'); } catch (e) {}
   S.dirHandle = null; S.folderName = 'samples';
   await openFiles({ all, models }, json);
