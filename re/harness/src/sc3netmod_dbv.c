@@ -346,6 +346,61 @@ static int dbv_is_bvopen(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     return 1;
 }
 
+/* task dbvx49 (round 2026-11-17b, xsect 51 / 53 in the showcase city's layout): DBVCAPNEAR. The cap tests below read
+   whole rows past the end, d -2..6 (9 cells), and need the row after the stamp's rows empty across them. On axis 1 the
+   rows past an end are real columns, so a straight road along x two real rows past a drag's flat end (the showcase's
+   street grid: (129..148,111) below 51's end rows 107..109) crosses every one of those rows: rr `..rrr.r..` instead of
+   `..rrr....`. The end was RAGGED and stayed the stock 11203 / 39 / 11225 ladder, with an empty real row between it and
+   the street. Now, only where the tests below would say RAGGED, each cap shape is tried again by its cells alone: the
+   shape's cells (row j of the drags' partial rows, cells (j + d, j)) are road, and every cell of rows 1.. that is
+   8-adjacent to the shape or to the end row's four cells, outside the shape, is empty, and so are the two cells beside
+   the end row. Roads further away do not count,
+   as for the stamp rows + one empty row of avrbtfix. A road cell DBVTOUCH masked counts as road in those tests: it
+   touched the band (Berlin (159,151), beside the end row: an avenue junction right below a diagonal boulevard's end;
+   read as no road, the end took a cap against it, first try 2026-11-17). Off: SC3NETMOD_DBVCAPNEAR=0. */
+static int dbv_rd_any(DbvPass *p, int cx, int cz);               /* road, or masked by DBVTOUCH (below) */
+static int g_dbv_capnear = -1;
+static volatile LONG g_dbv_n_capnear;
+static int dbv_capnear_on(void) {
+    if (g_dbv_capnear < 0) {
+        g_dbv_capnear = !env_off("SC3NETMOD_DBVCAPNEAR");
+        logf("dbv: DBVCAPNEAR %s (a cap end with a road further than one cell past its stamp is a cap, not ragged, "
+             "SC3NETMOD_DBVCAPNEAR)", g_dbv_capnear ? "on" : "off");
+    }
+    return g_dbv_capnear;
+}
+static int dbv_cap_near(DbvPass *p, int z_e, int a_e, int e) {
+    static const int KIND[4] = { DK_CAP_SQ, DK_CAP_PART, DK_CAP_X4Z3, DK_CAP_X4Z4 };
+    static const BYTE LEN[4][3] = { { 0, 0, 0 }, { 3, 0, 0 }, { 3, 2, 0 }, { 3, 2, 1 } };   /* d 0..len-1 per row */
+    int k, j, dx, dz, ok;
+#define CN_SHAPE(dx_, dz_) ((dz_) >= 1 && (dz_) <= 3 && (dx_) - (dz_) >= 0 && (dx_) - (dz_) < LEN[k][(dz_) - 1])
+#define CN_BASE(dx_, dz_) (CN_SHAPE(dx_, dz_) || ((dz_) == 0 && (dx_) >= 0 && (dx_) <= 3))
+    if (dbv_rd_any(p, DBV_CELLX(-1, 0), DBV_CELLZ(-1, 0)) || dbv_rd_any(p, DBV_CELLX(4, 0), DBV_CELLZ(4, 0)))
+        return 0;                                                    /* a road beside the end row, even masked */
+    for (k = 0; k < 4; k++) {
+        if (!g_dbv_nst[KIND[k]]) continue;
+        for (j = 1, ok = 1; j <= 3 && ok; j++)
+            for (dx = j; dx < j + LEN[k][j - 1] && ok; dx++) ok = DBV_RDE(dx, j);
+        for (dz = 1; dz <= 4 && ok; dz++)                                /* the ring: rows 1..4, beside base cells */
+            for (dx = -1; dx <= 5 + dz && ok; dx++) {
+                int a2, b2, nb = 0;
+                if (CN_SHAPE(dx, dz)) continue;
+                for (a2 = -1; a2 <= 1 && !nb; a2++)
+                    for (b2 = -1; b2 <= 1 && !nb; b2++) nb = CN_BASE(dx + a2, dz + b2);
+                if (nb && dbv_rd_any(p, DBV_CELLX(dx, dz), DBV_CELLZ(dx, dz))) ok = 0;   /* masked touches count */
+            }
+        if (ok) {
+            InterlockedIncrement(&g_dbv_n_capnear);
+            logf("dbv: band axis %d end at canonical (%d,%d): cap kind %d by its cells, road further away kept "
+                 "(DBVCAPNEAR)", p->axis, a_e, z_e, KIND[k]);
+            return KIND[k];
+        }
+    }
+#undef CN_SHAPE
+#undef CN_BASE
+    return 0;
+}
+
 static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     unsigned rr[6];
     int j, d, dz, ok;
@@ -437,6 +492,25 @@ static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     if (rr[0] == R012 && !rr[1]) return DK_CAP_PART;
     if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && !rr[2]) return DK_CAP_X4Z3;
     if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && rr[2] == DM(0) && !rr[3]) return DK_CAP_X4Z4;
+    if (dbv_capnear_on()) {                                              /* task dbvx49: DBVCAPNEAR */
+        int kk = dbv_cap_near(p, z_e, a_e, e);
+        if (kk) return kk;
+    }
+    {                                                                    /* task dbvx49: SC3NETMOD_DBVCAPDBG */
+        static int dbg = -1;
+        if (dbg < 0) dbg = env_on("SC3NETMOD_DBVCAPDBG");
+        if (dbg) {
+            char s[6][10];
+            for (j = 0; j < 6; j++) {
+                for (d = -2; d <= 6; d++) s[j][d + 2] = (rr[j] & DM(d)) ? 'r' : '.';
+                s[j][9] = 0;
+            }
+            logf("dbv: DBVCAPDBG band axis %d %s end at canonical (%d,%d) real (%d,%d): ragged, rows past (d -2..6) "
+                 "%s|%s|%s|%s|%s|%s", p->axis, e ? "bottom" : "top", a_e, z_e,
+                 DBV_RX(p, DBV_CELLX(0, 0), DBV_CELLZ(0, 0)), DBV_RZ(p, DBV_CELLX(0, 0), DBV_CELLZ(0, 0)),
+                 s[0], s[1], s[2], s[3], s[4], s[5]);
+        }
+    }
     return DK_RAGGED;                                                    /* task avrbtfix (was DK_NONE) */
 #undef R012
 #undef R123
@@ -605,6 +679,26 @@ static int dbvx_near(int t, int i, int j) {
 }
 static volatile LONG g_dbvx_n_relax;
 
+/* task dbvx49 (round 2026-11-17b, xsect 49 / 53 with 3..4-row arms): DBVXENDCAP. A crossing template's window reaches
+   about 4 rows up each arm, and the band's end rows inside it were never ends (`jxrow`: the box of a T / L stem is
+   there). With short arms a cross's FAR end lies inside the window too: 49 at 4 rows lost the cap stamp of the diagonal
+   boulevard's end (its partial rows then touched the band and stayed the stock ladder). Now such an end is judged as
+   usual when its kind is a cap (square, part, x4z3, x4z4), every cell of its stamp is road and none of them is a cell a
+   matched template writes (a box or a template's band-piece cell: at 6 rows template 1 writes one on 49's top end, and
+   stamping there refused the whole band, "junctions or ends too close together"); otherwise it is skipped as before.
+   Same rule, same effect on the far end of a T / L stem 4 rows long (50 52 54 55: its partial rows were the stock
+   ladder, now the cap). Off: SC3NETMOD_DBVXENDCAP=0. */
+static int g_dbvx_endcap = -1;
+static volatile LONG g_dbvx_n_endcap;
+static int dbvx_endcap_on(void) {
+    if (g_dbvx_endcap < 0) {
+        g_dbvx_endcap = !env_off("SC3NETMOD_DBVXENDCAP");
+        logf("dbv: DBVXENDCAP %s (a cap end inside a crossing template's rows, away from its box, keeps its cap stamp, "
+             "SC3NETMOD_DBVXENDCAP)", g_dbvx_endcap ? "on" : "off");
+    }
+    return g_dbvx_endcap;
+}
+
 static int dbv_chain_tried(int clean, int n) {                    /* discovery: is the chain handed to dbv_band? */
     return clean >= DBV_MIN_CLEAN || (clean >= 1 && n >= 2 && dbv_short_on());   /* >= 1: not a solid block (xsect 63:
                                                      four straight roads side by side are 4-wide rows with road on both
@@ -725,7 +819,27 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     /* ---- ends */
     for (e = 1; e >= 0; e--) {
         int z_e = e ? z0 + n - 1 : z0, a_e = LEFT(z_e), kind, sgn = e ? 1 : -1, dx, dz;
-        if (jxrow[z_e - z0]) continue;                                   /* task diagfix: inside a crossing template */
+        if (jxrow[z_e - z0]) {                                           /* task diagfix: inside a crossing template */
+            int hit = 0, w2;                                             /* task dbvx49 DBVXENDCAP: unless a cap */
+            if (!dbvx_endcap_on()) continue;
+            kind = dbv_end_kind(p, z_e, a_e, e, n);
+            if (kind != DK_CAP_SQ && kind != DK_CAP_PART && kind != DK_CAP_X4Z3 && kind != DK_CAP_X4Z4) continue;
+            for (i = 0; i < g_dbv_nst[kind] && !hit; i++) {              /* the stamp's cells: road, and none of */
+                int sx = g_dbv_st[kind][i].dx, sz = g_dbv_st[kind][i].dz;  /* them a cell a matched template writes */
+                if (!e) dbv_turn(0, &sx, &sz);                           /* (else the box is the end, as before) */
+                sx += a_e; sz += z_e;
+                if (!dbv_rd(p, sx, sz)) hit = 1;
+                for (m = 0; m < nxm && !hit; m++) {
+                    const DbvX *q = &g_dbvx[xmt[m]];
+                    for (w2 = 0; w2 < q->nw && !hit; w2++)
+                        hit = xma[m] + g_dbvxw[q->w0 + w2].dx == sx && xmz[m] + g_dbvxw[q->w0 + w2].dz == sz;
+                }
+            }
+            if (hit || !g_dbv_nst[kind]) continue;
+            InterlockedIncrement(&g_dbvx_n_endcap);
+            logf("dbv: band axis %d from canonical (%d,%d): %s end inside crossing template rows is a cap (kind %d), "
+                 "stamped (DBVXENDCAP)", p->axis, x0, z0, e ? "bottom" : "top", kind);
+        } else
         kind = dbv_end_kind(p, z_e, a_e, e, n);
         ekind[e] = kind;                                                 /* task diagfix: DBVCAPCLEAN */
         if (kind == DK_NONE) {
@@ -1356,6 +1470,7 @@ static void dbv_stats(void) {
     if (!g_dbv_on || n == last) return;
     last = n;
     logf("stats: dbv bands seen=%ld, cells written=%ld, cells reverted=%ld, windows grown=%ld (to the whole map %ld), "
-         "kept with touching road=%ld, stub arms=%ld, short-arm template matches=%ld", g_dbv_n_bands, g_dbv_n_cells,
-         g_dbv_n_rev, g_dbv_n_grow, g_dbv_n_full, g_dbv_n_touch, g_dbv_n_stub, g_dbvx_n_relax);   /* diagarm DBVSHORT */
+         "kept with touching road=%ld, stub arms=%ld, short-arm template matches=%ld, caps by their cells=%ld, "
+         "caps inside template rows=%ld", g_dbv_n_bands, g_dbv_n_cells, g_dbv_n_rev, g_dbv_n_grow, g_dbv_n_full,
+         g_dbv_n_touch, g_dbv_n_stub, g_dbvx_n_relax, g_dbv_n_capnear, g_dbvx_n_endcap);              /* diagarm DBVSHORT, dbvx49 DBVCAPNEAR */
 }
