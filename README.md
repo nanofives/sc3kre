@@ -15,6 +15,9 @@ obtained copy of the game to use any of it.
 Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips on the
 [Releases](https://github.com/nanofives/sc3kre/releases) page (the newest one is at the top).
 
+**Gallery.** Every junction the road mod builds, with the drag that makes each one:
+[nanofives.github.io/sc3kre/gallery](https://nanofives.github.io/sc3kre/gallery/).
+
 **Install.** Unzip into the game folder (the one with `Apps` and `Cities`, `SC3U.exe` is inside `Apps`), run
 `powershell -ExecutionPolicy Bypass -File .\sc3mods_patch.ps1` once in that folder, start `Apps\SC3U.exe`. GOG and
 Steam copies both work.
@@ -23,10 +26,10 @@ and what changed.
 **Linux and macOS (Wine, Lutris, CrossOver).** The Windows script needs PowerShell, so the release also has
 `sc3mods_patch.sh`, a plain `sh` script that makes the same edit to `SC3U.exe` and needs only tools every Linux and
 macOS install has (`sh`, `dd`, `od`, `wc`, `cp`, `mv`, `cut`, `tr`, `grep`, and `sha256sum` or `shasum`). Close the game, then run
-it from the game's `Apps` folder, the one with `SC3U.exe` and `sc3mods.dll` (or pass the folder with `--apps`):
+it from the game folder, where the zip puts it. It finds `Apps/SC3U.exe` by itself (or pass the folder with `--apps`):
 
-    cd "/path/to/SimCity 3000 Unlimited/Apps"
-    sh sc3mods_patch.sh              # patch, keeps SC3U.exe.orig
+    cd "/path/to/SimCity 3000 Unlimited"
+    sh sc3mods_patch.sh              # patch, keeps Apps/SC3U.exe.orig
     sh sc3mods_patch.sh --restore    # back to stock
 
 It accepts the same exes as the `.ps1` (GOG 2.0.0.3, GOG and Steam 2.0.949, signed copies of them) and refuses any other
