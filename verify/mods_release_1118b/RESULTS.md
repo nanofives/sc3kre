@@ -26,3 +26,5 @@ The 2026-11-18 zip tree with the 3 DLLs and Apps/sc3lang from the repo, README.t
 sc3mods_2026-11-18b.zip, SHA-256 E6C3855FDC06172B4709157F51C6351A96856B37718FA12BB6A2927FDB558B62.
 
 Not checked: the mods page in languages other than Spanish (de, fr, it, nl, sv row texts are the children's translations).
+
+GitHub: `sc3mods-2026-11-18b`, target d8678e4, asset downloaded back, SHA-256 matches. The 11-18 notes start with a "superseded" line.
