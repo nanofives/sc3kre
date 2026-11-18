@@ -9192,6 +9192,7 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_saltfix"),   "Agua salada solo en el mar", "Salt water only at sea" }, NULL, "SC3RESIZE_SALTFIX" },
     { { SC3KEY("resize.mt_terrpanel"), "Panel de terreno ampliado", "Larger terrain panel" }, NULL, "SC3RESIZE_TERRPANEL" },
     { { SC3KEY("resize.mt_weather"),   "Interruptor de clima",    "Weather switch" },         NULL, "SC3RESIZE_WEATHER" },
+    { { SC3KEY("resize.mt_stylemix"),  "Mezcla de estilos",       "Building style mix" },     NULL, "SC3NETMOD_STYLEMIX" },
     { { SC3KEY("resize.mt_sandbox"),   "Sandbox: sin abandono",   "Sandbox: no abandonment" }, NULL, "+SC3SIMRUN_SANDBOX" },
     { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" } };
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
@@ -9245,7 +9246,9 @@ static void mt_vis_all(void *win, int on) {
     for (i = 0; i < MT_N; i++) mp_vis(mp_child(win, MT_ROW0 + i), on);
 }
 
-/* page C controls: mods left, features right, 19 px rows */
+/* page C controls: mods left, features right, 19 px rows (features 18 px since stylemix 2026-11-18: 15 rows at 19
+   pushed the SALTFIX city checkbox to local y 435, onto Volver at 436) */
+#define MT_FEAT_DY 18
 static int mt_build(void *fac, void *win, int es, DWORD col) {
     int n = 0, i, ym = 84, yf = 84;
     n += ho_add_label(fac, win, MT_TITLE, SC3TR(es, "resize.mt_title", "Activar mods y funciones", "Turn mods and features on or off"), 18, 40, 440);
@@ -9255,7 +9258,7 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
         const MT_ROW *r = &k_mt_rows[i];
         g_mt_on0[i] = mt_state(r);
         if (r->dll) { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19; }
-        else if (r->env[0] != '+') { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += 19; }
+        else if (r->env[0] != '+') { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += MT_FEAT_DY; }
     }
     ym += 6;   /* the default-off rows (env '+'): left column, under their own heading */
     n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_sim", "Simulación", "Simulation"), 18, ym, 200); ym += 20;
@@ -9264,7 +9267,7 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
         if (r->dll || r->env[0] != '+') continue;
         n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19;
     }
-    i = (ym > yf ? ym : yf) + 8;   /* 14 feature rows: keep the city section clear of Volver (local y 436) */
+    i = (ym > yf ? ym : yf) + 8;   /* 15 feature rows at 18 px: keep the city section clear of Volver (local y 436) */
     n += ho_add_label(fac, win, MT_NOTE, SC3TR(es, "resize.mt_note", "Los cambios se aplican al reiniciar el juego.",
                                                "Changes apply the next time the game starts."), 18, i, 450);
     n += ho_add_label(fac, win, MT_NOTE2, SC3TR(es, "resize.mt_note2", "Una ciudad grande o con avenidas necesita su mod para cargar.",

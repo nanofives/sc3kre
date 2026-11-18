@@ -608,6 +608,8 @@ resize.mt_sirens=Siren fix
 # sc3resize.c
 resize.mt_stationwarn=Station warnings
 # sc3resize.c
+resize.mt_stylemix=Building style mix
+# sc3resize.c
 resize.mt_terrpanel=Larger terrain panel
 # sc3resize.c
 resize.mt_title=Turn mods and features on or off

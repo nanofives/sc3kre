@@ -45,6 +45,8 @@ etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
  *    retile (FUN_1001547b entry) and after a city load. SC3NETMOD_RBT=0 / SC3NETMOD_RBT_LOAD=0 turn it off.
  * 6. DAV (task diagave, sc3netmod_dav.c): automatic diagonal avenues from `dav` table lines, on RBT's two hooks: two
  *    diagonal drags side by side get a median. SC3NETMOD_DAV=0 turns it off.
+ * 7. STYLEMIX (task stylemix 2026-11-18, in the OVERLAY block): SC3NETMOD_STYLEMIX=0 serves BUILDFAM.IXF with the
+ *    style-mix family lines at weight 0, so no new European / Asian copies grow; saved ones keep loading.
  * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
  * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */
@@ -54,6 +56,7 @@ etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 #include <intrin.h>
 #pragma intrinsic(_ReturnAddress)
 
@@ -806,6 +809,93 @@ static const char *ov_rel(LPCSTR in, char *full) {
     return full + g_rootlen;
 }
 
+/* ===== STYLEMIX (task stylemix 2026-11-18, Simtropolis NicoMT: "disable the building region style mix").
+ * SC3NETMOD_STYLEMIX=0 (Turn mods on/off row "Building style mix") stops NEW style-mix buildings from growing.
+ * The style_mix package (netpack style_sets) adds each European / Asian building as a family Key line
+ * "Key: 1406,545184782,<id + 400000 | id + 1500000>,<weight>" in the overlay Apps\Res\BUILDFAM.IXF. Only style
+ * sets give ids above 0xFFFF (netpack_stylesets.py requires offset > 0xFFFF, growables and BAT growables must fit
+ * 16 bits). With the switch off this block writes a copy of that file to %TEMP%\sc3netmod_nomix_<pid>.IXF in which
+ * the weight digits of every such line are '0' (same length, so the IXF index and record sizes stay valid) and the
+ * overlay serves the copy instead. SIMGEOM 0x10001250 reads a Key line with weight 0 as "skip it and lower
+ * BuildingCount" (0x1000136f), so the family lists the stock members (and other packages' growables) only.
+ * The exemplars (OccupantAttribs_Korea.IXF) and the set art (CSAttrib_Korea.IXF, *_netpack_set.DAT) are still
+ * served, so mix buildings already in a save load with their own look. Copies left by dead processes are deleted. */
+static char g_nomix[MAX_PATH];       /* the filtered BUILDFAM copy, "" = STYLEMIX on or nothing to filter */
+#define NOMIX_REL "Apps\\Res\\BUILDFAM.IXF"
+
+static int nomix_filter(BYTE *b, DWORD n) {          /* -> number of Key lines zeroed */
+    static const char pat[] = "Key: 1406,545184782,";
+    DWORD i, j, k, pl = sizeof(pat) - 1;
+    int hits = 0;
+    for (i = 0; i + pl < n; i++) {
+        unsigned long id = 0;
+        if (b[i] != 'K' || memcmp(b + i, pat, pl)) continue;
+        for (j = i + pl; j < n && b[j] >= '0' && b[j] <= '9' && j - (i + pl) < 10; j++) id = id * 10 + (b[j] - '0');
+        if (j == i + pl || j >= n || b[j] != ',') continue;
+        if (id <= 0xFFFF) continue;
+        for (k = j + 1; k < n && b[k] >= '0' && b[k] <= '9'; k++) b[k] = '0';
+        if (k > j + 1) hits++;
+        i = k;
+    }
+    return hits;
+}
+
+static void nomix_sweep(const char *tmp) {           /* delete copies whose process is gone */
+    char pat[MAX_PATH], f[MAX_PATH];
+    WIN32_FIND_DATAA fd;
+    HANDLE h, p;
+    DWORD pid;
+    _snprintf(pat, sizeof(pat), "%ssc3netmod_nomix_*.IXF", tmp); pat[sizeof(pat) - 1] = 0;
+    h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        pid = strtoul(fd.cFileName + 16, NULL, 10);
+        if (pid == GetCurrentProcessId()) continue;
+        p = pid ? OpenProcess(SYNCHRONIZE, FALSE, pid) : NULL;
+        if (p && WaitForSingleObject(p, 0) == WAIT_TIMEOUT) { CloseHandle(p); continue; }   /* alive */
+        if (p) CloseHandle(p);
+        _snprintf(f, sizeof(f), "%s%s", tmp, fd.cFileName); f[sizeof(f) - 1] = 0;
+        DeleteFileA(f);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+}
+
+/* after ov_walk, before the hooks (DllMain, kernel32 only) */
+static void nomix_init(void) {
+    char src[MAX_PATH], tmp[MAX_PATH];
+    HANDLE h;
+    DWORD n, got = 0, wrote = 0;
+    BYTE *b;
+    int i, hits, have = 0;
+    if (!env_off("SC3NETMOD_STYLEMIX")) { logf("stylemix: on (the style mix grows; SC3NETMOD_STYLEMIX=0 turns it off)"); return; }
+    for (i = 0; i < g_novfiles; i++) if (!lstrcmpiA(g_ovfiles[i], NOMIX_REL)) have = 1;
+    if (!have) { logf("stylemix: off, but the overlay has no %s - nothing to filter", NOMIX_REL); return; }
+    n = GetTempPathA(sizeof(tmp), tmp);
+    if (!n || n >= sizeof(tmp) - 40) { logf("### stylemix: no temp folder, style mix stays on"); return; }
+    nomix_sweep(tmp);
+    _snprintf(src, sizeof(src), "%s%s", g_ovdir, NOMIX_REL); src[sizeof(src) - 1] = 0;
+    h = CreateFileA(src, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) { logf("### stylemix: cannot open %s (%lu), style mix stays on", src, GetLastError()); return; }
+    n = GetFileSize(h, NULL);
+    b = (n && n != INVALID_FILE_SIZE && n < 64u << 20) ? (BYTE *)malloc(n) : NULL;
+    if (b && !(ReadFile(h, b, n, &got, NULL) && got == n)) { free(b); b = NULL; }
+    CloseHandle(h);
+    if (!b) { logf("### stylemix: cannot read %s, style mix stays on", src); return; }
+    hits = nomix_filter(b, n);
+    _snprintf(g_nomix, sizeof(g_nomix), "%ssc3netmod_nomix_%lu.IXF", tmp, GetCurrentProcessId());
+    g_nomix[sizeof(g_nomix) - 1] = 0;
+    h = CreateFileA(g_nomix, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE || !WriteFile(h, b, n, &wrote, NULL) || wrote != n) {
+        logf("### stylemix: cannot write %s (%lu), style mix stays on", g_nomix, GetLastError());
+        if (h != INVALID_HANDLE_VALUE) { CloseHandle(h); DeleteFileA(g_nomix); }
+        g_nomix[0] = 0; free(b); return;
+    }
+    CloseHandle(h);
+    free(b);
+    logf("stylemix: OFF (SC3NETMOD_STYLEMIX=0): %d family Key line(s) with ids above 65535 set to weight 0, "
+         "%s served from %s (%lu bytes)", hits, NOMIX_REL, g_nomix, n);
+}
+
 /* `in` names a file the overlay holds -> overlay path in `out`, 1 */
 static int ov_map(LPCSTR in, char *out) {
     char full[MAX_PATH];
@@ -814,6 +904,10 @@ static int ov_map(LPCSTR in, char *out) {
     if (!rel) return 0;
     for (i = 0; i < g_novfiles; i++) {
         if (!lstrcmpiA(g_ovfiles[i], rel)) {
+            if (g_nomix[0] && !lstrcmpiA(rel, NOMIX_REL)) {           /* STYLEMIX off: the filtered copy */
+                lstrcpynA(out, g_nomix, MAX_PATH);
+                return 1;
+            }
             _snprintf(out, MAX_PATH, "%s%s", g_ovdir, g_ovfiles[i]);
             out[MAX_PATH - 1] = 0;
             return 1;
@@ -1091,6 +1185,7 @@ static void overlay_init(void) {
         g_ovdirlen = lstrlenA(g_ovdir);
         if (GetFileAttributesA(g_ovdir) != INVALID_FILE_ATTRIBUTES) ov_walk("");
         logf("overlay: %s, %d file(s)", g_ovdir, g_novfiles);
+        nomix_init();                                     /* STYLEMIX: SC3NETMOD_STYLEMIX=0 */
     }
     if (!g_novfiles && !g_filelog) return;
     o_CreateFileA = (PFN_CreateFileA)GetProcAddress(k, "CreateFileA");
