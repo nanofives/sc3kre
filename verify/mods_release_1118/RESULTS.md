@@ -39,3 +39,5 @@ A player who unzips over 17c keeps `mods\netmod\tables\highway_core.txt` (sc3net
 variant ids without art and the hwyt rule, which runs only with SC3NETMOD_HWYT=1. README says it can be deleted.
 
 Open: 49 at 3 rows keeps a 1-row stock avenue stub above the box (dbvx49 section "Open", gallery ISSUES 7).
+
+GitHub: `sc3mods-2026-11-18`, target 5762ab8, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-18, asset downloaded back, SHA-256 matches. The 17c notes start with a "superseded" line.
