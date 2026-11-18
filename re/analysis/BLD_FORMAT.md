@@ -136,3 +136,49 @@ name, architect, two more strings, u32). [CONFIRMED @ 0x12001faf, 0x1200be1d]
 So the real frames are one call away **inside a running Baapp.exe**: `(*(DAT_12079434))->vt+0x10(outPath, n,
 &paths, 0, NULL)` with cRZString objects (vt+0x14 = the C string), which writes an IXF in BAT.DAT format to
 `outPath` that `bldfile.bat_frames` already reads. Not done this round (verify/bldfile/RESULTS.md, "Real frames").
+
+## 5. The batch renderer run for real (task bldbat, 2026-11-18)
+
+**Baapp.exe carries its own copy of the BA code**: it never loads SIMBABLD.DLL (Frida LoadLibrary trace through start-up,
+menu and a render), it has its own `Res\BA\RenderedBuildingsBackup.IXF` string and no `0x79F4AAD1` class id. Mapping into
+Baapp.exe (base 0x400000, no relocations):
+
+| SIMBABLD | Baapp.exe | what |
+|---|---|---|
+| `0x12001faf` sc3_bat_export_rendered_buildings_ixf | `FUN_004044a9` | same 2,044-byte body |
+| `0x12001f71` / `0x12001f8e` | `FUN_0040446b` / `FUN_00404488` | slot +0x10 / +0x18 wrappers |
+| vtable `0x12069a84` | vtable `0x480c78` | BA application |
+| `DAT_12079434`, factory `0x12001140`, ctor `0x12002c8f` | `DAT_004954e0`, getter `FUN_004010c9`, ctor `FUN_00405189` | singleton |
+
+Call (made on Baapp's main thread from a PeekMessageA hook, `re/tools/bldbat/ba_render.py`):
+`(*DAT_004954e0)->vt[+0x10](out, n, &paths, 0, NULL)`. `out` and `paths[i]` are cRZString objects (vtable `0x480344`:
++4 AddRef `0x44f17d`, +8 Release `0x44f184` deletes at count <= 1, +0x14 c_str `0x45f4fd`; ctor `FUN_00402c4c`). `paths` is a
+pointer to an array of object pointers, as in Baapp's own caller `FUN_00401c73` ("export to SimCity", slot +0x18).
+`app+0x4d` = 0 skips the progress window. The view object (`vt+0x24` = `0x4053e2`) is created on demand, so the call works
+from the main menu without opening the editor. [CONFIRMED by run: 17 of 17 shipped .bld rendered, 63 to 83 s]
+
+Per building (`FUN_00404d73` line 303, `segment->vt+0x3c(group, instance, frames)`):
+- group = `FUN_004534bb(app+0x58)`: LCG `x * 0x41C64E6D + 0x3039`, seeded by `timeGetTime()` at app construction
+  (`FUN_004534a0`, seed -1). A new group per building per run. [CONFIRMED @ 0x4534bb, 0x4534a0]
+- instance = the loaded building's `+0x1a8`, or a new id from `FUN_00404d52` when that is 0. In every run it was a new
+  id, not the .bld info id (Dupont: 0x3809C6FE, .bld 0x45FEEAC6). [CONFIRMED by run; why +0x1a8 stays 0: UNCERTAIN]
+- records: one 0x856CD19A override, one 0x6300 table (instance = override instance, the override's last u32 = the same),
+  16 pixel records `{0, 1}` on consecutive instances. Same shape as BAT.DAT.
+
+`bldfile.py render` re-keys the result to the importers' keys (group 0xBA1DBF1E, instance = .bld id, a free pixel block).
+
+### Custom parts (records 0xE3F87B0D / 0xE3F87B10)
+
+Record 0xE3F87B0D: u8 10, 8 x u32 (two rects), u32 hash (= the hash beside the name in the model's texture list), u32,
+4 x f32 (w, h, 1/w, 1/h), u32 n + name, then the key of its image record (type 0xE3F87B10, group, instance) and u32 kind
+(6 paint, 7 detail, 16 prop). The image is the section-3 header (format 0x0EF1) + 4 bytes per pixel. `bldfile.custom_textures`.
+
+How the renderer resolves a texture name (Trash & Burn, runs X / Y / W, verify/bldbat/RESULTS.md):
+1. the .bld's embedded copy: used, even when no file of that name exists anywhere (13 of its 17 parts);
+2. a file in `Apps\BACustom\<Paints|Details|Props>`: Baapp lists and opens every file there at start-up only (no file is
+   opened during a render), and uses it only when its content is the one the .bld was made with. A same-named magenta
+   file was ignored (with and without the embedded copy); the genuine pixels written back as a TGA made a stripped
+   .bld render pixel-identical to the original (16 of 16 frames);
+3. otherwise the face is drawn flat and untextured. The render does not fail.
+The hash follows content, not the name: Kankakee's `bourbo~3.tga` (an 8.3 name) carries 0x55CDCCEE like
+`bourbon 03.tga`. Hash function: [UNCERTAIN], not a CRC32 of the name, the file or its pixels.

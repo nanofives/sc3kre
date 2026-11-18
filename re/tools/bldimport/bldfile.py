@@ -20,6 +20,16 @@ Art for a grown .bld building, two sources (`frames()`):
   py -3.12 re/tools/bldimport/bldfile.py info  <file.bld|folder>...         fields of each file
   py -3.12 re/tools/bldimport/bldfile.py sheet <file.bld> --out x.png [--game G] [--art preview|bat]
   py -3.12 re/tools/bldimport/bldfile.py check --game <tree> <folder>        preview frames against BAT.DAT frames
+  py -3.12 re/tools/bldimport/bldfile.py parts <file.bld|folder> [--game G]   texture names a .bld uses, where each resolves
+  py -3.12 re/tools/bldimport/bldfile.py render <file.bld|folder>... --game <dev tree> --out x.ixf [--install]
+                                                                              real 20 frames from the BA's batch renderer
+
+render (task bldbat, 2026-11-18): runs the Building Architect's own batch export (Baapp.exe FUN_004044a9, the same
+body as SIMBABLD 0x12001faf) in a patched, windowed BaappW.exe of a DEV tree (re/tools/bldbat/ba_patch.py,
+ba_render.py), then writes the result as a BAT-format IXF with the keys the importers look for: group 0xBA1DBF1E,
+override and frame-table instance = the .bld id, 16 pixel records on a free block of instances. --install also merges
+it into the tree's Apps/BARender/BAT.DAT (backup BAT.DAT.bldbat-orig, link-safe), where bldimport.py and the
+classifier page already read "bat" art. Dev side only (Frida + a dev tree). Results: verify/bldbat/RESULTS.md.
 """
 import argparse
 import os
@@ -308,6 +318,210 @@ def thumbnail(bld, size=160):
     return im.convert("RGB").resize((size, size), Image.LANCZOS)
 
 
+# =================================================================== custom parts (task bldbat)
+
+PART_KIND = {6: "paint", 7: "detail", 16: "prop"}       # last u32 of record 0xE3F87B0D (Trash & Burn, HiTech Lab)
+
+
+def custom_textures(path):
+    """Records 0xE3F87B0D (one per custom texture) and their embedded images 0xE3F87B10.
+    Layout (the 84 records of the 17 shipped files): u8 10, 8 x u32 (two rects), u32 hash (= the hash beside the name
+    in the model's texture list), u32, 4 x f32 (w, h, 1/w, 1/h), u32 n, n bytes name, then the image record's key
+    u32 type 0xE3F87B10, u32 group, u32 instance, and u32 kind (6 paint, 7 detail, 16 prop)."""
+    with open(path, "rb") as fh:
+        r = _records(fh.read())
+    out = []
+    for (g, i, t), pl in sorted(r.items(), key=lambda kv: kv[0][1]):
+        if t != T_TEXINFO:
+            continue
+        h, = struct.unpack_from("<I", pl, 33)
+        n, = struct.unpack_from("<I", pl, 57)
+        name = pl[61:61 + n].decode("cp1252", "replace")
+        it, ig, ii, kind = struct.unpack_from("<4I", pl, 61 + n)
+        img = r.get((ig, ii, it))
+        w = hh = None
+        if img is not None:
+            _f, w, hh, _n = struct.unpack_from("<HHHI", img, 0)
+        out.append({"name": name, "hash": h, "kind": PART_KIND.get(kind, "kind %d" % kind), "w": w, "h": hh,
+                    "embedded": img is not None, "image_key": (ig, ii, it)})
+    return out
+
+
+def embedded_image(path, part):
+    """-> RGBA PIL image of an embedded custom texture (4 bytes per pixel as stored; written back as a 32-bit TGA
+    it made the BA render the stripped .bld identically, verify/bldbat/RESULTS.md step 3)."""
+    from PIL import Image
+    with open(path, "rb") as fh:
+        r = _records(fh.read())
+    _f, w, h, raw = _image(r[tuple(part["image_key"])])
+    return Image.frombuffer("RGBA", (w, h), raw, "raw", "RGBA", 0, 1)
+
+
+def parts(path, game=None):
+    """Every texture name the model uses and how the BA resolves it (verify/bldbat/RESULTS.md step 3):
+    color = a solid colour, no file; embedded = the .bld carries the image and the renderer uses it; stock = a file
+    under Apps/Res/BA; custom = a file under Apps/BACustom (used only when its content is the one the .bld was made
+    with: a same-named file with other pixels was ignored); missing = drawn as a flat untextured face."""
+    b = read_bld(path)
+    emb = {p["name"].lower(): p for p in custom_textures(path)}
+    files = {}
+    if game is not None:
+        for root in ("Res/BA", "BACustom"):
+            for dp, _dn, fn in os.walk(game.path("Apps/" + root)):
+                for f in fn:
+                    files.setdefault(f.lower(), []).append(os.path.relpath(os.path.join(dp, f), game.path("Apps")))
+    out, seen = [], set()
+    for name, h in b["model"]["textures"]:
+        k = name.lower()
+        if not name or k in seen:
+            continue
+        seen.add(k)
+        e = emb.get(k)
+        row = {"name": name, "hash": h, "kind": e["kind"] if e else None, "where": None}
+        if name.startswith("color "):
+            row["status"] = "color"
+        elif e is not None:
+            row["status"] = "embedded"
+        elif game is None:
+            row["status"] = "file"
+        else:
+            hit = files.get(k, [])
+            stock = [x for x in hit if x.lower().startswith("res")]
+            if stock:
+                row.update(status="stock", where=stock[0])
+            elif hit:
+                row.update(status="custom", where=hit[0])
+            else:
+                row["status"] = "missing"
+        out.append(row)
+    return out
+
+
+# =================================================================== frames from the BA's batch renderer (bldbat)
+
+def ixf_buildings(data):
+    """batgrow.bat_buildings over an IXF in any group (the batch renderer draws a new group per building: LCG
+    FUN_004534bb seeded by timeGetTime, FUN_004534a0). -> [building dict + 'group']."""
+    import batgrow as BG
+
+    class _G(BG.Game):
+        def __init__(self):
+            pass
+
+        def read(self, rel):
+            return data
+
+    _idx, order = BG.records(data)
+    out, keep = [], BG.BAT_GROUP
+    try:
+        for g in sorted(set(g for g, i, t in order if t == BG.OVR_TYPE)):
+            BG.BAT_GROUP = g
+            for b in BG.bat_buildings(_G()):
+                b["group"] = g
+                out.append(b)
+    finally:
+        BG.BAT_GROUP = keep
+    return out
+
+
+def rekey_rendered(data, blds, used=()):
+    """Rendered IXF -> (records [(g, i, t, payload)], report [(file, id or None, error)]). Group -> 0xBA1DBF1E;
+    override instance, table instance and the override's last u32 -> the .bld id (matched by name and lot, else by
+    lot in order); the 16 pixel records -> consecutive instances on a block free in `used` (keys of the target
+    BAT.DAT). The renderer's own instance is the loaded building's +0x1a8 or a new id (FUN_00404d73 / FUN_00404d52)."""
+    import batgrow as BG
+    idx, _order = BG.records(data)
+    taken = set(i for g, i, t in used if g == BG.BAT_GROUP)
+    pending = list(blds)
+    recs, report = [], []
+    for b in ixf_buildings(data):
+        nm = b["name"].decode("cp1252", "replace")
+        m = [x for x in pending if x["name"] == nm and x["lot"] == b["size"]] or \
+            [x for x in pending if x["lot"] == b["size"]]
+        if not m or b["problem"]:
+            report.append((nm, None, b["problem"] or "no matching .bld"))
+            continue
+        bld = m[0]
+        pending.remove(bld)
+        g, inst = b["group"], b["inst"]
+        ovr = bytearray(idx[(g, inst, BG.OVR_TYPE)])
+        key = struct.unpack_from("<3I", ovr, 1)
+        tab = bytearray(idx[(key[1], key[2], key[0])])
+        new = bld["ident"]
+        base = (new * 16 + 0x10) & 0xFFFFFFF0
+        while any(((base + k) & 0xFFFFFFFF) in taken for k in range(16)) or base > 0xFFFFFFE0:
+            base = (base + 0x1F3B0) & 0xFFFFFFF0
+        remap = {pk: base + k for k, pk in enumerate(b["pix_keys"])}
+        taken.update(remap.values())
+        taken.add(new)
+        struct.pack_into("<3I", ovr, 1, key[0], BG.BAT_GROUP, new)
+        if struct.unpack_from("<I", ovr, len(ovr) - 4)[0] == inst:
+            struct.pack_into("<I", ovr, len(ovr) - 4, new)
+        for k in range((len(tab) - 0x18) // 15):
+            pg, pi = struct.unpack_from("<II", tab, 0x18 + 15 * k + 2)
+            struct.pack_into("<II", tab, 0x18 + 15 * k + 2, BG.BAT_GROUP, remap[(pg, pi)])
+        recs.append((BG.BAT_GROUP, new, key[0], bytes(tab)))
+        for (pg, pi), ni in remap.items():
+            recs.append((BG.BAT_GROUP, ni, 1, idx[(pg, pi, 1)]))
+            recs.append((BG.BAT_GROUP, ni, 0, idx[(pg, pi, 0)]))
+        recs.append((BG.BAT_GROUP, new, BG.OVR_TYPE, bytes(ovr)))
+        report.append((bld["file"], new, None))
+    for x in pending:
+        report.append((x["file"], None, "not in the render output (the BA did not load it)"))
+    return recs, report
+
+
+def install_bat(game, recs):
+    """Merge rendered records into <game>/Apps/BARender/BAT.DAT; entries with the same override instance are replaced.
+    Backup BAT.DAT.bldbat-orig once. Delete-then-write (test trees hard-link BAT.DAT). -> (records dropped, added)."""
+    import batgrow as BG
+    path = game.path(BG.BAT_REL)
+    old = game.read(BG.BAT_REL)
+    bak = path + ".bldbat-orig"
+    if not os.path.exists(bak):
+        with open(bak, "wb") as fh:
+            fh.write(old)
+    idx, order = BG.records(old)
+    new_ovr = set(i for g, i, t, _p in recs if t == BG.OVR_TYPE)
+    drop = set()
+    for g, i, t in order:
+        if t == BG.OVR_TYPE and g == BG.BAT_GROUP and i in new_ovr:
+            key = struct.unpack_from("<3I", idx[(g, i, t)], 1)
+            tab = idx.get((key[1], key[2], key[0]))
+            drop.add((g, i, t))
+            if tab is not None:
+                drop.add((key[1], key[2], key[0]))
+                for k in range((len(tab) - 0x18) // 15):
+                    pg, pi = struct.unpack_from("<II", tab, 0x18 + 15 * k + 2)
+                    drop.update({(pg, pi, 0), (pg, pi, 1)})
+    keep = [(g, i, t, idx[(g, i, t)]) for g, i, t in order if (g, i, t) not in drop]
+    out = BG.new_container(keep + list(recs))
+    os.remove(path)
+    with open(path, "wb") as fh:
+        fh.write(out)
+    return len(drop), len(recs)
+
+
+def render_bat(paths, game, out, install=False, log=print):
+    """BA batch render of .bld files -> normalised BAT-format IXF at `out` (and the game's BAT.DAT with install).
+    -> (ba_render result, report, install counts or None)."""
+    import batgrow as BG
+    sys.path.insert(0, os.path.join(TOOLS, "bldbat"))
+    import ba_render
+    blds = [read_bld(p) for p in paths]
+    raw = out + ".raw.ixf"
+    res = ba_render.render(game.root, raw, paths, log)
+    with open(raw, "rb") as fh:
+        data = fh.read()
+    used = BG.records(game.read(BG.BAT_REL))[1] if game.exists(BG.BAT_REL) else []
+    recs, report = rekey_rendered(data, blds, used)
+    with open(out, "wb") as fh:
+        fh.write(BG.new_container(recs))
+    os.remove(raw)
+    inst = install_bat(game, recs) if install and recs else None
+    return res, report, inst
+
+
 # =================================================================== CLI
 
 def _bld_paths(args):
@@ -428,6 +642,40 @@ def cmd_js_expect(a):
     return 0
 
 
+def cmd_parts(a):
+    import batgrow as BG
+    game = BG.Game(a.game) if a.game else None
+    for p in _bld_paths(a.paths):
+        rows = parts(p, game)
+        cnt = {}
+        for r in rows:
+            cnt[r["status"]] = cnt.get(r["status"], 0) + 1
+        print("%s: %s" % (os.path.basename(p), ", ".join("%d %s" % (v, k) for k, v in sorted(cnt.items()))))
+        for r in rows:
+            if r["status"] in ("embedded", "custom", "missing") or a.all:
+                print("   %-9s %-7s %-34s %08X %s" % (r["status"], r["kind"] or "", r["name"], r["hash"],
+                                                    r["where"] or ""))
+    return 0
+
+
+def cmd_render(a):
+    import batgrow as BG
+    game = BG.Game(a.game)
+    res, report, inst = render_bat(_bld_paths(a.paths), game, a.out, a.install)
+    bad = 0
+    for f, ident, err in report:
+        if err:
+            bad += 1
+            print("%-30s FAILED: %s" % (f, err))
+        else:
+            print("%-30s id %08X" % (f, ident))
+    print("wrote %s (%d buildings, BA render %.1f s, display mode changes %d)" % (
+        a.out, len(report) - bad, res.get("ms", 0) / 1000.0, res["mode_changes"]))
+    if inst:
+        print("installed into %s: replaced %d old records, added %d" % (game.path(BG.BAT_REL), inst[0], inst[1]))
+    return 1 if bad else 0
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -445,9 +693,19 @@ def main(argv):
     s = sub.add_parser("js-expect")
     s.add_argument("--out", required=True)
     s.add_argument("paths", nargs="+")
+    s = sub.add_parser("parts")
+    s.add_argument("--game")
+    s.add_argument("--all", action="store_true", help="list stock files and colours too")
+    s.add_argument("paths", nargs="+")
+    s = sub.add_parser("render")
+    s.add_argument("--game", required=True, help="dev tree with BaappW.exe + bawinonly.dll (bldbat/ba_patch.py)")
+    s.add_argument("--out", required=True)
+    s.add_argument("--install", action="store_true", help="also merge into the tree's Apps/BARender/BAT.DAT")
+    s.add_argument("paths", nargs="+")
     a = ap.parse_args(argv)
     try:
-        return {"info": cmd_info, "sheet": cmd_sheet, "check": cmd_check, "js-expect": cmd_js_expect}[a.cmd](a)
+        return {"info": cmd_info, "sheet": cmd_sheet, "check": cmd_check, "js-expect": cmd_js_expect,
+                "parts": cmd_parts, "render": cmd_render}[a.cmd](a)
     except BldError as e:
         print("bldfile: %s" % e)
         return 1
