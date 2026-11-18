@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom buildings guide</title>
+<meta name="description" content="How to turn your own 3D models into buildings that grow in SimCity 3000 Unlimited, with a free sample pack to start from.">
+<style>
+:root {
+  --bg: #f3f4f1; --surface: #ffffff; --fg: #1d2420; --muted: #5a665f; --line: #d9ded9;
+  --accent: #2f6b4b; --accent-fg: #ffffff; --chip: #e7ece8; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
+  --code: #eef1ee; --warn: #8a5a00; --warnbg: #fff4d6;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #121614; --surface: #1a201d; --fg: #e6ebe8; --muted: #9aa69f; --line: #2b3430;
+          --accent: #7cc49c; --accent-fg: #0f1512; --chip: #222a26; --shadow: none; --code: #222a26;
+          --warn: #f2c66d; --warnbg: #2e2614; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #121614; --surface: #1a201d; --fg: #e6ebe8; --muted: #9aa69f; --line: #2b3430;
+          --accent: #7cc49c; --accent-fg: #0f1512; --chip: #222a26; --shadow: none; --code: #222a26;
+          --warn: #f2c66d; --warnbg: #2e2614; color-scheme: dark; }
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font); }
+a { color: var(--accent); }
+header.top { max-width: 1000px; margin: 0 auto; padding: 40px 16px 20px; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.01em; text-wrap: balance; }
+.lead { max-width: 70ch; color: var(--muted); margin: 0 0 8px; }
+.meta { color: var(--muted); font-size: .92rem; margin: 14px 0 0; }
+nav.fams { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+nav.fams ul { max-width: 1000px; margin: 0 auto; padding: 10px 16px; list-style: none; display: flex; gap: 8px;
+  overflow-x: auto; scrollbar-width: thin; }
+nav.fams a { display: inline-block; white-space: nowrap; padding: 6px 12px; border-radius: 999px; background: var(--chip);
+  color: var(--fg); text-decoration: none; font-size: .9rem; }
+nav.fams a:hover, nav.fams a:focus-visible { background: var(--accent); color: var(--accent-fg); }
+main { max-width: 1000px; margin: 0 auto; padding: 8px 16px 48px; }
+section.fam { padding-top: 32px; }
+section.fam > h2 { font-size: 1.45rem; margin: 0 0 8px; }
+h3 { font-size: 1.08rem; margin: 22px 0 6px; }
+p, li { max-width: 75ch; }
+ol li, ul li { margin: 4px 0; }
+code, kbd { font-family: var(--mono); font-size: .9em; background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+kbd { border: 1px solid var(--line); }
+.note { background: var(--warnbg); color: var(--fg); border-left: 4px solid var(--warn); padding: 10px 14px; border-radius: 6px; max-width: 75ch; }
+.dl { display: inline-block; background: var(--accent); color: var(--accent-fg); padding: 9px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+.tablewrap { overflow-x: auto; margin: 10px 0 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--chip); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+figure { margin: 16px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+figure img { display: block; width: 100%; height: auto; background: #4a5a3c; }
+figure a { display: block; }
+figcaption { padding: 10px 12px; font-size: .92rem; color: var(--muted); }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.pair figure { margin: 0; }
+footer { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; color: var(--muted); font-size: .88rem;
+  border-top: 1px solid var(--line); }
+footer p { max-width: 80ch; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Your own buildings in SimCity 3000 Unlimited</h1>
+  <p class="lead">Turn a 3D model into a building that grows in your zones next to the stock ones. You classify the models in a page that opens in your browser (<a href="importer/index.html">the building importer</a>), and the same page installs them into the game and takes them out again. No Python, no Building Architect, no other tool to install.</p>
+  <p class="lead">To get you started there is a free sample pack of 18 buildings: houses, shops, offices, towers and factories, from 1x1 to 3x3 lots. Install it as it is, or use it as a template for your own.</p>
+  <p class="meta">By nanofives, sc3kre project, November 2026. Needs the sc3mods road mod (sc3netmod) installed.</p>
+</header>
+<nav class="fams" aria-label="Sections"><ul>
+  <li><a href="#what">What it does</a></li>
+  <li><a href="#pack">Sample pack</a></li>
+  <li><a href="#model">Making a model</a></li>
+  <li><a href="#classify">Classifying</a></li>
+  <li><a href="#install">Installing</a></li>
+  <li><a href="#bld">.bld files</a></li>
+  <li><a href="#look">Stock look</a></li>
+  <li><a href="#trouble">Troubleshooting</a></li>
+</ul></nav>
+<main>
+
+<section class="fam" id="what">
+<h2>What the tool does</h2>
+<p>Each enabled model becomes a new growable building. The page draws it in the game's own camera at all five zoom levels and all four view rotations (20 pictures), on its own patch of lawn, and writes it into the game as a member of the building class you picked. From then on it grows on zoned lots of that class, like the stock buildings of the class, and takes its jobs, residents and pollution from a stock building of the same class and lot size.</p>
+<p>Nothing stock is replaced. Your buildings join the stock ones in the same families, and the weight you give each one sets how often it is picked.</p>
+<figure><a href="img/houses_z4.jpg"><img src="img/houses_z4.jpg" alt="Sample pack houses grown next to stock houses in Sacramento at zoom 4" loading="lazy" width="1100" height="690"></a>
+<figcaption>Sacramento at zoom 4, after a few game-run minutes: Red Roof Houses, Gable Houses (dark green roofs) and Brick Houses grown among the stock houses. Every building here grew on its own, none was placed by hand.</figcaption></figure>
+<h3>What it does not do</h3>
+<ul>
+  <li>Ploppable buildings (landmarks, rewards), airports and seaports. Only zoned growables for now.</li>
+  <li>Lots that are not square. A building sits on a 1x1, 2x2, 3x3 or 4x4 lot, as every stock growable does.</li>
+  <li>Night lights and animation. The stock houses have none either.</li>
+  <li>File formats other than OBJ and the Building Architect's <code>.bld</code>. Convert glTF, FBX or anything else to OBJ first (Blender does it).</li>
+</ul>
+</section>
+
+<section class="fam" id="pack">
+<h2>The sample pack</h2>
+<p>18 buildings: 16 from Kenney's free city kits and 2 test models of ours. They cover residential, commercial and industrial classes from low to high wealth, on 1x1, 2x2 and 3x3 lots, with weight 2 each, near the stock weights of 1 to 3. In our tests in Sacramento and Berlin all 18 grew on their own. The Skyscraper (class 6700, dense high-wealth commercial) grew only after we made Berlin rebuild its commercial lots more often, because that class otherwise changes few lots.</p>
+<p><a class="dl" href="https://github.com/nanofives/sc3kre/releases/download/sample-buildings-2026-11-18/sc3-sample-buildings-2026-11-18.zip">Download the sample pack (zip)</a></p>
+<figure><a href="img/pack_sheet.jpg"><img src="img/pack_sheet.jpg" alt="The 18 buildings of the sample pack at zoom 3, with their class and lot size" loading="lazy" width="1284" height="727"></a>
+<figcaption>The whole pack at zoom 3, with each building's class and lot size.</figcaption></figure>
+<div class="pair">
+<figure><a href="img/berlin_glass_tower_z3.jpg"><img src="img/berlin_glass_tower_z3.jpg" alt="Glass Tower grown in Berlin" loading="lazy" width="1100" height="690"></a><figcaption>Berlin, zoom 3: the Glass Tower (centre, dark blue glass in a grey frame) among stock offices.</figcaption></figure>
+<figure><a href="img/berlin_skyscraper_z3.jpg"><img src="img/berlin_skyscraper_z3.jpg" alt="Skyscraper grown in Berlin's downtown" loading="lazy" width="1080" height="677"></a><figcaption>Berlin, zoom 3: the Skyscraper (blue glass grid in a white frame, right) next to the stock towers.</figcaption></figure>
+<figure><a href="img/chimney_factory_z4.jpg"><img src="img/chimney_factory_z4.jpg" alt="Chimney Factory and Smoke Works in an industrial zone" loading="lazy" width="1100" height="690"></a><figcaption>Sacramento, zoom 4: the Chimney Factory (centre, yellow chimneys), Workshops, Smoke Works and two Long Factories (yellow tanks) next to stock industry.</figcaption></figure>
+<figure><a href="img/corner_shops_z4.jpg"><img src="img/corner_shops_z4.jpg" alt="Corner Shops in a commercial zone" loading="lazy" width="1100" height="690"></a><figcaption>Sacramento, zoom 4: two Corner Shops (white, centre) on a commercial block.</figcaption></figure>
+<figure><a href="img/next_to_stock_z3.jpg"><img src="img/next_to_stock_z3.jpg" alt="Each pack building in its four views next to the stock building it takes its stats from" loading="lazy"></a><figcaption>Each building in its four view rotations (left) next to the stock building it takes its stats from (right), zoom 3.</figcaption></figure>
+</div>
+<div class="tablewrap"><table>
+<thead><tr><th>Building</th><th>Class</th><th>Lot</th><th>Size</th><th>Weight</th><th>Source</th></tr></thead><tbody>
+<tr><td>Solar Bungalow</td><td>3100 Residential light, low wealth</td><td>1x1</td><td>13 x 9 x 7 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Red Roof House</td><td>3300 Residential light, mid wealth</td><td>1x1</td><td>13 x 10 x 8 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Gable House</td><td>3300 Residential light, mid wealth</td><td>1x1</td><td>13 x 10 x 11 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Modern Dark House</td><td>3500 Residential light, high wealth</td><td>1x1</td><td>12 x 10 x 9 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Big Villa</td><td>3500 Residential light, high wealth</td><td>2x2</td><td>23 x 18 x 15 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Wide Apartments</td><td>3700 Residential medium, low wealth</td><td>2x2</td><td>23 x 10 x 16 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Apartment Tower</td><td>4500 Residential dense, mid wealth</td><td>2x2</td><td>18 x 18 x 30 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Corner Shop</td><td>5100 Commercial light, low wealth</td><td>1x1</td><td>11 x 13 x 11 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Shop Row</td><td>5700 Commercial medium, low wealth</td><td>2x2</td><td>28 x 17 x 15 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Office Block</td><td>6100 Commercial medium, high wealth</td><td>3x3</td><td>39 x 31 x 42 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Glass Tower</td><td>6300 Commercial dense, low wealth</td><td>2x2</td><td>24 x 24 x 52 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Skyscraper</td><td>6700 Commercial dense, high wealth</td><td>3x3</td><td>28 x 31 x 120 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Workshop</td><td>8700 Industrial clean, light</td><td>1x1</td><td>12 x 16 x 9 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Smoke Works</td><td>8100 Industrial dirty, light</td><td>1x1</td><td>15 x 12 x 15 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Chimney Factory</td><td>8300 Industrial dirty, medium</td><td>2x2</td><td>21 x 27 x 24 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Long Factory</td><td>8900 Industrial clean, medium</td><td>2x2</td><td>30 x 15 x 17 m</td><td class="n">2</td><td>Kenney</td></tr>
+<tr><td>Brick House</td><td>3300 Residential light, mid wealth</td><td>1x1</td><td>12 x 12 x 9 m</td><td class="n">2</td><td>sc3kre test model</td></tr>
+<tr><td>Three-Storey Block</td><td>3900 Residential medium, mid wealth</td><td>2x2</td><td>23 x 22 x 13 m</td><td class="n">2</td><td>sc3kre test model</td></tr>
+</tbody></table></div>
+<h3>What is in the zip</h3>
+<ul>
+  <li>One <code>.obj</code> and one <code>.mtl</code> per building, and the textures in <code>Textures\</code>.</li>
+  <li><code>importer\</code>: the building importer (<code>index.html</code> and <code>bldweb.js</code>), the same page as the online one. Open <code>index.html</code> in Chrome or Edge.</li>
+  <li><code>models.json</code>: the name, class, lot, weight, scale and rotation of every building, as the page writes it. Open the folder in the page to see or change them.</li>
+  <li><code>sc3build\ids.json</code>: the building ids (38000 and up). Keep it with the folder. It is what lets a saved city find its buildings again after you reinstall.</li>
+  <li><code>CREDITS.txt</code>, <code>Kenney_License.txt</code> and <code>README.txt</code>.</li>
+</ul>
+<p>Most models are by <a href="https://www.kenney.nl">Kenney</a>, from the free City Kit Suburban, Commercial and Industrial, released under CC0 (public domain). Two are test models of ours, also CC0. You may change them, share them and use them in your own packs.</p>
+</section>
+
+<section class="fam" id="model">
+<h2>Making or finding a model</h2>
+<p>Any OBJ model works if it follows these rules. Blender's OBJ export with its default settings already gives the right axes.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Units</td><td>metres</td><td>One lot cell is 16 m wide. A 10 m wide house fills a 1x1 lot like a stock cottage.</td></tr>
+<tr><td>Up axis</td><td>+Y</td><td>OBJ convention and Blender's default export.</td></tr>
+<tr><td>Front</td><td>+Z</td><td>What faces you in Blender's front view. The front is drawn on the lower-right face in the first view rotation, the side stock shopfronts face.</td></tr>
+<tr><td>Ground</td><td>the lowest vertex</td><td>The model is set down so its lowest point touches the ground, and its footprint is centred on the lot.</td></tr>
+<tr><td>Footprint</td><td>at most 16 / 32 / 48 / 64 m</td><td>For a 1x1 / 2x2 / 3x3 / 4x4 lot. A larger model overhangs the neighbouring lots, and the page warns about it.</td></tr>
+<tr><td>Height</td><td>any</td><td>Tall buildings draw taller. The sample skyscraper is 120 m.</td></tr>
+</tbody></table></div>
+<p>You do not have to model at the right size. The page has a <b>Scale</b> field per model, and the Kenney models in the sample pack use scales from 9 to 22 because the kits are not in metres.</p>
+<h3>Lot sizes</h3>
+<p>Pick the lot from the footprint: a model up to 16 m across goes on 1x1, up to 32 m on 2x2, and so on. Not every class has every lot size, because the game copies the stats (jobs, residents, pollution) of a stock building of the same class and size. The page offers only the sizes that exist:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Class</th><th>What</th><th>Lot sizes</th></tr></thead><tbody>
+<tr><td class="n">3100</td><td>Residential light, low wealth</td><td>1x1</td></tr>
+<tr><td class="n">3300</td><td>Residential light, mid wealth</td><td>1x1</td></tr>
+<tr><td class="n">3500</td><td>Residential light, high wealth</td><td>1x1, 2x2</td></tr>
+<tr><td class="n">3700</td><td>Residential medium, low wealth</td><td>2x2, 3x3</td></tr>
+<tr><td class="n">3900</td><td>Residential medium, mid wealth</td><td>2x2</td></tr>
+<tr><td class="n">4100</td><td>Residential medium, high wealth</td><td>2x2, 3x3</td></tr>
+<tr><td class="n">4300</td><td>Residential dense, low wealth</td><td>2x2, 3x3</td></tr>
+<tr><td class="n">4500</td><td>Residential dense, mid wealth</td><td>2x2, 3x3, 4x4</td></tr>
+<tr><td class="n">4700</td><td>Residential dense, high wealth</td><td>3x3, 4x4</td></tr>
+<tr><td class="n">5100</td><td>Commercial light, low wealth</td><td>1x1</td></tr>
+<tr><td class="n">5500</td><td>Commercial light, high wealth</td><td>1x1, 2x2</td></tr>
+<tr><td class="n">5700</td><td>Commercial medium, low wealth</td><td>2x2, 3x3, 4x4</td></tr>
+<tr><td class="n">6100</td><td>Commercial medium, high wealth</td><td>2x2, 3x3</td></tr>
+<tr><td class="n">6300</td><td>Commercial dense, low wealth</td><td>2x2, 3x3</td></tr>
+<tr><td class="n">6700</td><td>Commercial dense, high wealth</td><td>3x3, 4x4</td></tr>
+<tr><td class="n">8100</td><td>Industrial dirty, light</td><td>1x1</td></tr>
+<tr><td class="n">8300</td><td>Industrial dirty, medium</td><td>2x2</td></tr>
+<tr><td class="n">8500</td><td>Industrial dirty, dense</td><td>1x1, 2x2, 3x3</td></tr>
+<tr><td class="n">8700</td><td>Industrial clean, light</td><td>1x1, 2x2</td></tr>
+<tr><td class="n">8900</td><td>Industrial clean, medium</td><td>2x2, 3x3</td></tr>
+<tr><td class="n">9100</td><td>Industrial clean, dense</td><td>3x3, 4x4</td></tr>
+<tr><td class="n">9300</td><td>Farm</td><td>1x1, 2x2, 3x3</td></tr>
+</tbody></table></div>
+<h3>Textures and colours</h3>
+<ul>
+  <li>Colours come from the <code>.mtl</code> file: <code>Kd</code> for a flat colour, <code>map_Kd</code> for a PNG or JPEG texture. Put the texture inside the models folder (in it or in a subfolder) and write its path relative to the <code>.mtl</code>. The page cannot read a texture outside the models folder.</li>
+  <li>The faces are drawn flat-shaded and two-sided, so vertex normals and smoothing groups make no difference.</li>
+  <li>Transparent texture pixels, normal maps, bump maps and specular maps are not used.</li>
+  <li>A 1x1 lot is 128 pixels wide at zoom 4, the closest zoom, so fine texture detail turns into a few pixels. Bold windows, doors and roof edges read better than photo textures.</li>
+</ul>
+<h3>Polygon budget</h3>
+<p>There is no hard limit. The models in the sample pack hold from 34 to 8,700 triangles each, and the Python version of the tool drew all 18 in under 3 minutes on our PC. More triangles cost drawing time when you install, not frame rate in the game: the game only ever sees the 20 finished pictures.</p>
+<h3>Where to find models</h3>
+<ul>
+  <li><a href="https://www.kenney.nl/assets">Kenney's kits</a> (CC0): the sample pack's source. City Kit Suburban, Commercial and Industrial include roads, trees and fences too. Leave those out, only buildings grow.</li>
+  <li>Any model you have the right to use. Check its licence before you share a pack built from it.</li>
+  <li>Your own, from Blender, SketchUp or any tool that exports OBJ.</li>
+</ul>
+</section>
+
+<section class="fam" id="classify">
+<h2>Classifying the models</h2>
+<p>Open the building importer in Chrome or Edge: online at <a href="importer/index.html">nanofives.github.io/sc3kre/buildings/importer</a>, or open <code>importer\index.html</code> from the sample pack zip straight from the disk. Both are the same page. It needs no server and nothing to install. The 3D preview of each model loads its 3D library from the internet.</p>
+<ol>
+  <li>Select <b>Open folder</b> and pick the folder with your models. Each model shows as a card with a 3D view you can turn.</li>
+  <li>Select a card (or several) and set the fields on the right:
+    <ul>
+      <li><b>Kind</b>: <code>growable</code> for a zoned building.</li>
+      <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above).</li>
+      <li><b>Lot</b>: 1x1 to 4x4.</li>
+      <li><b>Weight</b>: how often it is picked against the other members of its family. Most stock buildings have weight 1, a few have 2 or 3. The sample pack uses 2.</li>
+      <li><b>Scale</b> and <b>Rotate (deg)</b>: size and turn (in 90 degree steps) before the model is set on its lot.</li>
+      <li><b>Name</b>: what the query box shows.</li>
+    </ul></li>
+  <li><b>Suggest for all</b> fills kind, class, lot and height from each model's size, as a starting point.</li>
+  <li>Clear <b>Enabled</b> to leave a model out without deleting it.</li>
+  <li>Select <b>Save models.json</b>. The file goes into the models folder, and you can open the folder again later to carry on.</li>
+</ol>
+</section>
+
+<section class="fam" id="install">
+<h2>Installing and removing</h2>
+<p class="note">Close the game before you select Install or Remove. The page cannot see whether the game is running, so it does not check. Install the sc3mods road mod (sc3netmod) first: the buildings go into its overlay folder, and the page refuses a game folder without it.</p>
+<ol>
+  <li>In the same page, with your models folder open and classified, select <b>Game folder</b> and pick your SimCity 3000 Unlimited folder (the one with <code>Apps</code>, <code>Cities</code> and <code>Buildings</code> in it). The page checks that it is a game folder with the road mod, and remembers it for your next visit.</li>
+  <li>Optional: pick a <b>Look</b>. <code>stock</code> is the default and matches the stock art. <code>stock, sharp zoom 4</code> draws the closest zoom at full detail. <code>clean</code> is plain, without the stock grain. A model that names a style in <code>models.json</code> keeps its own.</li>
+  <li>Close the game and select <b>Install into the game</b>. The page saves <code>models.json</code> if you changed it, draws each enabled model (20 pictures each, with a progress line per model), shows each building in its four views, and writes the files.</li>
+  <li>Start the game and load a city. New buildings grow as lots of their class develop or redevelop, so give the city some time at a fast speed.</li>
+</ol>
+<p>To take them out again, close the game, open the page, pick the game folder and select <b>Remove from the game</b>. Every file goes back to how it was before your first install, and the picture file the install created is deleted.</p>
+<p>Selecting Install again replaces the last install and keeps the same ids. So add, change or remove models in the folder and install again. If you also use the BAT conversion script (<code>bat_growables.ps1</code>), run it first and install your models after it.</p>
+<h3>When the browser cannot write into the folders</h3>
+<p>Firefox and Safari cannot write into folders, and Chrome or Edge can refuse a folder (for example one under Program Files). The page then offers, under <b>No folder access</b>:</p>
+<ul>
+  <li><b>Make the install .zip</b>: you pick the game folder in the browser's upload picker, and the page downloads <code>sc3-buildings-install.zip</code>. Unpack it into the game folder and replace the files it asks about. If the page could not write into your models folder either, it also downloads <code>ids.json</code>: put it in the models folder's <code>sc3build</code> folder.</li>
+  <li><b>Make the removal .zip</b>: downloads the original files to put back, plus <code>DELETE_THESE_FILES.txt</code>, which names the file the install created. Unpack the zip into the game folder and delete that file.</li>
+</ul>
+<h3>Where the files go</h3>
+<ul>
+  <li>The game: <code>mods\netmod\overlay\Apps\Res\</code> (pictures, building records, names in every language, family lists). Backups and the install record go in <code>mods\netmod\bldimport\</code>.</li>
+  <li>The models folder: <code>sc3build\ids.json</code>.</li>
+</ul>
+<h3>Ids and saved cities</h3>
+<p>Each model file gets an id from 38000 to 38999, kept in <code>sc3build\ids.json</code> in the models folder. Keep that file. A city saved with your buildings finds them again only if they keep the same ids. The sample pack ships its <code>ids.json</code>, so every player who installs it gets the same ids, 38000 to 38017.</p>
+<p>A city saved with imported buildings and opened without them does not crash. In our test with the same kind of files, each of those lots showed a stock building of the same type in its place.</p>
+</section>
+
+<section class="fam" id="bld">
+<h2>Building Architect .bld files</h2>
+<p>Downloaded Building Architect buildings (<code>.bld</code>) work in the same folder as your OBJ models. The page reads the name, lot and category from the file and suggests a class.</p>
+<p>A <code>.bld</code> file holds the Building Architect's model and one 200 x 200 preview picture, not the game's 20 pictures. Two cases:</p>
+<ul>
+  <li><b>The building is in the game's <code>Apps\BARender\BAT.DAT</code></b> (the 15 buildings the game ships, and any you once added through the Building Architect): its real pictures are used, all four views.</li>
+  <li><b>It is not</b>: the preview is used for every zoom. The first view is right. The other three are the same picture or its mirror image, so a building that looks different on each side shows the wrong side in three of the four view rotations. The page marks these as approximate views.</li>
+</ul>
+<p>If a <code>.bld</code> matters to you, add it once through the game's Building Architect so it lands in <code>BAT.DAT</code>, then install again.</p>
+</section>
+
+<section class="fam" id="look">
+<h2>Tips for a stock look</h2>
+<ul>
+  <li><b>Fill the lot.</b> Stock houses cover most of their lot. Size the model with Scale until it does, and compare it with its stock neighbours in the page's preview or in game.</li>
+  <li><b>Add detail you can see from far away</b>: window frames, eaves, porches, chimneys, a dark line where the roof meets the wall. Stock art has more dark detail than a plain model, and that is most of the difference.</li>
+  <li><b>Tone down bright colours.</b> The drawing step adds contrast and saturation to match the stock pictures, so a colour that is already strong gets stronger. The sample pack makes three roof colour variants of the Kenney suburban texture for this: <code>kenney_suburban_colormap_red</code>, <code>_slate</code> and <code>_moss</code>. Only the roof colour changed, and the <code>.mtl</code> picks which one a house uses.</li>
+  <li><b>Put things on the lot.</b> Trees, fences, a driveway or parked cars belong in the same model as the building. The picture includes everything on the lot.</li>
+  <li><b>Keep weights low.</b> With weights near the stock ones (1 to 3) your buildings mix in. A weight of 20 against stock weights of 1 fills whole neighbourhoods with them.</li>
+  <li>Keep the default Look, <code>stock</code>. It copies how the stock art is lit and coloured, and makes the zoom 4 picture from zoom 3 as the stock buildings do. To give one model another style, add <code>"x_bldrender": {"style": "clean"}</code> (or <code>"stock_sharp"</code>) to its entry in <code>models.json</code>.</li>
+</ul>
+<div class="pair">
+<figure><a href="img/houses_z3.jpg"><img src="img/houses_z3.jpg" alt="Sample pack houses among stock houses at zoom 3" loading="lazy" width="1100" height="690"></a><figcaption>The same neighbourhood at zoom 3.</figcaption></figure>
+<figure><a href="img/long_factory_z4.jpg"><img src="img/long_factory_z4.jpg" alt="Long Factory next to stock factories at zoom 4" loading="lazy" width="1100" height="690"></a><figcaption>A Long Factory (yellow tank) next to stock factories, zoom 4.</figcaption></figure>
+</div>
+</section>
+
+<section class="fam" id="trouble">
+<h2>Troubleshooting</h2>
+<h3>My building never grows</h3>
+<ul>
+  <li>The class needs demand and the right zone: a 3100 house grows only on light residential zones with low-wealth demand. Check the class against the zones and the demand meter of your city.</li>
+  <li>Lots develop over time. Run the game at a fast speed for a few game years. A city with no free zoned land grows new buildings only when old lots redevelop.</li>
+  <li>Check that the model is enabled (ticked) in the page, and that the sc3mods road mod is installed and on.</li>
+  <li>A weight of 1 in a family with many members comes up rarely. Raise it for a test, then lower it again.</li>
+  <li>Dense high-wealth commercial (class 6700) redevelops rarely. In our Berlin test the 15 stock buildings of that class held 170 lots before and 166 after 10 game-run minutes, so a new member has few chances to appear. The sample Skyscraper grew there once commercial lots were rebuilt more often (the sc3mods <code>simrun.ini</code> setting <code>[churn] anarchy_com</code>).</li>
+</ul>
+<h3>It looks too small, too big or hangs over the road</h3>
+<p>Change Scale and install again. The tool warns when the footprint is larger than the lot. Check the size against the lot table in <a href="#model">Making a model</a>.</p>
+<h3>The front faces the wrong way</h3>
+<p>Set Rotate to 90, 180 or 270 and install again. Grown buildings never turn to face their road, stock ones included, so the side you see depends only on the view rotation.</p>
+<h3>It is grey or a texture is missing</h3>
+<p>The <code>map_Kd</code> path in the <code>.mtl</code> is wrong, the file is missing, or it sits outside the models folder. Paths are relative to the <code>.mtl</code> file and must stay inside the models folder. Keep file names unique across kits: several Kenney kits call their texture <code>colormap.png</code>, which is why the sample pack renames them.</p>
+<h3>I removed a model and my city looks different</h3>
+<p>Its lots now show a stock building of the same type. Install the model again (with the same <code>ids.json</code>) to get it back.</p>
+<h3>The page cannot open my folder</h3>
+<p>Use Chrome or Edge. The page writes into folders through a browser feature (the File System Access API) that Firefox and Safari do not offer. In any browser, the .zip buttons under <b>No folder access</b> do the same job (see <a href="#install">Installing</a>).</p>
+<h3>Install says the game folder is wrong</h3>
+<p>Pick the folder that holds <code>Apps</code>, <code>Cities</code> and <code>Buildings</code>, not <code>Apps</code> itself. The page also needs the sc3mods road mod installed in that folder.</p>
+<h3>Install or Remove stopped halfway</h3>
+<p>Close the game and select the same button again. The page works from the files on disk and the backups it keeps in <code>mods\netmod\bldimport\</code>, so a second run starts from where things are.</p>
+</section>
+
+</main>
+<footer>
+  <p>The mods and this tool are free and come as a zip on the <a href="https://github.com/nanofives/sc3kre/releases/latest">sc3kre releases page</a>. Road junction pictures are in the <a href="../gallery/">road mod gallery</a>. Bug reports are welcome as GitHub issues or on Simtropolis.</p>
+  <p>Sample models by Kenney (www.kenney.nl), CC0. SimCity 3000 Unlimited is the property of Electronic Arts / Maxis. This is an independent project, not affiliated with or endorsed by Electronic Arts or Maxis.</p>
+</footer>
+</body>
+</html>
