@@ -1,0 +1,13 @@
+{
+  "sc3models": 1,
+  "generator": "hand-written sample",
+  "models": [
+    { "file": "house_a.obj", "name": "Red brick house", "kind": "growable", "class": 3300, "lot": [1, 1], "weight": 1,
+      "height_m": 9.5, "scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": true, "notes": "",
+      "x_bldrender": { "palette": "warm", "shadow": true } },
+    { "file": "shop_a.obj", "name": "Corner shop", "kind": "growable", "class": 5100, "lot": [1, 1], "weight": 2,
+      "height_m": 6.6, "scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": true, "notes": "sample", "author": "me" },
+    { "file": "missing_building.obj", "name": "File not in the folder", "kind": "growable", "class": 8100, "lot": [1, 1], "weight": 1,
+      "height_m": 12, "scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": false, "notes": "kept on save" }
+  ]
+}

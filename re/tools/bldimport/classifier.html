@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SC3 Model Classifier</title>
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --panel2:#eceef2; --text:#1d2330; --muted:#5d6678; --line:#d3d8e0;
+  --accent:#2563eb; --accent-text:#ffffff; --warn:#b45309; --warnbg:#fef3c7; --ok:#15803d;
+  --canvas:#e6e9ef; --sel:#dbe7ff; --r:#2f9e44; --c:#1c7ed6; --i:#e8590c; --o:#7048e8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171d; --panel:#1d222b; --panel2:#262c37; --text:#e6e9ef; --muted:#9aa4b5; --line:#343b49;
+    --accent:#5b8def; --accent-text:#0b1020; --warn:#fbbf24; --warnbg:#3a2f12; --ok:#4ade80;
+    --canvas:#242a35; --sel:#243556; --r:#51cf66; --c:#4dabf7; --i:#ff922b; --o:#9775fa;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171d; --panel:#1d222b; --panel2:#262c37; --text:#e6e9ef; --muted:#9aa4b5; --line:#343b49;
+  --accent:#5b8def; --accent-text:#0b1020; --warn:#fbbf24; --warnbg:#3a2f12; --ok:#4ade80;
+  --canvas:#242a35; --sel:#243556; --r:#51cf66; --c:#4dabf7; --i:#ff922b; --o:#9775fa;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0 8px 0 0}
+button,select,input,textarea{font:inherit;color:var(--text)}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+input[type=text],input[type=number],select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:100%}
+#status{color:var(--muted);flex:1 1 220px;min-width:160px}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;padding:16px;align-items:start}
+.left{min-width:0}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+.tools input[type=text]{max-width:220px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:8px;padding:6px;cursor:pointer;position:relative;user-select:none}
+.card.sel{border-color:var(--accent);background:var(--sel)}
+.card.focus{outline:2px solid var(--accent);outline-offset:1px}
+.card img{width:100%;aspect-ratio:4/3;display:block;border-radius:5px;background:var(--canvas);object-fit:contain}
+.card .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.card .fl{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card input[type=checkbox]{position:absolute;top:10px;left:10px;width:18px;height:18px}
+.badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.b{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid var(--line);background:var(--panel2)}
+.b.R{border-color:var(--r);color:var(--r)} .b.C{border-color:var(--c);color:var(--c)}
+.b.I{border-color:var(--i);color:var(--i)} .b.O{border-color:var(--o);color:var(--o)}
+.b.warn{background:var(--warnbg);color:var(--warn);border-color:var(--warn)}
+.b.off{opacity:.55;text-decoration:line-through}
+.side{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto}
+#view{width:100%;aspect-ratio:4/3;background:var(--canvas);border-radius:8px;display:block;touch-action:none}
+.row{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center;margin:7px 0}
+.row label{color:var(--muted);font-size:13px}
+.measure{color:var(--muted);font-size:12.5px;margin:8px 0}
+.sugg{background:var(--panel2);border-radius:8px;padding:8px;margin:10px 0;font-size:13px}
+.sugg .why{color:var(--muted);font-size:12px;margin-top:3px}
+.btnrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+details{margin-top:12px}
+summary{cursor:pointer;color:var(--muted)}
+textarea#rules{height:260px;font:12px/1.35 ui-monospace,Consolas,monospace;white-space:pre}
+.hint{color:var(--muted);font-size:12px;margin:4px 0}
+.empty{padding:40px 10px;text-align:center;color:var(--muted);grid-column:1/-1;border:2px dashed var(--line);border-radius:10px}
+pre#selftest{display:none}
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr);padding:12px 16px}
+  .side{position:static;max-height:none}
+  header{position:static}
+}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>SC3 Model Classifier</h1>
+  <button id="btnOpen" class="primary">Open folder</button>
+  <button id="btnSave" disabled>Save models.json</button>
+  <button id="btnTheme" title="Switch light / dark">Theme</button>
+  <span id="status">Open a folder with OBJ, glTF, GLB or FBX models. An existing models.json is read back.</span>
+</header>
+<input type="file" id="fileFallback" webkitdirectory multiple hidden>
+
+<div class="app">
+  <section class="left">
+    <div class="tools">
+      <input type="text" id="filter" placeholder="Filter by name or file">
+      <button id="btnAll">Select all</button>
+      <button id="btnNone">Clear selection</button>
+      <button id="btnSuggestAll" title="Overwrite kind, class, lot and height of every model with the current rules">Suggest for all</button>
+      <span class="hint">Click selects, Ctrl-click toggles, Shift-click selects a range.</span>
+    </div>
+    <div id="grid"><div class="empty">No models yet. Use <b>Open folder</b>.</div></div>
+  </section>
+
+  <aside class="side">
+    <canvas id="view"></canvas>
+    <label class="hint"><input type="checkbox" id="autoturn"> Turn automatically</label>
+    <div class="measure" id="measure">Nothing selected.</div>
+    <div class="sugg" id="sugg" hidden></div>
+    <div id="form"></div>
+    <details id="rulesBox">
+      <summary>Suggestion rules (editable)</summary>
+      <p class="hint">Plain JSON. Footprint and height come from the model after scale and rotation, in meters. A lot cell is <code>cell_m</code> meters. Keywords are matched against the file name and the model name. After Apply, press a Suggest button to use the new rules.</p>
+      <textarea id="rules" spellcheck="false"></textarea>
+      <div class="btnrow"><button id="btnRulesApply">Apply rules</button><button id="btnRulesReset">Reset to defaults</button></div>
+      <div class="hint" id="rulesMsg"></div>
+    </details>
+  </aside>
+</div>
+<pre id="selftest"></pre>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+
+// ---------------------------------------------------------------- lot classes
+// Same ids and lot sizes as re/scripts/bat_growables.ps1 ($Classes, Bases keys). [zone, density 1-3, wealth, label, sizes]
+const CLASSES = [
+ [3100,'R',1,'low','Residential light, low wealth',[1]],
+ [3300,'R',1,'mid','Residential light, mid wealth',[1]],
+ [3500,'R',1,'high','Residential light, high wealth',[1,2]],
+ [3700,'R',2,'low','Residential medium, low wealth',[2,3]],
+ [3900,'R',2,'mid','Residential medium, mid wealth',[2]],
+ [4100,'R',2,'high','Residential medium, high wealth',[2,3]],
+ [4300,'R',3,'low','Residential dense, low wealth',[2,3]],
+ [4500,'R',3,'mid','Residential dense, mid wealth',[2,3,4]],
+ [4700,'R',3,'high','Residential dense, high wealth',[3,4]],
+ [5100,'C',1,'low','Commercial light, low wealth',[1]],
+ [5500,'C',1,'high','Commercial light, high wealth',[1,2]],
+ [5700,'C',2,'low','Commercial medium, low wealth',[2,3,4]],
+ [6100,'C',2,'high','Commercial medium, high wealth',[2,3]],
+ [6300,'C',3,'low','Commercial dense, low wealth',[2,3]],
+ [6700,'C',3,'high','Commercial dense, high wealth',[3,4]],
+ [8100,'I',1,'dirty','Industrial dirty, light',[1]],
+ [8300,'I',2,'dirty','Industrial dirty, medium',[2]],
+ [8500,'I',3,'dirty','Industrial dirty, dense',[1,2,3]],
+ [8700,'I',1,'clean','Industrial clean, light',[1,2]],
+ [8900,'I',2,'clean','Industrial clean, medium',[2,3]],
+ [9100,'I',3,'clean','Industrial clean, dense',[3,4]],
+ [9300,'F',1,'farm','Farm',[1,2,3]],
+];
+const CLS = new Map(CLASSES.map(c => [c[0], c]));
+const KINDS = ['growable','airport','seaport','ploppable'];
+
+const DEFAULT_RULES = {
+  cell_m: 16,
+  light_max_m: 12,
+  medium_max_m: 30,
+  wealth: 'mid',
+  commercial_mid_as: 'low',
+  industry_default: 'clean',
+  fallback_industrial_min_area_m2: 500,
+  fallback_commercial_min_area_m2: 120,
+  fallback_max_height_m: 20,
+  keywords: {
+    R: ['house','home','villa','cottage','apartment','flat','residen','condo','bungalow','tenement','dwelling'],
+    C: ['shop','store','office','mall','market','bank','hotel','cafe','restaurant','supermarket','plaza'],
+    I: ['factory','plant','warehouse','industr','mill','refinery','foundry','depot','works','silo'],
+    farm: ['farm','barn','ranch','stable'],
+    dirty: ['factory','refinery','foundry','smoke','chimney','mill','works'],
+    clean: ['office','lab','tech','warehouse','assembly'],
+    airport: ['airport','hangar','terminal','runway'],
+    seaport: ['seaport','harbor','harbour','dock','pier','shipyard','crane'],
+    ploppable: ['park','school','hospital','statue','monument','landmark','fire','police','church','library','stadium','museum']
+  }
+};
+let rules = structuredClone(DEFAULT_RULES);
+
+// ---------------------------------------------------------------- state
+const S = {
+  recs: [],          // model records in folder order
+  orphans: [],       // entries in models.json whose file is not in the folder (saved unchanged)
+  top: {},           // unknown top-level keys of models.json
+  dirHandle: null, folderName: '', sel: new Set(), focus: null, lastClick: null, hadJson: false, dirty: false
+};
+const $ = id => document.getElementById(id);
+const grid = $('grid'), statusEl = $('status');
+const setStatus = t => { statusEl.textContent = t; };
+const round = (v, p) => Math.round(v * p) / p;
+
+// ---------------------------------------------------------------- theme
+try { const t = localStorage.getItem('bc-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+const qs = new URLSearchParams(location.search);
+if (qs.get('theme')) document.documentElement.dataset.theme = qs.get('theme');
+function isDark() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+}
+$('btnTheme').onclick = () => {
+  const t = isDark() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('bc-theme', t); } catch (e) {}
+  applyThemeToScene();
+};
+
+// ---------------------------------------------------------------- three.js scenes
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({ canvas: view, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 4 / 3, 0.1, 5000);
+const controls = new OrbitControls(camera, view);
+controls.enableDamping = true;
+const pv = new THREE.Group(); scene.add(pv);
+const aux = new THREE.Group(); scene.add(aux);          // ground grid + lot outline
+function addLights(sc) {
+  sc.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.1));
+  const d = new THREE.DirectionalLight(0xffffff, 2.2); d.position.set(-30, 60, 40); sc.add(d);
+}
+addLights(scene);
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function applyThemeToScene() { scene.background = new THREE.Color(cssVar('--canvas')); rebuildGround(); }
+
+const thumbR = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+thumbR.setSize(240, 180);
+const thumbScene = new THREE.Scene(); addLights(thumbScene);
+const thumbCam = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 5000);
+
+function sizeView() {
+  const w = view.clientWidth || 400, h = Math.round(w * 3 / 4);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', sizeView);
+
+let ground = null;
+function rebuildGround() {
+  while (aux.children.length) { const o = aux.children.pop(); o.geometry && o.geometry.dispose(); }
+  const cell = rules.cell_m || 16;
+  const grid = new THREE.GridHelper(cell * 8, 8, 0x888888, 0x888888);
+  grid.material.opacity = 0.35; grid.material.transparent = true; aux.add(grid);
+  const rec = S.focus;
+  const lot = rec && rec.meta.lot ? rec.meta.lot : null;
+  if (lot) {
+    const w = lot[0] * cell / 2, d = lot[1] * cell / 2;
+    const g = new THREE.BufferGeometry().setFromPoints([[-w,0.05,-d],[w,0.05,-d],[w,0.05,d],[-w,0.05,d]].map(p => new THREE.Vector3(...p)));
+    aux.add(new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: new THREE.Color(cssVar('--accent')) })));
+  }
+}
+function frame() {
+  const rec = S.focus; if (!rec) return;
+  const cell = rules.cell_m || 16;
+  const m = measure(rec);
+  const lot = rec.meta.lot || [1, 1];
+  const r = Math.max(m.fx, m.fz, m.h, lot[0] * cell, lot[1] * cell) * 1.15;
+  controls.target.set(0, m.h / 2, 0);
+  camera.position.set(r * 1.1, r * 0.85 + m.h * 0.3, r * 1.3);
+  camera.near = r / 100; camera.far = r * 50; camera.updateProjectionMatrix();
+  controls.update();
+}
+function loop() {
+  requestAnimationFrame(loop);
+  controls.autoRotate = $('autoturn').checked; controls.autoRotateSpeed = 3;
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ---------------------------------------------------------------- loading models
+let urlMap = new Map();     // lowercase basename -> blob url, for MTL / textures / .bin next to a model
+function modifier(url) {
+  if (/^(blob:|data:)/.test(url)) return url;
+  const base = decodeURIComponent(url.split(/[\\/]/).pop().split('?')[0]).toLowerCase();
+  return urlMap.get(base) || url;
+}
+const greyMat = () => new THREE.MeshStandardMaterial({ color: 0xcfc8bd, roughness: .85, metalness: 0, side: THREE.DoubleSide });
+
+async function loadObject(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const manager = new THREE.LoadingManager(); manager.setURLModifier(modifier);
+  if (ext === 'obj') {
+    const text = await file.text();
+    const loader = new OBJLoader(manager);
+    const mm = text.match(/^\s*mtllib\s+(.+?)\s*$/m);
+    if (mm && urlMap.has(mm[1].toLowerCase())) {
+      try {
+        const mtl = await new MTLLoader(manager).loadAsync(urlMap.get(mm[1].toLowerCase()));
+        mtl.preload(); loader.setMaterials(mtl);
+        const o = loader.parse(text); return o;
+      } catch (e) { /* fall through to grey */ }
+    }
+    const o = new OBJLoader().parse(text);
+    o.traverse(n => { if (n.isMesh) n.material = greyMat(); });
+    return o;
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    if (ext === 'gltf' || ext === 'glb') {
+      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+      return (await new GLTFLoader(manager).loadAsync(url)).scene;
+    }
+    if (ext === 'fbx') {
+      const { FBXLoader } = await import('three/addons/loaders/FBXLoader.js');
+      return await new FBXLoader(manager).loadAsync(url);
+    }
+  } finally { setTimeout(() => URL.revokeObjectURL(url), 5000); }
+  throw new Error('unsupported ' + ext);
+}
+
+function prettyName(file) {
+  const b = file.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').trim();
+  return b.charAt(0).toUpperCase() + b.slice(1);
+}
+
+// Each record: file, rawEntry (unknown keys survive), meta (known keys), obj, wrap, base size at scale 1
+async function makeRecord(file, entry) {
+  const rec = { file: file.name, f: file, raw: entry ? { ...entry } : null, fresh: !entry, err: null };
+  try {
+    const obj = await loadObject(file);
+    const box = new THREE.Box3().setFromObject(obj);
+    if (box.isEmpty()) throw new Error('no geometry');
+    const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    obj.position.set(-c.x, -box.min.y, -c.z);
+    const wrap = new THREE.Group(); wrap.add(obj);
+    rec.obj = obj; rec.wrap = wrap; rec.base = { x: size.x, y: size.y, z: size.z };
+  } catch (e) { rec.err = String(e.message || e); rec.base = { x: 0, y: 0, z: 0 }; }
+  const e = entry || {};
+  rec.meta = {
+    name: e.name ?? prettyName(file.name), kind: e.kind ?? 'growable', class: e.class ?? null,
+    lot: Array.isArray(e.lot) ? e.lot.slice() : null, weight: e.weight ?? 1, height_m: e.height_m ?? null,
+    scale: e.scale ?? 1, rotate_deg: e.rotate_deg ?? 0, style: e.style ?? 'any', enabled: e.enabled ?? true, notes: e.notes ?? ''
+  };
+  if (rec.base.y && rec.meta.height_m == null) rec.meta.height_m = round(rec.base.y * rec.meta.scale, 10);
+  if (!entry) { const s = suggest(rec); Object.assign(rec.meta, s.set); rec.why = s.why; }
+  return rec;
+}
+
+function thumbnail(rec) {
+  if (!rec.wrap) return '';
+  const saved = { s: rec.wrap.scale.clone(), r: rec.wrap.rotation.y };
+  rec.wrap.scale.setScalar(1); rec.wrap.rotation.y = 0;
+  thumbScene.add(rec.wrap);
+  thumbScene.background = new THREE.Color(cssVar('--canvas'));
+  const b = rec.base, r = Math.max(b.x, b.y, b.z) * 1.35 || 1;
+  thumbCam.position.set(r * 1.0, r * 0.75 + b.y * .2, r * 1.25);
+  thumbCam.lookAt(0, b.y / 2, 0);
+  thumbR.render(thumbScene, thumbCam);
+  const url = thumbR.domElement.toDataURL('image/png');
+  thumbScene.remove(rec.wrap);
+  rec.wrap.scale.copy(saved.s); rec.wrap.rotation.y = saved.r;
+  return url;
+}
+
+// ---------------------------------------------------------------- measures, suggestions
+function measure(rec) {
+  const r = (rec.meta.rotate_deg || 0) * Math.PI / 180, s = rec.meta.scale || 1;
+  const c = Math.abs(Math.cos(r)), n = Math.abs(Math.sin(r));
+  const fx = (rec.base.x * c + rec.base.z * n) * s, fz = (rec.base.x * n + rec.base.z * c) * s;
+  return { fx, fz, h: rec.base.y * s };
+}
+function hasWord(text, list) { return (list || []).find(w => text.includes(w.toLowerCase())); }
+
+function suggest(rec) {
+  const R = rules, m = measure(rec), cell = R.cell_m || 16, K = R.keywords || {};
+  const text = (rec.file + ' ' + rec.meta.name).toLowerCase();
+  const area = m.fx * m.fz, want = Math.max(1, Math.min(4, Math.ceil(Math.max(m.fx, m.fz) / cell - 0.15)));
+  const why = [];
+  let kind = 'growable', zone = null, hit;
+  if ((hit = hasWord(text, K.airport))) { kind = 'airport'; why.push(`name has "${hit}": airport`); }
+  else if ((hit = hasWord(text, K.seaport))) { kind = 'seaport'; why.push(`name has "${hit}": seaport`); }
+  else if ((hit = hasWord(text, K.ploppable))) { kind = 'ploppable'; why.push(`name has "${hit}": ploppable`); }
+  else if ((hit = hasWord(text, K.farm))) { zone = 'F'; why.push(`name has "${hit}": farm`); }
+  else if ((hit = hasWord(text, K.R))) { zone = 'R'; why.push(`name has "${hit}": residential`); }
+  else if ((hit = hasWord(text, K.C))) { zone = 'C'; why.push(`name has "${hit}": commercial`); }
+  else if ((hit = hasWord(text, K.I))) { zone = 'I'; why.push(`name has "${hit}": industrial`); }
+  else if (m.h <= R.fallback_max_height_m && area >= R.fallback_industrial_min_area_m2) { zone = 'I'; why.push(`no keyword, footprint ${area.toFixed(0)} m2 >= ${R.fallback_industrial_min_area_m2}: industrial`); }
+  else if (m.h <= R.fallback_max_height_m && area >= R.fallback_commercial_min_area_m2) { zone = 'C'; why.push(`no keyword, footprint ${area.toFixed(0)} m2 >= ${R.fallback_commercial_min_area_m2}: commercial`); }
+  else { zone = 'R'; why.push(`no keyword, footprint ${area.toFixed(0)} m2: residential`); }
+  const set = { kind, height_m: round(m.h, 10) };
+  if (kind !== 'growable') {
+    set.class = null; set.lot = [want, want];
+    why.push(`lot ${want}x${want} from footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m at ${cell} m per cell`);
+    return { set, why: why.join('. ') };
+  }
+  let dens = m.h <= R.light_max_m ? 1 : m.h <= R.medium_max_m ? 2 : 3;
+  why.push(`height ${m.h.toFixed(1)} m: density ${dens}`);
+  let pool, cls;
+  if (zone === 'F') cls = CLS.get(9300);
+  else {
+    const w = zone === 'I'
+      ? (hasWord(text, K.dirty) ? 'dirty' : hasWord(text, K.clean) ? 'clean' : R.industry_default)
+      : zone === 'C' ? (R.wealth === 'high' ? 'high' : (R.wealth === 'mid' ? R.commercial_mid_as : 'low')) : R.wealth;
+    pool = CLASSES.filter(c => c[3] === w && zoneOf(c) === zone);
+    if (!pool.length) pool = CLASSES.filter(c => zoneOf(c) === zone);
+    pool.sort((a, b) => a[2] - b[2]);
+    cls = pool.find(c => c[2] === dens) || pool[pool.length - 1];
+    while (cls && want > Math.max(...cls[5]) && cls[2] < 3) {
+      const up = pool.find(c => c[2] === cls[2] + 1); if (!up) break;
+      cls = up; why.push(`footprint needs ${want} cells: density raised to ${cls[2]}`);
+    }
+  }
+  set.class = cls[0];
+  const sizes = cls[5];
+  const lotN = sizes.includes(want) ? want : (sizes.find(s => s >= want) ?? Math.max(...sizes));
+  set.lot = [lotN, lotN];
+  why.push(`${cls[0]} ${cls[4]} offers ${sizes.map(s => s + 'x' + s).join(', ')}; footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m = ${(Math.max(m.fx, m.fz) / cell).toFixed(2)} cells: lot ${lotN}x${lotN}`);
+  return { set, why: why.join('. ') };
+}
+function zoneOf(c) { return c[0] === 9300 ? 'F' : c[1]; }
+
+function warnings(rec) {
+  const w = [], m = rec.meta, cell = rules.cell_m || 16;
+  if (rec.err) w.push('could not load: ' + rec.err);
+  if (m.kind === 'growable') {
+    if (m.class == null) w.push('growable without a class');
+    else if (!CLS.has(m.class)) w.push('class ' + m.class + ' is not in the lot class table');
+    else if (m.lot && m.lot[0] === m.lot[1] && !CLS.get(m.class)[5].includes(m.lot[0])) w.push(`class ${m.class} offers ${CLS.get(m.class)[5].map(s => s + 'x' + s).join(', ')}, not ${m.lot[0]}x${m.lot[1]}`);
+  }
+  if (m.lot && rec.base.x) {
+    const ms = measure(rec);
+    if (ms.fx > m.lot[0] * cell * 1.15 || ms.fz > m.lot[1] * cell * 1.15) w.push(`footprint ${ms.fx.toFixed(1)} x ${ms.fz.toFixed(1)} m is wider than the ${m.lot[0]}x${m.lot[1]} lot (${cell} m per cell)`);
+  }
+  return w;
+}
+
+// ---------------------------------------------------------------- models.json
+function entryOf(rec) {
+  const m = rec.meta;
+  return { ...(rec.raw || {}), file: rec.file, name: m.name, kind: m.kind, class: m.class, lot: m.lot, weight: m.weight,
+    height_m: m.height_m, scale: m.scale, rotate_deg: m.rotate_deg, style: m.style, enabled: m.enabled, notes: m.notes };
+}
+function toJSONText() {
+  const out = { ...S.top, sc3models: 1, models: [...S.recs.map(entryOf), ...S.orphans] };
+  return JSON.stringify(out, null, 2) + '\n';
+}
+async function applyJSON(text, files) {
+  const data = JSON.parse(text);
+  if (!data || !Array.isArray(data.models)) throw new Error('models.json has no "models" array');
+  const { models, ...top } = data; S.top = top;
+  const byFile = new Map(models.map(e => [String(e.file).toLowerCase(), e]));
+  const seen = new Set();
+  const recs = [];
+  for (const f of files) {
+    const e = byFile.get(f.name.toLowerCase()); if (e) seen.add(f.name.toLowerCase());
+    recs.push(await makeRecord(f, e));
+  }
+  S.orphans = models.filter(e => !seen.has(String(e.file).toLowerCase()));
+  return recs;
+}
+
+// ---------------------------------------------------------------- folder opening
+const MODEL_EXT = /\.(obj|gltf|glb|fbx)$/i;
+async function openFiles(files, jsonFile) {
+  urlMap.forEach(u => URL.revokeObjectURL(u)); urlMap = new Map();
+  for (const f of files.all) urlMap.set(f.name.toLowerCase(), URL.createObjectURL(f));
+  const models = files.models.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  setStatus('Loading ' + models.length + ' models...');
+  S.top = {}; S.orphans = []; S.hadJson = false;
+  let recs;
+  if (jsonFile) {
+    try { recs = await applyJSON(await jsonFile.text(), models); S.hadJson = true; }
+    catch (e) { setStatus('models.json could not be read (' + e.message + '). Starting from suggestions.'); recs = null; }
+  }
+  if (!recs) { recs = []; for (const f of models) recs.push(await makeRecord(f, null)); }
+  S.recs = recs; S.sel.clear(); S.focus = null; S.lastClick = null; S.dirty = !S.hadJson;
+  for (const r of recs) r.thumb = thumbnail(r);
+  renderGrid();
+  if (recs[0]) select([recs[0]]);
+  $('btnSave').disabled = !recs.length;
+  const nf = recs.filter(r => r.fresh).length;
+  setStatus(`${recs.length} models from ${S.folderName || 'folder'}` + (S.hadJson ? `, models.json read (${recs.length - nf} entries, ${nf} new, ${S.orphans.length} for missing files)` : ', no models.json yet: suggestions shown, save to create it'));
+}
+async function pickFolder() {
+  if (window.showDirectoryPicker) {
+    try {
+      const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+      const all = [], models = []; let json = null;
+      for await (const [name, h] of dir.entries()) {
+        if (h.kind !== 'file') continue;
+        const f = await h.getFile(); all.push(f);
+        if (MODEL_EXT.test(name)) models.push(f);
+        if (name.toLowerCase() === 'models.json') json = f;
+      }
+      S.dirHandle = dir; S.folderName = dir.name;
+      await openFiles({ all, models }, json);
+      return;
+    } catch (e) { if (e.name === 'AbortError') return; console.warn('directory picker failed, using fallback', e); }
+  }
+  $('fileFallback').click();
+}
+$('btnOpen').onclick = pickFolder;
+$('fileFallback').onchange = async ev => {
+  const list = [...ev.target.files].filter(f => (f.webkitRelativePath || f.name).split('/').length <= 2);
+  const models = list.filter(f => MODEL_EXT.test(f.name));
+  const json = list.find(f => f.name.toLowerCase() === 'models.json') || null;
+  S.dirHandle = null; S.folderName = (list[0] && list[0].webkitRelativePath || '').split('/')[0];
+  await openFiles({ all: list, models }, json);
+  setStatus(statusEl.textContent + '. This browser cannot write into the folder: Save downloads models.json, copy it next to the models.');
+  ev.target.value = '';
+};
+
+$('btnSave').onclick = async () => {
+  const text = toJSONText();
+  try {
+    if (S.dirHandle) {
+      const fh = await S.dirHandle.getFileHandle('models.json', { create: true });
+      const w = await fh.createWritable(); await w.write(text); await w.close();
+      S.dirty = false; setStatus(`Saved models.json (${S.recs.length + S.orphans.length} entries) into ${S.folderName}.`);
+      return;
+    }
+  } catch (e) { console.warn('direct save failed, downloading', e); }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = 'models.json'; document.body.appendChild(a); a.click(); a.remove();
+  S.dirty = false; setStatus('Downloaded models.json. Copy it next to the models.');
+};
+addEventListener('beforeunload', e => { if (S.dirty && S.recs.length) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------------------------------------------------------------- grid
+function zoneBadge(rec) {
+  const m = rec.meta;
+  if (m.kind !== 'growable') return m.kind[0].toUpperCase();
+  const c = CLS.get(m.class); return c ? (c[0] === 9300 ? 'I' : c[1]) : '?';
+}
+function renderGrid() {
+  const q = $('filter').value.trim().toLowerCase();
+  grid.textContent = '';
+  const list = S.recs.filter(r => !q || (r.file + ' ' + r.meta.name).toLowerCase().includes(q));
+  if (!list.length) { grid.innerHTML = '<div class="empty">' + (S.recs.length ? 'No model matches the filter.' : 'No models yet. Use <b>Open folder</b>.') + '</div>'; return; }
+  for (const rec of list) {
+    const m = rec.meta, z = zoneBadge(rec), w = warnings(rec);
+    const d = document.createElement('div');
+    d.className = 'card' + (S.sel.has(rec) ? ' sel' : '') + (S.focus === rec ? ' focus' : '');
+    d.dataset.file = rec.file;
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = S.sel.has(rec);
+    cb.onclick = ev => { ev.stopPropagation(); toggle(rec); };
+    const img = document.createElement('img'); img.src = rec.thumb || ''; img.alt = '';
+    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = m.name; nm.title = m.name;
+    const fl = document.createElement('div'); fl.className = 'fl'; fl.textContent = rec.file;
+    const bd = document.createElement('div'); bd.className = 'badges';
+    const mk = (t, c, title) => { const s = document.createElement('span'); s.className = 'b ' + (c || ''); s.textContent = t; if (title) s.title = title; bd.appendChild(s); };
+    mk(m.kind === 'growable' ? z : m.kind, z);
+    if (m.class != null) mk(String(m.class), z);
+    if (m.lot) mk(m.lot[0] + 'x' + m.lot[1]);
+    if (!m.enabled) mk('off', 'off');
+    if (rec.fresh) mk('new', '', 'No entry in models.json yet: values are suggestions');
+    if (w.length) mk('!', 'warn', w.join('\n'));
+    d.append(cb, img, nm, fl, bd);
+    d.onclick = ev => clickCard(rec, ev, list);
+    grid.appendChild(d);
+  }
+}
+function clickCard(rec, ev, list) {
+  if (ev.shiftKey && S.lastClick && list.includes(S.lastClick)) {
+    const a = list.indexOf(S.lastClick), b = list.indexOf(rec);
+    select(list.slice(Math.min(a, b), Math.max(a, b) + 1), true, rec);
+  } else if (ev.ctrlKey || ev.metaKey) toggle(rec);
+  else { select([rec]); }
+  S.lastClick = rec;
+}
+function toggle(rec) {
+  const next = new Set(S.sel); next.has(rec) ? next.delete(rec) : next.add(rec);
+  S.focus = next.has(rec) ? rec : ([...next].pop() || null);
+  S.sel = next; afterSelect();
+}
+function select(recs, keep, focus) {
+  S.sel = new Set(recs); S.focus = focus || recs[recs.length - 1] || null; afterSelect();
+}
+function afterSelect() { renderGrid(); refreshPanel(); showFocus(); }
+$('btnAll').onclick = () => select(S.recs);
+$('btnNone').onclick = () => select([]);
+$('filter').oninput = renderGrid;
+
+function showFocus() {
+  pv.clear();
+  const rec = S.focus;
+  if (rec && rec.wrap) { pv.add(rec.wrap); applyWrap(rec); frame(); }
+  rebuildGround();
+}
+function applyWrap(rec) { rec.wrap.scale.setScalar(rec.meta.scale || 1); rec.wrap.rotation.y = (rec.meta.rotate_deg || 0) * Math.PI / 180; }
+
+// ---------------------------------------------------------------- edit panel
+const form = $('form');
+const el = {};
+function row(label, node) {
+  const r = document.createElement('div'); r.className = 'row';
+  const l = document.createElement('label'); l.textContent = label; r.append(l, node); form.appendChild(r); return r;
+}
+function buildForm() {
+  el.name = Object.assign(document.createElement('input'), { type: 'text' }); row('Name', el.name);
+  el.kind = document.createElement('select'); KINDS.forEach(k => el.kind.add(new Option(k, k))); row('Kind', el.kind);
+  el.class = document.createElement('select');
+  el.class.add(new Option('none', ''));
+  for (const [z, label] of [['R', 'Residential'], ['C', 'Commercial'], ['F', 'Farm'], ['I', 'Industrial']]) {
+    const g = document.createElement('optgroup'); g.label = label;
+    CLASSES.filter(c => zoneOf(c) === z).forEach(c => g.appendChild(new Option(`${c[0]} ${c[4]} (${c[5].map(s => s + 'x' + s).join(' ')})`, String(c[0]))));
+    el.class.appendChild(g);
+  }
+  row('Class', el.class);
+  el.lot = document.createElement('select');
+  [1, 2, 3, 4].forEach(n => el.lot.add(new Option(n + 'x' + n, n + ',' + n))); row('Lot', el.lot);
+  for (const [k, lab, step] of [['weight', 'Weight', 1], ['height_m', 'Height (m)', 0.1], ['scale', 'Scale', 0.05], ['rotate_deg', 'Rotate (deg)', 90]]) {
+    el[k] = Object.assign(document.createElement('input'), { type: 'number', step }); row(lab, el[k]);
+  }
+  el.style = Object.assign(document.createElement('input'), { type: 'text' }); row('Style', el.style);
+  el.enabled = Object.assign(document.createElement('input'), { type: 'checkbox' }); row('Enabled', el.enabled);
+  el.notes = document.createElement('textarea'); el.notes.rows = 2; row('Notes', el.notes);
+
+  const edit = (key, fn) => ev => { const recs = [...S.sel]; if (!recs.length) return; recs.forEach(r => fn(r, ev.target)); S.dirty = true; renderGrid(); refreshMeasure(); rebuildGround(); if (S.focus) applyWrap(S.focus); if (key === 'scale' || key === 'rotate_deg' || key === 'height_m') frame(); refreshPanel(key); };
+  el.name.onchange = edit('name', (r, t) => { r.meta.name = t.value; });
+  el.kind.onchange = edit('kind', (r, t) => { if (t.value === '__mixed__') return; r.meta.kind = t.value; if (t.value !== 'growable') r.meta.class = null; });
+  el.class.onchange = edit('class', (r, t) => { if (t.value === '__mixed__') return; r.meta.class = t.value === '' ? null : +t.value; });
+  el.lot.onchange = edit('lot', (r, t) => { if (t.value === '__mixed__') return; r.meta.lot = t.value.split(',').map(Number); });
+  el.weight.onchange = edit('weight', (r, t) => { if (t.value !== '') r.meta.weight = +t.value; });
+  el.scale.onchange = edit('scale', (r, t) => { if (t.value === '' || +t.value <= 0) return; r.meta.scale = +t.value; r.meta.height_m = round(r.base.y * r.meta.scale, 10); });
+  el.height_m.onchange = edit('height_m', (r, t) => { if (t.value === '' || +t.value <= 0 || !r.base.y) return; r.meta.height_m = +t.value; r.meta.scale = round(r.meta.height_m / r.base.y, 10000); });
+  el.rotate_deg.onchange = edit('rotate_deg', (r, t) => { if (t.value !== '') r.meta.rotate_deg = +t.value; });
+  el.style.onchange = edit('style', (r, t) => { r.meta.style = t.value; });
+  el.enabled.onchange = edit('enabled', (r, t) => { r.meta.enabled = t.checked; });
+  el.notes.onchange = edit('notes', (r, t) => { r.meta.notes = t.value; });
+}
+function common(recs, get) {
+  const vals = new Set(recs.map(r => JSON.stringify(get(r))));
+  return vals.size === 1 ? { one: true, v: get(recs[0]) } : { one: false };
+}
+function setSel(sel, c, toStr) {
+  [...sel.options].filter(o => o.value === '__mixed__').forEach(o => o.remove());
+  if (c.one) {
+    const v = toStr(c.v);
+    if (![...sel.options].some(o => o.value === v)) { const [a, b] = v.split(','); sel.add(new Option(a + 'x' + b, v)); }
+    sel.value = v;
+  } else { const o = new Option('(mixed)', '__mixed__'); sel.add(o, 0); sel.value = '__mixed__'; }
+}
+function refreshMeasure() {
+  const recs = [...S.sel];
+  if (!recs.length) { $('measure').textContent = 'Nothing selected.'; return; }
+  const cell = rules.cell_m || 16;
+  if (recs.length === 1) {
+    const r = recs[0], m = measure(r);
+    $('measure').textContent = r.err ? 'Could not load: ' + r.err : `${r.file}: footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m (${(m.fx / cell).toFixed(2)} x ${(m.fz / cell).toFixed(2)} cells), height ${m.h.toFixed(1)} m.`;
+  } else $('measure').textContent = `${recs.length} models selected. Edit a field to change it on all of them. Untouched fields stay as they are.`;
+}
+function refreshPanel(skip) {
+  const recs = [...S.sel], dis = !recs.length;
+  Object.values(el).forEach(e => e.disabled = dis);
+  refreshMeasure();
+  const sg = $('sugg');
+  if (dis) { sg.hidden = true; ['name','style','notes','weight','height_m','scale','rotate_deg'].forEach(k => { el[k].value = ''; }); return; }
+  const set = (k, c, fmt = v => v) => { if (k === skip) return; el[k].value = c.one ? fmt(c.v) : ''; el[k].placeholder = c.one ? '' : '(mixed)'; };
+  set('name', common(recs, r => r.meta.name)); set('style', common(recs, r => r.meta.style)); set('notes', common(recs, r => r.meta.notes));
+  set('weight', common(recs, r => r.meta.weight)); set('height_m', common(recs, r => r.meta.height_m)); set('scale', common(recs, r => r.meta.scale));
+  set('rotate_deg', common(recs, r => r.meta.rotate_deg));
+  setSel(el.kind, common(recs, r => r.meta.kind), v => v);
+  setSel(el.class, common(recs, r => r.meta.class), v => v == null ? '' : String(v));
+  setSel(el.lot, common(recs, r => r.meta.lot), v => v ? v.join(',') : '1,1');
+  const ce = common(recs, r => r.meta.enabled);
+  el.enabled.indeterminate = !ce.one; el.enabled.checked = ce.one && ce.v;
+  // suggestion box
+  sg.hidden = false; sg.textContent = '';
+  const t = document.createElement('div');
+  if (recs.length === 1) {
+    const s = suggest(recs[0]), c = CLS.get(s.set.class);
+    t.innerHTML = '<b>Suggested</b>: ' + s.set.kind + (c ? ', class ' + c[0] + ' (' + c[4] + ')' : '') + ', lot ' + s.set.lot[0] + 'x' + s.set.lot[1];
+    const why = document.createElement('div'); why.className = 'why'; why.textContent = s.why; sg.append(t, why);
+    const w = warnings(recs[0]); if (w.length) { const x = document.createElement('div'); x.className = 'why'; x.style.color = 'var(--warn)'; x.textContent = 'Warning: ' + w.join('; '); sg.appendChild(x); }
+  } else { t.innerHTML = '<b>Suggestions</b> for ' + recs.length + ' selected models use the rules below.'; sg.appendChild(t); }
+  const br = document.createElement('div'); br.className = 'btnrow';
+  const b = document.createElement('button'); b.textContent = recs.length > 1 ? 'Apply suggestions to selection' : 'Apply suggestion';
+  b.onclick = () => { suggestInto(recs); };
+  br.appendChild(b); sg.appendChild(br);
+}
+function suggestInto(recs) {
+  for (const r of recs) { const s = suggest(r); Object.assign(r.meta, s.set); r.why = s.why; r.fresh = false; }
+  S.dirty = true; renderGrid(); refreshPanel(); rebuildGround();
+}
+$('btnSuggestAll').onclick = () => { if (S.recs.length) suggestInto(S.recs); };
+
+// ---------------------------------------------------------------- rules editor
+function showRules() { $('rules').value = JSON.stringify(rules, null, 2); }
+$('btnRulesApply').onclick = () => {
+  try {
+    const r = JSON.parse($('rules').value);
+    if (typeof r.cell_m !== 'number' || r.cell_m <= 0) throw new Error('cell_m must be a positive number');
+    rules = r; $('rulesMsg').textContent = 'Rules applied.'; refreshPanel(); rebuildGround(); renderGrid();
+  } catch (e) { $('rulesMsg').textContent = 'Not applied: ' + e.message; }
+};
+$('btnRulesReset').onclick = () => { rules = structuredClone(DEFAULT_RULES); showRules(); $('rulesMsg').textContent = 'Defaults restored.'; refreshPanel(); rebuildGround(); renderGrid(); };
+
+// ---------------------------------------------------------------- demo + test hooks
+const DEMO_FILES = ['house_a.obj', 'shop_a.obj', 'factory_a.obj'];
+async function loadDemo(base = 'samples/') {
+  const all = [], models = []; let json = null;
+  for (const n of DEMO_FILES) { const r = await fetch(base + n); const f = new File([await r.blob()], n); all.push(f); models.push(f); }
+  try { const r = await fetch(base + 'models.json'); if (r.ok) json = new File([await r.blob()], 'models.json'); } catch (e) {}
+  S.dirHandle = null; S.folderName = 'samples';
+  await openFiles({ all, models }, json);
+}
+async function roundTrip() {
+  const res = { steps: [] };
+  const base = 'samples/';
+  const files = [];
+  for (const n of DEMO_FILES) files.push(new File([await (await fetch(base + n)).blob()], n));
+  const original = await (await fetch(base + 'models.json')).text();
+  await applyJSON(original, files).then(r => { S.recs = r; });
+  // multi-edit: two models at once, as the panel does
+  const picked = S.recs.slice(0, 2);
+  picked.forEach(r => { r.meta.class = 3500; r.meta.lot = [2, 2]; r.meta.notes = 'edited in selftest'; });
+  const saved = toJSONText();
+  // reload from the saved text
+  S.recs = await applyJSON(saved, files);
+  const again = toJSONText();
+  const a = JSON.parse(saved), b = JSON.parse(again), o = JSON.parse(original);
+  res.topKeysKept = Object.keys(o).filter(k => k !== 'models').every(k => JSON.stringify(a[k]) === JSON.stringify(o[k]));
+  res.unknownEntryKeysKept = o.models.every(om => { const sm = a.models.find(x => x.file === om.file); return sm && Object.keys(om).every(k => ['file','name','kind','class','lot','weight','height_m','scale','rotate_deg','style','enabled','notes'].includes(k) || JSON.stringify(sm[k]) === JSON.stringify(om[k])); });
+  res.unknownKeys = [...new Set(o.models.flatMap(m => Object.keys(m)).filter(k => !['file','name','kind','class','lot','weight','height_m','scale','rotate_deg','style','enabled','notes'].includes(k)))].concat(Object.keys(o).filter(k => k !== 'models' && k !== 'sc3models'));
+  res.editSurvived = picked.every(p => { const sm = b.models.find(x => x.file === p.file); return sm.class === 3500 && sm.lot.join() === '2,2' && sm.notes === 'edited in selftest'; });
+  res.stable = saved === again;
+  res.orphanKept = a.models.some(m => m.file === 'missing_building.obj');
+  res.count = { original: o.models.length, saved: a.models.length };
+  res.pass = res.topKeysKept && res.unknownEntryKeysKept && res.editSurvived && res.stable && res.orphanKept && res.unknownKeys.length > 0;
+  res.savedText = saved;
+  return res;
+}
+window.bc = { S, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES };
+
+// ---------------------------------------------------------------- start
+buildForm(); showRules(); sizeView(); applyThemeToScene(); refreshPanel(); loop();
+if (qs.get('demo')) {
+  loadDemo().then(() => {
+    const pick = qs.get('select');
+    if (pick === 'all') select(S.recs);
+    else if (pick) { const f = pick.split(','); select(S.recs.filter(r => f.includes(r.file))); }
+    if (qs.get('turn')) { const t = +qs.get('turn') * Math.PI / 180; controls.update(); const p = camera.position.clone().sub(controls.target); p.applyAxisAngle(new THREE.Vector3(0, 1, 0), t); camera.position.copy(controls.target).add(p); }
+    if (qs.get('rules')) $('rulesBox').open = true;
+    document.title = 'SC3 Model Classifier [demo ready]';
+    if (qs.get('selftest')) roundTrip().then(r => { $('selftest').textContent = JSON.stringify(r); document.title = 'SC3 Model Classifier [selftest done]'; }).catch(e => { $('selftest').textContent = JSON.stringify({ pass: false, error: String(e.stack || e) }); });
+  }).catch(e => setStatus('Demo failed: ' + e.message + ' (file:// pages need chrome --allow-file-access-from-files to fetch the samples)'));
+}
+</script>
+</body>
+</html>
