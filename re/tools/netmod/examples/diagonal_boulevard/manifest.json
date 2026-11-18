@@ -1,7 +1,7 @@
 {
  "netpack": 1,
  "name": "diagonal_boulevard",
- "version": "0.3.0",
+ "version": "0.3.1",
  "author": "netmod (task diagbv)",
  "description": "Diagonal boulevards: draw three diagonal roads joined side by side (each one cell over: along x on the down-right diagonal, one cell up on the other) and sc3netmod's DBV block makes them one 3-wide boulevard, the straight boulevard's cross-section turned 45 degrees: the outer roads are the carriageways, the middle one gives each an extra lane and holds a grass median with avenue 11204's trees. Straight single roads crossing it, meeting it from one side or closing its end get junctions with crosswalks; it narrows into the diagonal avenue or tapers into one of its three roads, closes with a round curb where all three stop, and turns into the straight boulevard where its drags go on straight. Lane lines are white dashes. Built by `diagbv.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Needs sc3netmod.dll with the DBV block. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side, every turn at the junctions; own lane specs (bvl_*.lanes.json, dbvlanes.py / bvlanes.py).",
  "game": {
@@ -8253,6 +8253,490 @@
       ]
      ],
      "_": "55 T stem 1 edge 1 g6"
+    },
+    {
+     "id": 23,
+     "x0": -2,
+     "z0": -4,
+     "w": 9,
+     "h": 9,
+     "grid": "--.....rr--r...rrr--rr.rrr..-rrrrr....rrrr.....rrrrr...-rrrrrr.--r..rrrr--....rr-",
+     "writes": [
+      [
+       1,
+       0,
+       22723,
+       3
+      ],
+      [
+       1,
+       1,
+       22721,
+       3
+      ],
+      [
+       2,
+       -1,
+       22726,
+       3
+      ],
+      [
+       2,
+       0,
+       22724,
+       3
+      ],
+      [
+       2,
+       1,
+       22722,
+       3
+      ],
+      [
+       3,
+       -1,
+       22727,
+       3
+      ],
+      [
+       3,
+       0,
+       22725,
+       3
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 1 (arms 3/4/5/6/7 rows, g0, anchor shift 1)"
+    },
+    {
+     "id": 24,
+     "x0": -1,
+     "z0": -2,
+     "w": 9,
+     "h": 9,
+     "grid": "-rr....--rrrr..r--.rrrrrr-...rrrrr.....rrrr....rrrrr-..rrr.rr--rrr...r--rr.....--",
+     "writes": [
+      [
+       2,
+       2,
+       22725,
+       1
+      ],
+      [
+       2,
+       3,
+       22727,
+       1
+      ],
+      [
+       3,
+       1,
+       22722,
+       1
+      ],
+      [
+       3,
+       2,
+       22724,
+       1
+      ],
+      [
+       3,
+       3,
+       22726,
+       1
+      ],
+      [
+       4,
+       1,
+       22721,
+       1
+      ],
+      [
+       4,
+       2,
+       22723,
+       1
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 2 (arms 3/4/5/6/7 rows, g1, anchor shift 0)"
+    },
+    {
+     "id": 25,
+     "x0": -1,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "-r.....rrrrr...rrrrrrr.rrr..rrrrrr....rrrr.....rrrrr...rrrrrrr.---..------....---",
+     "writes": [
+      [
+       0,
+       -3,
+       20950,
+       0
+      ],
+      [
+       2,
+       1,
+       22723,
+       3
+      ],
+      [
+       2,
+       2,
+       22721,
+       3
+      ],
+      [
+       3,
+       0,
+       22726,
+       3
+      ],
+      [
+       3,
+       1,
+       22724,
+       3
+      ],
+      [
+       3,
+       2,
+       22722,
+       3
+      ],
+      [
+       4,
+       0,
+       22727,
+       3
+      ],
+      [
+       4,
+       1,
+       22725,
+       3
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 1 (arms 3/4/5/6/7 rows, g4, anchor shift 0)"
+    },
+    {
+     "id": 26,
+     "x0": -1,
+     "z0": -2,
+     "w": 9,
+     "h": 9,
+     "grid": "---....------..---.rrrrrrr...rrrrr.....rrrr....rrrrrr..rrr.rrrrrrr...rrrrr.....r-",
+     "writes": [
+      [
+       2,
+       2,
+       22725,
+       1
+      ],
+      [
+       2,
+       3,
+       22727,
+       1
+      ],
+      [
+       3,
+       1,
+       22722,
+       1
+      ],
+      [
+       3,
+       2,
+       22724,
+       1
+      ],
+      [
+       3,
+       3,
+       22726,
+       1
+      ],
+      [
+       4,
+       1,
+       22721,
+       1
+      ],
+      [
+       4,
+       2,
+       22723,
+       1
+      ],
+      [
+       6,
+       6,
+       20950,
+       2
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 2 (arms 3/4/5/6/7 rows, g5, anchor shift 0)"
+    },
+    {
+     "id": 27,
+     "x0": -1,
+     "z0": -3,
+     "w": 9,
+     "h": 10,
+     "grid": "--.....-----...-------.----.rrrrrrr...rrrrr....rrrrr...rrrrrrr.rrrr.rrrrrrr...rrr-r.....r-",
+     "writes": [
+      [
+       2,
+       1,
+       22765,
+       0
+      ],
+      [
+       2,
+       2,
+       22766,
+       0
+      ],
+      [
+       3,
+       0,
+       22767,
+       0
+      ],
+      [
+       3,
+       1,
+       22768,
+       0
+      ],
+      [
+       3,
+       2,
+       22769,
+       0
+      ],
+      [
+       3,
+       3,
+       22770,
+       0
+      ],
+      [
+       4,
+       1,
+       22771,
+       0
+      ],
+      [
+       4,
+       2,
+       22772,
+       0
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 9 (arms 3/4/5/6/7 rows, g0, anchor shift 0)"
+    },
+    {
+     "id": 28,
+     "x0": -3,
+     "z0": -4,
+     "w": 10,
+     "h": 9,
+     "grid": "---....rr----r..rrrr.--rrrrrr...-rrrrr.....rrrr.....-rrrrr...--rrrrrr.---r..rrrr---....rr-",
+     "writes": [
+      [
+       0,
+       0,
+       22767,
+       3
+      ],
+      [
+       1,
+       -1,
+       22771,
+       3
+      ],
+      [
+       1,
+       0,
+       22768,
+       3
+      ],
+      [
+       1,
+       1,
+       22765,
+       3
+      ],
+      [
+       2,
+       -1,
+       22772,
+       3
+      ],
+      [
+       2,
+       0,
+       22769,
+       3
+      ],
+      [
+       2,
+       1,
+       22766,
+       3
+      ],
+      [
+       3,
+       0,
+       22770,
+       3
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 10 (arms 3/4/5/6/7 rows, g0, anchor shift 2)"
+    },
+    {
+     "id": 29,
+     "x0": -1,
+     "z0": -2,
+     "w": 10,
+     "h": 9,
+     "grid": "-rr....---rrrr..r---.rrrrrr--...rrrrr-.....rrrr.....rrrrr-...rrrrrr--.rrrr..r----rr....---",
+     "writes": [
+      [
+       0,
+       -2,
+       20951,
+       0
+      ],
+      [
+       1,
+       -2,
+       20950,
+       0
+      ],
+      [
+       2,
+       2,
+       22767,
+       3
+      ],
+      [
+       3,
+       1,
+       22771,
+       3
+      ],
+      [
+       3,
+       2,
+       22768,
+       3
+      ],
+      [
+       3,
+       3,
+       22765,
+       3
+      ],
+      [
+       4,
+       1,
+       22772,
+       3
+      ],
+      [
+       4,
+       2,
+       22769,
+       3
+      ],
+      [
+       4,
+       3,
+       22766,
+       3
+      ],
+      [
+       5,
+       2,
+       22770,
+       3
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 10 (arms 3/4/5/6/7 rows, g1, anchor shift 0)"
+    },
+    {
+     "id": 30,
+     "x0": -1,
+     "z0": -3,
+     "w": 9,
+     "h": 10,
+     "grid": "-r.....r-rrr...rrrrrrr.rrrr.rrrrrrr...rrrrr....rrrrr...rrrrrrr.----.-------...-----.....--",
+     "writes": [
+      [
+       2,
+       1,
+       22765,
+       0
+      ],
+      [
+       2,
+       2,
+       22766,
+       0
+      ],
+      [
+       3,
+       0,
+       22767,
+       0
+      ],
+      [
+       3,
+       1,
+       22768,
+       0
+      ],
+      [
+       3,
+       2,
+       22769,
+       0
+      ],
+      [
+       3,
+       3,
+       22770,
+       0
+      ],
+      [
+       4,
+       1,
+       22771,
+       0
+      ],
+      [
+       4,
+       2,
+       22772,
+       0
+      ],
+      [
+       7,
+       -2,
+       20951,
+       1
+      ],
+      [
+       7,
+       -1,
+       20950,
+       1
+      ]
+     ],
+     "_": "dbvx49 short-arm variant of 9 (arms 3/4/5/6/7 rows, g2, anchor shift 0)"
     }
    ]
   }

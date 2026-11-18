@@ -345,6 +345,34 @@ static int dav_clean(RbBuf *b, int axis, int a, int z) {
     return !dav_road(b, axis, a - 1, z) && !dav_road(b, axis, a + 3, z);
 }
 
+/* task dbvx49 (round 2026-11-17b, xsect 49 with 3..4-row arms): DAVSHORTBOX. A diagonal boulevard's crossing box
+   (DBVX) claims every cell of the diagonal avenue's rows at the crossing, so those rows end the avenue's chain
+   (dav_full) and split it in two. With 6-row arms each part keeps 4+ clean rows. With 3- or 4-row arms the part past the
+   box has 1..2 clean rows, under the DAV_MIN_ROWS anchor, and stayed the stock 11203 / 43 / 39 ladder against the box
+   (49 at 4 rows; at 3 rows it converted only while no box was drawn). Now a chain with at least one clean row is judged
+   when the row just past one of its ends is a row the diagonal boulevard holds (the box): its end there runs into the
+   boulevard (bend 3) as at 6 rows, the other end is judged as usual. Off: SC3NETMOD_DAVSHORTBOX=0. */
+static int g_dav_shortbox = -1;
+static volatile LONG g_dav_n_shortbox;
+static int dav_held_row(RbBuf *b, int axis, int a, int z) {   /* road on the row's three cells, all held by DBV */
+    return dav_road(b, axis, a, z) && dav_road(b, axis, a + 1, z) && dav_road(b, axis, a + 2, z) &&
+           dbv_claimed(axis ? -a : a, z) && dbv_claimed(axis ? -(a + 1) : a + 1, z) &&
+           dbv_claimed(axis ? -(a + 2) : a + 2, z);
+}
+static int dav_shortbox(RbBuf *b, int axis, int x, int z, int rows, int brun) {
+    if (g_dav_shortbox < 0) {
+        g_dav_shortbox = !env_off("SC3NETMOD_DAVSHORTBOX");
+        logf("dav: DAVSHORTBOX %s (a diagonal avenue arm 1..2 rows long past a diagonal boulevard's box converts, "
+             "SC3NETMOD_DAVSHORTBOX)", g_dav_shortbox ? "on" : "off");
+    }
+    if (!g_dav_shortbox || brun < 1 || rows < 1) return 0;   /* 0 clean rows (49 at 3 rows: the stub's one row has
+                       the boulevard's arm beside it) stays out: tried 2026-11-17 (a5), it also took the diagonal
+                       boulevard's ragged end rows as avenue stubs and broke 43 at 4 rows */
+    if (!dav_held_row(b, axis, x + rows, z + rows) && !dav_held_row(b, axis, x - 1, z - 1)) return 0;
+    InterlockedIncrement(&g_dav_n_shortbox);
+    return 1;
+}
+
 /* junction pieces: `davj <piece> <n> <s1> <s2> <road> <far>` = the piece at state 0 draws road 29 in orientation
    <road> (0 along x, 1 along z) with the avenue's 35 halves at states s1 (and s2 when n == 2) over it as asphalt, and
    keeps its far curb <far> (0 N, 1 E, 2 S, 3 W; 255 none) for a stem. */
@@ -813,7 +841,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 while (dav_full(&P.b, axis, x + rows, z + rows)) rows++;
                 for (k = 0, run = brun = 0; k < rows; k++)        /* anchored by MIN_ROWS clean rows (no road beside) */
                     brun += dav_clean(&P.b, axis, x + k, z + k);
-                if (brun < DAV_MIN_ROWS || rows > 1024) continue;
+                if (rows > 1024 || (brun < DAV_MIN_ROWS && !dav_shortbox(&P.b, axis, x, z, rows, brun))) continue;
                 /* task diagx: crossing templates at every row with road beside it */
                 for (k = 0; k < rows; k++) {
                     if (dav_clean(&P.b, axis, x + k, z + k)) continue;
@@ -1660,6 +1688,8 @@ static void dav_stats(void) {
         logf("stats: dav crossing cells left with AVL's one-way piece (DAVXAVL)=%ld", g_dav_n_xavl);
     if (g_dav_n_bvyield)                                               /* task diagfix: DAVBVBEND */
         logf("stats: dav cells left to BV (DAVBVBEND)=%ld", g_dav_n_bvyield);
+    if (g_dav_n_shortbox)                                              /* task dbvx49: DAVSHORTBOX */
+        logf("stats: dav short arms judged past a diagonal boulevard's box (DAVSHORTBOX)=%ld", g_dav_n_shortbox);
     if (g_dav_n_dbvwin)                                                /* task diagfix: DAVDBVWIN */
         logf("stats: dav windows DBV judged first (DAVDBVWIN)=%ld", g_dav_n_dbvwin);
     if (g_davxn_n_put || g_davxn_n_back)                               /* task diagxnet: DAVXN */
