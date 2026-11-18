@@ -18,6 +18,9 @@ Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips
 **Gallery.** Every junction the road mod builds, with the drag that makes each one:
 [nanofives.github.io/sc3kre/gallery](https://nanofives.github.io/sc3kre/gallery/).
 
+**Your own buildings.** Turn 3D models and Building Architect `.bld` files into zoned buildings, with a sample pack
+and a guide: [nanofives.github.io/sc3kre/buildings](https://nanofives.github.io/sc3kre/buildings/).
+
 **Install.** Unzip into the game folder (the one with `Apps` and `Cities`, `SC3U.exe` is inside `Apps`), run
 `powershell -ExecutionPolicy Bypass -File .\sc3mods_patch.ps1` once in that folder, start `Apps\SC3U.exe`. GOG and
 Steam copies both work.
