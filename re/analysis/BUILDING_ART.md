@@ -97,9 +97,10 @@ the lot per zoom and lot size (`bldrender.CALIB`), **0 differing pixels on 160 o
 126, 2x2 3077 / 3020 / 141, 3x3 3011 / 176, 4x4 3028 / 3071, zooms 0-3, every slot, and the flat tile 39 at zooms
 0-4. Stock lots of 2x2 and larger are one pixel wider per side at zooms 1-2 than 1x1 lots: the growth is per size.
 
-**Zoom 4** is rendered natively (scale byte 0, its own 128 px-per-cell record) rather than zoom 3 doubled: sharper,
-and the network pieces prove the native path draws. Stock zoom 4 has 2 px steps that a native edge cannot match;
-the lot edge used is tile 39's native zoom-4 edge (exact), the edge stock roads already draw next to houses.
+**Zoom 4** depends on the render style (section 4.1). `stock` (the default since 2026-11-18c) writes the zoom-3 frame
+pixel-doubled, anchor x 2, as its own scale-0 record: the same pixels the stock scale-2 frames draw, so the lot edge
+has the stock 2 px steps. `clean` and `stock_sharp` render zoom 4 natively (128 px per cell): sharper, and the lot
+edge is tile 39's native zoom-4 edge (exact), the edge stock roads draw next to houses.
 
 **Model axes** (classifier page convention, Blender's OBJ export default): metres, Y up. OBJ +X -> u, +Z -> v,
 +Y -> h. The footprint's bounding box is centred on the lot, the lowest vertex sits on the ground. `scale` multiplies,
@@ -112,14 +113,71 @@ ridge fills a 1x1 lot like Meek Cr. (115) and Pitched Roof Cottage (3065) do, an
 2x2 lot like the stock 2x2 houses (`verify/bldrender/owner_shots/`). Change it per model with `x_bldrender.cell_m`.
 [UNCERTAIN: an engine-side meaning of the cell size does not exist to measure; the value is a visual match.]
 
-**Light**: sun direction (v, u, h) = (0.30, -0.80, 1.25) normalised, ambient 0.50, diffuse 0.62: roof brightest,
-the lower-left face lit, the lower-right face in shade, as on the stock houses. Shadows from an orthographic shadow
-map along the sun, a shadowed sample keeps 35 % of its direct light (stock shadows are soft). Ground: procedural
-lawn (no game pixels), base colour from the measured stock lawn (mean RGB 86 / 118 / 70 over 5,540 green pixels
-in the lower quarter of nine stock 1x1 / 2x2 lots).
+**Light** (style `clean`): sun direction (v, u, h) = (0.30, -0.80, 1.25) normalised, ambient 0.50, diffuse 0.62:
+roof brightest, the lower-left face lit, the lower-right face in shade in every slot. Shadows from an orthographic
+shadow map along the sun, a shadowed sample keeps 35 % of its direct light. Ground: procedural lawn (no game pixels),
+base colour from the measured stock lawn (mean RGB 86 / 118 / 70 over 5,540 green pixels in the lower quarter of nine
+stock 1x1 / 2x2 lots). The `stock` style replaces most of this (section 4.1).
 
 **Materials**: OBJ `usemtl` + MTL `Kd` colours, `map_Kd` textures (PNG / JPEG, nearest texel, wraps). Vertex
 normals are not used: faces are flat-shaded, two-sided (a face turned away from the camera is lit from its back).
+
+### 4.1 What makes stock building art look the way it does, and the render styles (task bldlook, 2026-11-18c)
+
+Measured on 75 stock growables (every growable class x lot size, the first two plain 20-frame members of each
+class's rule families), 16 frames each (zooms 0-3, slots 0-3), 1,200 frames. Tools and full tables:
+`verify/bldlook/RESULTS.md`, scripts in `verify/bldlook/work/` (`extract_stock.py`, `metrics.py`). "Structure" =
+opaque pixels that are not lawn green (G > R + 8 and G > B + 8 of 255).
+
+| what | stock | clean (2026-11-18b) |
+|---|---|---|
+| colours per frame | <= 255 on 1,200 of 1,200 frames (zoom 3 median 248, max 255) | up to 343 |
+| zoom 4 | zoom 3 doubled (1,908 of 1,936 census frames); 2x2 blocks equal 100 % | native, 45 % |
+| zoom 3 native? | 2x2 blocks equal 4 %: real zoom-3 detail, not zoom 2 doubled | 38 % (flat faces) |
+| lit side, zoom 3 right / left luminance, slots 0-3 | 0.81 / 1.27 / 0.81 / 1.23 | 0.88 / 0.88 / 0.76 / 0.91 |
+| structure contrast (p90 - p10) / p50, zooms 3 / 2 / 1 / 0 | 1.23 / 0.94 / 0.70 / 0.51 | 0.65 / 0.63 / 0.53 / 0.39 |
+| structure saturation, zoom 3 / 0 | 0.225 / 0.106 | 0.132 / 0.031 |
+| texture (mean abs luminance - 3x3 mean), zoom 3 | 0.045 | 0.019 |
+| dark lawn share (< 0.7 x lawn median), zooms 3 / 2 / 1 / 0 | 0.18 / 0.10 / 0.04 / 0.00 | 0.02 / 0.01 / 0.00 / 0.01 |
+| lit lawn RGB, zoom 3 / 0 | 94/136/73 / 114/137/104 | 97/128/76 / 88/118/70 |
+
+Findings:
+
+1. **The lit wall follows the model's axis, not the screen.** In slots 0 and 2 the lower-left face is the light one,
+   in slots 1 and 3 the lower-right. With the slot rule (u, v) -> (v, n - u), that is the model's +-u walls light and
+   +-v walls dark in every slot: the same world-axis rule as the stock highway walls (memory
+   project-wall-lighting-lit-twins). Grown lots keep state 0 (section 3), so in view rotations 1 and 3 every stock
+   house is lit on its lower-right face. The `clean` style lights the lower-left face in every slot, the opposite
+   of its neighbours in two of the four views.
+2. **8-bit palette per frame.** No stock frame holds more than 255 colours (plus the key): the art went through a
+   per-frame palette before the RGB565 export.
+3. **The lawn is darker along the two front edges of the lot** (heat map of dark lawn pixels over every 1x1 and
+   2x2 lot, all slots), not in a cast shadow beside the building. Measured as the dark-lawn share above.
+4. **The roof is not the brightest surface**: on 3020 and the 1x1 houses the lit wall is lighter than the roof.
+5. Stock contrast, saturation and dark-lawn share fall at the smaller zooms; the lawn gets lighter (zoom 0
+   114/137/104 against zoom 3 94/136/73).
+6. Smaller zooms are not box filters of the next one: zoom z against zoom z + 1 box-halved differs by 13-14 of 255
+   (mean abs, all three pairs); separate renders per zoom, as bldrender does.
+
+**Styles** (`bldrender.STYLES`, `render_model(..., style=)`; None = `$SC3BLD_STYLE`, else `stock`):
+
+| style | light | zoom 4 | colour | surface |
+|---|---|---|---|---|
+| `stock` (default) | axis light: ambient 0.47 + roof 0.42 x up + 0.37 x abs(n.u) + 0.20 x abs(n.v); screen sun only for cast shadows, which fall on surfaces facing it; shadow strength 0.25 / 0.40 / 0.55 / 0.70 at zooms 0-3 | zoom 3 doubled | vibrance 2.6 / 2.2 / 2.0 / 2.0 (less on already saturated colours), luminance contrast 1.4 / 1.2 / 1.3 / 1.35 about 0.42, 255-colour median-cut palette per frame, lawn per zoom fitted to the stock lit lawn | smooth two-octave grain (6 px and 2 px) 0.12-0.30, front-edge lawn band 0.3 cells deep, 0.10-0.62 dark |
+| `stock_sharp` | as `stock` | native | as `stock` | as `stock` |
+| `clean` | screen sun (above) | native | as 2026-11-18b | flat |
+
+`clean` renders byte for byte what the 2026-11-18b renderer did (40 of 40 frames compared). `calibrate` still gives
+0 differing pixels on 160 of 160 frames (the styles do not move the lot diamond). The fitted values come from the 6
+test and sample models measured the same way as the stock set; the table per style is in `verify/bldlook/RESULTS.md`.
+What the styles do not reach: stock p10 (dark detail: windows, eaves, porches) is 0.20 at zoom 3 against 0.24, and
+the stock texture comes from painted detail the test models do not have, so the measured texture stays 0.032
+against 0.045. More model detail closes both; a global filter would not.
+
+How to choose a style today: `bldimport.py` (owned by bldfile this round) does not pass one, so the default
+`stock` applies, or set `SC3BLD_STYLE=clean|stock|stock_sharp` for the run. The render cache key covers
+`bldrender.py` but not the variable, so after changing it run `bldimport.py build --force`.
+[Proposed for bldimport: an `x_bldrender.style` key per model, passed to `render_model` and added to the cache key.]
 
 ## 5. Packaging (`re/tools/bldimport/bldimport.py pack`)
 
@@ -146,4 +204,6 @@ py -3.12 re/tools/bldimport/make_testmodels.py <folder>                    # the
 - Non-square lots (the classifier writes [n, n] only; every stock base is square): not supported.
 - glTF / FBX: OBJ only this round.
 - Grown lots keep state 0 (section 3): read from saves, the developer's placement code not read.
-- Zoom 4 native edge vs stock zoom-3-doubled lots: a 1 px step can show between neighbouring lots at zoom 4.
+- Zoom 4 native edge vs stock zoom-3-doubled lots: a 1 px step can show between neighbouring lots at zoom 4 with
+  `clean` / `stock_sharp`; `stock` (default) doubles zoom 3 like the stock lots.
+- Per-model render style in `models.json`: needs a bldimport change (section 4.1).
