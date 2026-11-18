@@ -77,6 +77,8 @@
  *                                     env SC3SIMRUN_SANDBOX=1/0)
  *                                     [gentle] enabled=0 share_pct=25 (GENTLE block: negative-demand abandonment only
  *                                     under that share of the valve range; env SC3SIMRUN_GENTLE=1/0, _GENTLE_SHARE)
+ *                                     [hwyspeed] enabled=1 factor_pct=150 threshold=66000 (HWYSPEED block: animated
+ *                                     cars on highway and ramp lanes x factor; env SC3SIMRUN_HWYSPEED=1/0, _HWYSPEED_PCT)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
  *         sc3simrun_sirens(DWORD out[4]) = siren states recorded, cooldown blocks, siren-actor updates, removals.
  *         sc3simrun_lvwrap(DWORD out[4]) = average stores, stores over 255, last true average, last cell count.
@@ -273,6 +275,7 @@ static void churn_ini(const char *path);
 static void sirens_ini(const char *path);
 static void lvwrap_ini(const char *path);
 static void abandon_ini(const char *path);
+static void hwyspeed_ini(const char *path);
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -291,6 +294,7 @@ static void ini_read(void) {
     sirens_ini(path);
     lvwrap_ini(path);
     abandon_ini(path);
+    hwyspeed_ini(path);
 }
 
 /* ============================================================ FREEZE */
@@ -1275,6 +1279,98 @@ __declspec(dllexport) void __cdecl sc3simrun_abandon(DWORD *out) {
     out[39] = (DWORD)g_sbx_on; out[40] = (DWORD)g_gnt_on; out[41] = (DWORD)g_gnt_share;
 }
 
+/* ============================================================ HWYSPEED
+ * Simtropolis 2026-11-18 (Spamoidutout: "vehicles going faster on highways"; re/analysis/VEHICLE_SPEED.md,
+ * verify/hwyspeed/RESULTS.md). LOOKS ONLY: the animated cars. Trips, traffic density and routing never read this.
+ * Stock: a car moves dt * [veh+0x10c] per frame (STRTSIM 0x1001b940, dt = real-time microseconds). +0x10c is set from
+ * the current lane path's speed getter, vtable slot +0x3c = 0x1001ddc8 (`fld [ecx+0x24]; ret`), by MoveAlongPath
+ * 0x1001b110, 0x10019d50 and appear-on-path 0x1001bc70 `[CONFIRMED]`. path+0x24 = the TrBlkAtt lane edge's
+ * e3 * 2.22222e-09 (0x1002066a, constant 0x1002d264). The getter sits in exactly two vtables: forward path 0x1002cf40
+ * (slot at 0x1002cf7c) and backward path 0x1002cfa8 (slot at 0x1002cfe4). The car class max speed is read only by boats.
+ * Stock lane speeds (e3): road / avenue / rail / subway <= 65,000; highway lanes 94,000-110,000, ramps 74,999-79,999,
+ * highway grade changes 70,000. Every lane above 66,000 in the stock and netmod tables (14 TrBlkAtt files) is a
+ * highway, highway-crossing or ramp lane, and none is a train or subway lane (verify/hwyspeed/data/sweep66.txt).
+ * Fix: both slots point at hws_speed, which returns path+0x24 * factor when it is above threshold e3 * 2.22222e-09.
+ * Highway curves and junction pieces stored at 64,000 (stock 14020.., 15001..) are not scaled.
+ * Config: [hwyspeed] enabled=1 factor_pct=150 threshold=66000; env SC3SIMRUN_HWYSPEED=0/1, SC3SIMRUN_HWYSPEED_PCT=n.
+ * ON by default (owner 2026-11-18, x1.5), mods page row "Faster highway cars" (sc3resize MODTOGGLE writes
+ * [env] SC3SIMRUN_HWYSPEED=0 when unchecked). Off leaves the vtables untouched. Export sc3simrun_hwyspeed(pct) sets the factor at run time (A/B in one game;
+ * a car picks it up at its next lane path), returns the old one; pct < 0 only reads. */
+
+static int g_hws_on = 1, g_hws_pct = 150, g_hws_thr = 66000;
+static volatile float g_hws_mul = 1.5f, g_hws_lim = 0.0f;
+static volatile LONG g_hws_calls, g_hws_scaled;
+
+static void hwyspeed_ini(const char *path) {
+    char env[16];
+    if (path[0]) {
+        g_hws_on = GetPrivateProfileIntA("hwyspeed", "enabled", 1, path) ? 1 : 0;
+        g_hws_pct = (int)GetPrivateProfileIntA("hwyspeed", "factor_pct", 150, path);
+        g_hws_thr = (int)GetPrivateProfileIntA("hwyspeed", "threshold", 66000, path);
+    }
+    if (GetEnvironmentVariableA("SC3SIMRUN_HWYSPEED", env, sizeof(env))) g_hws_on = env[0] == '1';
+    if (GetEnvironmentVariableA("SC3SIMRUN_HWYSPEED_PCT", env, sizeof(env))) g_hws_pct = atoi(env);
+    if (g_hws_pct < 25) g_hws_pct = 25;
+    if (g_hws_pct > 400) g_hws_pct = 400;
+    if (g_hws_thr < 1) g_hws_thr = 1;
+    g_hws_mul = (float)g_hws_pct / 100.0f;
+}
+
+/* thiscall getter: ecx = path, no stack arguments, float in st(0) (same contract as 0x1001ddc8) */
+static float __fastcall hws_speed(BYTE *path, void *edx) {
+    float s = *(float *)(path + 0x24);
+    (void)edx;
+    InterlockedIncrement(&g_hws_calls);
+    if (s > g_hws_lim) {
+        InterlockedIncrement(&g_hws_scaled);
+        s *= g_hws_mul;
+    }
+    return s;
+}
+
+static int hwyspeed_arm(HMODULE strt) {
+    BYTE *S = (BYTE *)strt;
+    DWORD *slot[2], want = (DWORD)(S + 0x1ddc8), old;
+    float k;
+    int i;
+    slot[0] = (DWORD *)(S + 0x2cf7c);
+    slot[1] = (DWORD *)(S + 0x2cfe4);
+    if (IsBadReadPtr(S + 0x2d264, 4) || *(DWORD *)(S + 0x2d264) != 0x3118b5b5u) {
+        logf("HWYSPEED> e3 scale at STRTSIM+0x2d264 is not 0x3118b5b5 - NOT armed");
+        return 0;
+    }
+    if (IsBadReadPtr(S + 0x1ddc8, 4) || *(DWORD *)(S + 0x1ddc8) != 0xc32441d9u) {
+        logf("HWYSPEED> getter STRTSIM+0x1ddc8 is not `fld [ecx+0x24]; ret` - NOT armed");
+        return 0;
+    }
+    for (i = 0; i < 2; i++)
+        if (IsBadReadPtr(slot[i], 4) || *slot[i] != want) {
+            logf("HWYSPEED> vtable slot STRTSIM 0x%08lX holds 0x%08lX, expected 0x%08lX - NOT armed",
+                 0x10000000UL + (DWORD)((BYTE *)slot[i] - S), slot[i] ? *slot[i] : 0, want);
+            return 0;
+        }
+    k = *(float *)(S + 0x2d264);
+    g_hws_lim = (float)g_hws_thr * k;
+    for (i = 0; i < 2; i++) {
+        if (!VirtualProtect(slot[i], 4, PAGE_READWRITE, &old)) return i;
+        *slot[i] = (DWORD)hws_speed;      /* no restore (task onramp): a restore can land mid-write in another mod */
+    }
+    logf("HWYSPEED> lanes faster than e3 %d (%.6g units/us) x%.2f, slots 0x1002cf7c + 0x1002cfe4 wrapped",
+         g_hws_thr, (double)g_hws_lim, (double)g_hws_mul);
+    return 2;
+}
+
+__declspec(dllexport) int __cdecl sc3simrun_hwyspeed(int pct) {
+    int was = (int)(g_hws_mul * 100.0f + 0.5f);
+    if (pct >= 0) {
+        if (pct < 25) pct = 25;
+        if (pct > 400) pct = 400;
+        g_hws_mul = (float)pct / 100.0f;
+        logf("HWYSPEED> factor %d%% -> %d%% (calls %ld, scaled %ld)", was, pct, g_hws_calls, g_hws_scaled);
+    }
+    return was;
+}
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -1306,6 +1402,11 @@ static DWORD WINAPI sampler(LPVOID param) {
         while (!(au = GetModuleHandleA("AUDIO.DLL"))) Sleep(5);
         logf("### SIRENS: %d patch sites armed (2 roll bytes + 4 AUDIO slots when all parts are on)", sirens_arm(strt, au));
     } else logf("### SIRENS: off (stock siren chance and the shared per-id siren state)");
+    if (g_hws_on) {
+        HMODULE strt;
+        while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
+        logf("### HWYSPEED: on, factor_pct=%d threshold=%d, %d of 2 slots armed", g_hws_pct, g_hws_thr, hwyspeed_arm(strt));
+    } else logf("### HWYSPEED: off (stock lane speeds for the animated cars)");
     if (g_lv_mode) {
         HMODULE rci;
         while (!(rci = GetModuleHandleA("SIMRCI.DLL"))) Sleep(5);

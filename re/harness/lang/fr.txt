@@ -736,3 +736,4 @@ resize.mt_sim=Simulation
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: Building style mix
 resize.mt_stylemix=Mélange des styles
+resize.mt_hwyspeed=Autoroutes plus rapides

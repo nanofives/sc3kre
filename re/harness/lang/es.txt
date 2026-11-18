@@ -316,6 +316,7 @@ resize.mt_simrun=Ajustes de simulación
 resize.mt_sirens=Arreglo de sirenas
 resize.mt_stationwarn=Aviso de estaciones
 resize.mt_stylemix=Mezcla de estilos
+resize.mt_hwyspeed=Autos rápidos en autopista
 resize.mt_terrpanel=Panel de terreno ampliado
 resize.mt_title=Activar mods y funciones
 resize.mt_uitoggle=Botón ocultar interfaz
