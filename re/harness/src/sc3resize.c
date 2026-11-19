@@ -18996,7 +18996,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               g_newreward = GetPrivateProfileIntA("buildings", "newrewards", 1, bp) ? 1 : 0; }   /* NEWREWARD (civmod) */
           if (GetEnvironmentVariableA("SC3RESIZE_CIVVAR", v, sizeof(v))) g_civvar = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NEWREWARD", v, sizeof(v))) g_newreward = atoi(v);
-          at_install();      /* NEWREWARD: our reward types into the agent type registry, before app init reads CitySim.ini */
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);
           g_rl_envoff = GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v)) && !atoi(v) &&

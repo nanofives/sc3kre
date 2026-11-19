@@ -79,3 +79,65 @@ Game PIDs, all started by `sc3dev.ps1 run civmod` and stopped by PID: 8888, 1791
 | `re/tools/bldimport/bldimport.py` | kinds civic / reward, `bldimport_civic.ini`, `bldimport_rewards.ini`, `bldimport_types.ini`, check of the plugin kinds, help |
 | `re/tools/bldimport/make_testmodels.py` | `--civmod` |
 | `re/tools/civmod_lab.py` (new) | the lab |
+
+# Round 2 (2026-11-19, after the merge 289d3ce): "Loader declares", rewards plugin, page side, guide
+
+Owner calls: reward safety = the loader declares the reward types; then the page side of kinds civic and reward.
+
+## 4. The loader declares the reward types
+
+| change | where |
+|---|---|
+| the `[AgentTypes]` / `[AgentTypeHierarchy]` hooks (SC3U `0x0040bc80` / `0x0040bccb`) and the row feed moved from sc3resize to the loader | `re/harness/src/sc3mods.c` "REWARD TYPES", run from DllMain whenever the patched exe maps it as a static import, mods on or off |
+| sc3resize no longer declares | `sc3resize_civic.c`: asks the new export `sc3mods_reward_types(out, cap)` at the first city load and unlocks only those types (`NEWREWARD> 2 reward type(s) declared by the loader 38001 38002`) |
+| rewards are their own plugin | `Apps\PlugIn\bldimport_rewards\` = `bldimport_rewards.pin`, `.dat`, `bldimport_rewards.ini`, `bldimport_types.ini`. Civic looks and landmarks stay in `Apps\PlugIn\bldimport\` |
+| `sc3mods_patch.ps1 -Restore`, `sc3mods_patch.sh --restore` | move `PlugIn\bldimport_rewards` to `Apps\sc3mods_off\PlugIn\`. A patch run moves it back. The rewards are split, so only they leave (civic looks and landmarks use stock types and stay) |
+| the importer's Remove | removes every file the install wrote, both plugins included (`bldimport.py restore` and the page's Remove both put back state.json's list) |
+| loader size / VERSIONINFO | sc3mods.dll 123,392 -> 126,976 bytes. VERSIONINFO kept: "sc3mods for SimCity 3000 Unlimited", "SimCity 3000 Unlimited mod: mod loader", 2026.11.19 |
+
+Removed-data table, city `civmod_saved.sc3` (police look, stock police, landmark 18000, placed reward 38001), each run
+started by `sc3dev.ps1 run civmod`, watched 60 s after the city came up (or after start when sc3resize was not there):
+
+| run | setup | result |
+|---|---|---|
+| 0 | all mods on (sc3mods.dll + sc3resize.dll of this round) | loads, alive. Loader log: types 38001 and 38002 declared before app init. sc3resize: `2 reward type(s) declared by the loader`, both rows read from the new plugin, reward 38001 found at (177, 219). VEH FAULT: only the startup `0xC0000096 at SC3U.exe+0x84122` |
+| A | every row on the mods page off: `sc3mods.ini` `[mods]` 10 DLLs = 0 and `[env]` 21 feature switches = 0 (CIVVAR and NEWREWARD included) | loads, alive 60 s. `1 mod(s) loaded, some turned off`, both types declared, `CIVVAR> off`, `NEWREWARD> off` |
+| B | sc3resize not loaded (`-Stock`: the loader + the test DLL sc3winonly only) | alive 60 s and more, the city on screen with the reward standing (window grab `work\fd\80_B_sc3resize_off.png`). Round 1 with the same setup and no loader declaration: exited within 10 s |
+| C | `sc3mods_patch.ps1 -Restore`: SC3U.exe back to `49DD55E1...` (stock 2.0.0.3), `PlugIn\bldimport_rewards` moved to `sc3mods_off\PlugIn` | to run it windowed the exe was patched again with `sc3mods_patch.sh` (same hash `e5b6330c...` as the .ps1), the moved folder held aside, and the loader started with `SC3MODS_DECLARE=0` (test switch: no declaration), so the game saw what the bare stock exe sees: no reward exemplar, no declared type. Loads, alive 60 s, reward lot empty orange-brown ground, police look and landmark stand (`work\fd\81_C_restored.png`). The bare stock exe itself was not started (it runs fullscreen) |
+| C2 | `sc3mods_patch.ps1` (no -Restore), then `.sh --restore`, then `.sh` | the folder went back into PlugIn, out again, back again. Exe hashes `49DD55E1` stock / `e5b6330c` patched each time |
+
+## 5. Page side (classifier.html + bldweb.js)
+
+- bldweb.js: `CIVIC`, `REWARD`, `civicTable`, `rewardTable`, `agentTypeRows`, `civicIni`, the reward plugin, kinds civic
+  and reward in `plan` and `buildFiles`, ported line by line from bldimport.py.
+- classifier.html: kinds `civic` and `reward` in the Kind list. Base (17 buttons, it sets the lot), Population and Year
+  rows shown only for those kinds, the Description row for landmark, civic and reward. Suggest: the civic words pick
+  `civic` and the button. Warnings mirror bldimport.py's refusals. `models.json` gets `base` / `population` / `year`
+  only on those kinds. The install hint names both plugin folders.
+- Golden case `civic` (make_testmodels.py `--civmod`): golden.mjs 9 of 9 (7 files byte-identical: both .dat, both .pin,
+  the three ini files, plus ids.json and 80 frames), pagetest.mjs civic 11 of 11 (the page in headless Chrome installs
+  the same 7 files).
+- Stock reward per lot (bldimport `reward_table`, stage\release): 1x1 Historic Statue (219, type 14150), 2x2 Mayor's House
+  (243, 10110), 3x3 City Hall (208, 10120), 4x4 Stock Exchange (8017, 1002). Civic lots per button: police, jail, fire,
+  hospital, school, college, museum, big park 3x3; library, playground, pond, train station 2x2; small park, fountain,
+  bus stop 1x1; zoo, baseball 4x4.
+- Test case `landmarks`: its refused entry `civic_1x1.obj` was kind civic (meaning "not imported"). Now kind
+  `ploppable`, still refused, same file and id, so its outputs are unchanged. pagetest's "Description hidden" check now
+  picks a card of a kind without a Description (landmark, civic and reward have one).
+
+## 6. Suite, guide, build
+
+- `SC3PACK_PACKS=stage\st_packs test-slot bash re/tools/bldimport/webtest/run_all.sh dev\civmod\work\runall2 stage\release
+  stage\kits "<.happy-uploads>\SC4D LEX Legacy - BSC JMyers Homes Pack V3.1.zip" stage\st_packs\sc4_jmyers_homes
+  stage\st_packs\sc4`: **31 of 31 steps passed** (30 -> 31: the new step `pagetest.mjs civic`; golden_setup 8 cases).
+  First run 29 of 31: `pagetest.mjs kenney` failed on EBUSY reading Chrome's DevToolsActivePort at start (passed on the
+  rerun with no change), `pagetest.mjs landmarkdesc` failed its "Description hidden" check (fixed, section 5).
+- `sync_css.py --check`: in sync. `--publish`: classifier.html, bldweb.js, sc4web.js, sc3font.js, sc3pack.js to
+  docs/buildings/importer/.
+- Guide: `verify/bldpack/work/guide_template.html` (MAIN) + `make_docs.py --wt dev\civmod\wt --tree dev\civmod\tree --zip
+  <the 2026-11-18 sample pack URL>`: new sections "Civic buildings" and "Rewards" (nav entries), the "What it does not
+  do" line replaced, the Kind / Description / Base / Population / Year fields in Classifying. Published link kept.
+  `stage\sample_pack\README.txt` rewritten byte-identical (sha256 `bdda1dee...`). Numbers from sections 1 to 5 only.
+  Voice check over the new text: 0 dashes, semicolons, ellipses, emoji, intensifiers.
+- Build: `sc3dev.ps1 build civmod -Mods sc3mods,sc3resize`: sc3mods.dll 126,976 bytes (tree\Apps), sc3resize.dll
+  748,544 bytes (inst), no errors. Run 0 above is the start + load with all mods on: no new VEH FAULT.

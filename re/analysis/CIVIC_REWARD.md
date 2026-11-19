@@ -393,16 +393,19 @@ Measurements: `verify/civmod/RESULTS.md`.
   before the tree is built, the reward placed with no fault, saved, reloaded, moved.
 - **Row format.** `[AgentTypes] 38001=bldimport38001:<the base reward type's text key>`, `[AgentTypeHierarchy]
   38001=<the base type's parent>` (Mayor's House 10110 -> 10001).
-- **Not gated on the switch.** The declarations are made whenever `bldimport_types.ini` exists, with NEWREWARD on or
-  off, because a placed reward otherwise stops the game on load.
-- **Open risk.** The stock game (no sc3resize) with the plugin installed exits while loading a city that holds a placed
-  new reward (measured: PID 17576 gone within 10 s; the same setup on the original Madison ran 90 s). Fixes, owner's
-  call: (a) a SYS.PAK `CitySim.ini` edit in the netmod overlay (ties rewards to sc3netmod, and still not stock); (b)
-  give rewards one of the 24 building types `CitySim.ini` declares but no stock exemplar uses (1001 Arcology, 12260
-  Parking, 12510 Dam, 13008 PostOffice, 13320 FreeClinic, 14160 HistoricBuilding, 14910 Church, ...; 18xxx are
-  landmark cities and would join the landmark dialog), stock-safe but about eight rewards at most and each type's
-  stock meaning (IsA checks, land value row) has to be read first. `bldimport.py restore` (plugin removed) loads such a
-  city safely.
+- **The loader declares (owner call 2026-11-19, round 2).** The two hooks and the row feed moved from sc3resize to
+  `sc3mods.c` ("REWARD TYPES"), so they run whenever the patched exe maps the loader: all mods on, every mod off on the
+  mods page, sc3resize not loaded, `SC3MODS_OFF=1`. sc3resize no longer declares; it asks the loader's new export
+  `sc3mods_reward_types(out, cap)` and unlocks only the types listed there. The file moved with the rewards into
+  their own plugin, `Apps\PlugIn\bldimport_rewards\bldimport_types.ini`.
+- **The bare stock exe.** `sc3mods_patch.ps1 -Restore` / `.sh --restore` move `PlugIn\bldimport_rewards` to
+  `Apps\sc3mods_off\PlugIn`, a patch run moves it back, so the unpatched exe never loads a reward exemplar. Measured
+  before the move (round 1): the stock game with the plugin exited while loading a city holding a placed reward
+  (PID 17576 gone within 10 s). After the move: the city loads, the reward lot empty orange-brown ground
+  (`verify/civmod/RESULTS.md` 4).
+- Rejected alternatives (round 1): a SYS.PAK `CitySim.ini` edit in the netmod overlay (ties rewards to sc3netmod), or
+  the 24 building types `CitySim.ini` declares with no stock exemplar (1001 Arcology, 12260 Parking, 12510 Dam, ...),
+  stock-safe but about eight rewards at most.
 
 ### 5.3 Mover
 

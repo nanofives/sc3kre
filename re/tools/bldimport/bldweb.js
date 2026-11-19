@@ -1684,7 +1684,81 @@ function BLDWEB_LIB() {
     game._ports = out;
     return out;
   }
-  const targetOf = e => ((portOf(e.kind) || e.kind === 'landmark') ? e.kind : e.class);   // bldimport.target_of
+  // task civmod: bldimport.CIVIC / REWARD / civic_table / reward_types / reward_table / agent_type_rows / target_of
+  const PLUGIN_KINDS = ['landmark', 'civic', 'reward'];
+  const CIVIC = { police: 0xD2, jail: 0x1F41, fire: 0xD3, hospital: 0xD1, school: 0x1F94, college: 0xD6,
+    library: 0xF5, museum: 0xD4, small_park: 0xD, big_park: 0xD5, zoo: 0xDA, baseball: 0xD7,
+    playground: 0x234B, pond: 0x234C, fountain: 0x234E, bus_stop: 0x1F96, train_station: 0xED };
+  const CIVIC_NAMES = Object.keys(CIVIC).sort();
+  const FOUR_PIECE = new Set();
+  for (const [a, b] of [[0x1F5D, 0x1F61], [0x1F8B, 0x1F8F], [0x1F98, 0x1F9C]]) for (let k = a; k < b; k++) FOUR_PIECE.add(k);
+  const REWARD = { sizes: [1, 2, 3, 4], label: 'Reward', population: 20000, year: 0 };
+  const CIVIC_INI = PLUGIN_DIR + 'bldimport_civic.ini';
+  const RW_PLUGIN_NAME = 'bldimport_rewards', RW_DIR = 'Apps/PlugIn/' + RW_PLUGIN_NAME + '/';
+  const RW_PIN = RW_DIR + RW_PLUGIN_NAME + '.pin', RW_DAT = RW_DIR + RW_PLUGIN_NAME + '.dat';
+  const REWARD_INI = RW_DIR + 'bldimport_rewards.ini', TYPES_INI = RW_DIR + 'bldimport_types.ini';
+  const pyInt0 = s => (/^\s*0x/i.test(s) ? parseInt(s, 16) : parseInt(s, 10));
+  async function civicTable(game) {      // bldimport.civic_table
+    if (game._civic) return game._civic;
+    const bld = await stockBuildings(game), out = new Map();
+    for (const [name, inst] of Object.entries(CIVIC)) {
+      if (!bld.has(inst)) throw new BldError('civic ' + name + ': stock exemplar 0x' + inst.toString(16).toUpperCase() + ' not found');
+      const [f, p] = bld.get(inst);
+      const fp = tkb1Get(p, 0x66), lu = tkb1Get(p, 0x65), cs = tkb1Get(p, 0x67);
+      if (!(fp && fp.length) || fp[0] !== fp[2] || !(lu && lu.length) || !(cs && cs.length) || cs[0] !== CS_TYPE)
+        throw new BldError('civic ' + name + ': stock exemplar 0x' + inst.toString(16).toUpperCase() + ' is not a square plain building');
+      out.set('civic:' + name, { families: [], bases: new Map([[fp[0], [inst, f]]]), landuse: lu[0], copies: false,
+        label: 'Civic look of ' + latin1(tkb1Get(p, 0x64)) });
+    }
+    game._civic = out;
+    return out;
+  }
+  async function syspakSections(game, member) {   // bldimport.syspak_sections
+    const lines = syspakMember(await game.read('Apps/Sys/SYS.PAK'), member.toLowerCase()), out = new Map();
+    let sec = null;
+    for (const ln of lines) {
+      const s = pyStrip(ln);
+      if (s.startsWith('[')) { sec = s.toLowerCase(); if (!out.has(sec)) out.set(sec, []); }
+      else if (sec && s.includes('=') && !s.startsWith(';')) { const q = s.indexOf('='); out.get(sec).push([pyStrip(s.slice(0, q)), pyStrip(s.slice(q + 1))]); }
+    }
+    return out;
+  }
+  async function rewardTypes(game) {      // bldimport.reward_types
+    return ((await syspakSections(game, 'Advisor-CityPlanner.ini')).get('[reward_buildings]') || []).map(([k]) => pyInt0(k));
+  }
+  async function rewardTable(game) {      // bldimport.reward_table
+    if (game._rewards) return game._rewards;
+    const bld = await stockBuildings(game), types = new Set(await rewardTypes(game)), bases = new Map();
+    for (const bid of [...bld.keys()].sort((a, b) => a - b)) {
+      const [f, p] = bld.get(bid);
+      const lu = tkb1Get(p, 0x65), fp = tkb1Get(p, 0x66), cs = tkb1Get(p, 0x67);
+      if (FOUR_PIECE.has(bid) || !(lu && lu.length) || !types.has(lu[0]) || !(fp && fp.length) || fp[0] !== fp[2]) continue;
+      if (!REWARD.sizes.includes(fp[0]) || bases.has(fp[0]) || !(cs && cs.length) || cs[0] !== CS_TYPE || tkb1Get(p, 0x6D) === null) continue;
+      bases.set(fp[0], [bid, f]);
+    }
+    const miss = REWARD.sizes.filter(n => !bases.has(n));
+    if (miss.length) throw new BldError('reward: no stock base reward for lot ' + miss.map(n => n + 'x' + n).join(', '));
+    const out = new Map([['reward', { families: [], bases: new Map([...bases].sort((a, b) => a[0] - b[0])), landuse: null, copies: false, label: REWARD.label }]]);
+    game._rewards = out;
+    return out;
+  }
+  async function agentTypeRows(game, baseType, nid) {   // bldimport.agent_type_rows -> [value, parent] (ascii strings)
+    const cs = await syspakSections(game, 'CitySim.ini');
+    const at = new Map((cs.get('[agenttypes]') || []).map(([k, v]) => [pyInt0(k), v]));
+    const hi = new Map((cs.get('[agenttypehierarchy]') || []).map(([k, v]) => [pyInt0(k), v]));
+    if (!at.has(baseType) || !hi.has(baseType)) throw new BldError('CitySim.ini has no [AgentTypes] / [AgentTypeHierarchy] row for type ' + baseType);
+    const v = at.get(baseType), q = v.indexOf(':');
+    return ['bldimport' + nid + ':' + (q < 0 ? '' : v.slice(q + 1)), hi.get(baseType)];
+  }
+  function civicIni(lines, names) {       // bldimport.civic_ini; lines: Map base -> [id], names: [[id, name bytes]]
+    let t = '; bldimport civic looks (task civmod), read by sc3resize CIVVAR. Each press of the stock button builds the\r\n' +
+      '; next look: the stock building, then these, in order. Variants are instances in group 0x' + hex8(LM_GROUP) + '.\r\n[Variants]\r\n';
+    for (const b of [...lines.keys()].sort((x, y) => x - y)) t += '0x' + hex8(b) + '=' + lines.get(b).map(i => '0x' + hex8(i)).join(',') + '\r\n';
+    t += '\r\n[Names]\r\n';
+    for (const [i, nm] of names) t += '0x' + hex8(i) + '=' + latin1(nm) + '\r\n';
+    return ascii(t);
+  }
+  const targetOf = e => (e.kind === 'civic' ? 'civic:' + e.base : (portOf(e.kind) || PLUGIN_KINDS.includes(e.kind)) ? e.kind : e.class);   // bldimport.target_of
   async function landmarkTable(game) {   // bldimport.landmark_table
     if (game._landmarks) return game._landmarks;
     const bld = await stockBuildings(game);
@@ -1711,9 +1785,10 @@ function BLDWEB_LIB() {
     }
     throw new BldError('prop 0x' + prop.toString(16) + ' not present');
   }
-  function pluginPin(keys) {             // bldimport.plugin_pin; keys: [[id, name bytes]]
-    let t = '[Admin]\r\nEnabled=ON\r\n\r\n[DBSegments]\r\n0x00000001=0x80C381D7;%PluginDirectory%' + PLUGIN_NAME + '\\' + PLUGIN_NAME +
-      '.dat\r\n\r\n[SpriteSegments]\r\n' + PLUGIN_NAME + '=addon-enabled\r\n\r\n[OccupantKeys]\r\n';
+  function pluginPin(keys, name) {       // bldimport.plugin_pin; keys: [[id, name bytes]]
+    const pn = name || PLUGIN_NAME;
+    let t = '[Admin]\r\nEnabled=ON\r\n\r\n[DBSegments]\r\n0x00000001=0x80C381D7;%PluginDirectory%' + pn + '\\' + pn +
+      '.dat\r\n\r\n[SpriteSegments]\r\n' + pn + '=addon-enabled\r\n\r\n[OccupantKeys]\r\n';
     for (const [nid, nm] of keys) t += '0x' + hex8(BLD_TYPE) + ',0x' + hex8(LM_GROUP) + ',0x' + hex8(nid) + '=' + nid + ' ' + latin1(nm) + '\r\n';
     return ascii(t);
   }
@@ -2069,12 +2144,18 @@ function BLDWEB_LIB() {
     const ids = await idsFor(folder, models);
     const table = game ? await classTable(game) : null;
     const ports = game ? await portTable(game) : null;
+    const civic = game ? await civicTable(game) : null;
     const out = [], rep = [];
-    for (const m of models) {
+    for (let m of models) {
       const f = 'file' in m ? m.file : '?';
       const nid = Object.prototype.hasOwnProperty.call(ids, f) ? ids[f] : null;
       const name = pyStrip(pyTrue(m.name) ? String(m.name) : splitext0(String(f)));
       let why = null;
+      const base = 'base' in m ? m.base : null;
+      if (('kind' in m ? m.kind : 'growable') === 'civic' && !('lot' in m) && civic && typeof base === 'string' && civic.has('civic:' + base)) {
+        const s0 = [...civic.get('civic:' + base).bases.keys()][0];
+        m = Object.assign({}, m, { lot: [s0, s0] });   // civic: the base's lot by default
+      }
       let [n, lotErr] = lotOf(m);
       const exists = typeof f === 'string' && !!(await folder.exists(f));
       if (isBld(f) && exists && !lotErr) {
@@ -2083,16 +2164,23 @@ function BLDWEB_LIB() {
       }
       let cls = 'class' in m ? m.class : null;
       const w = 'weight' in m ? m.weight : 1;
-      const kind = 'kind' in m ? m.kind : 'growable', port = portOf(kind), lm = kind === 'landmark';
+      const kind = 'kind' in m ? m.kind : 'growable', port = portOf(kind), lm = PLUGIN_KINDS.includes(kind);
+      const pop = 'population' in m ? m.population : REWARD.population, year = 'year' in m ? m.year : REWARD.year;
+      const pyInt = v => Number.isInteger(v) || typeof v === 'boolean';
       if (!pyTrue('enabled' in m ? m.enabled : true)) why = 'enabled is false';
-      else if (kind !== 'growable' && port === null && !lm) why = 'kind ' + JSON.stringify(kind) + ': only growable, airport, seaport and landmark buildings';
+      else if (kind !== 'growable' && port === null && !lm) why = 'kind ' + JSON.stringify(kind) + ': only growable, airport, seaport, landmark, civic and reward buildings';
+      else if (kind === 'civic' && !(typeof base === 'string' && Object.prototype.hasOwnProperty.call(CIVIC, base))) why = 'civic base ' + JSON.stringify(base) + ': one of ' + CIVIC_NAMES.join(', ');
+      else if (kind === 'civic' && civic && !lotErr && !civic.get('civic:' + base).bases.has(n)) why = 'civic lot ' + n + 'x' + n + ': a ' + base + ' look keeps the stock lot, ' + [...civic.get('civic:' + base).bases.keys()].map(s => s + 'x' + s).join(' ');
+      else if (kind === 'reward' && !(pyInt(pop) && 0 <= +pop && +pop <= 100000000)) why = 'population ' + JSON.stringify(pop) + ' is not a whole number from 0 to 100000000';
+      else if (kind === 'reward' && !(pyInt(year) && 0 <= +year && +year <= 9999)) why = 'year ' + JSON.stringify(year) + ' is not a whole number from 0 to 9999 (0 = any year)';
+      else if (kind === 'reward' && /[;=\r\n]/.test(name)) why = 'reward name ' + JSON.stringify(name) + ': the reward row cannot hold ; = or line breaks';
       else if (!exists) why = 'file not in the folder';
       else if (!(String(f).toLowerCase().endsWith('.obj') || isBld(f))) why = 'only .obj models and .bld files';
       else if (cls === null && isBld(f) && port === null && !lm) why = 'no class: its category (' + ((m.x_bld || {}).category) + ') is not a house, shop or factory, set one in models.json';
       else if (lotErr) why = lotErr;
       else if (!Number.isInteger(w) || !(1 <= w && w <= 1000)) why = 'weight ' + JSON.stringify(w) + ' is not a whole number from 1 to 1000';
       else if (port !== null && port.copies && w > PORT_MAX_COPIES) why = 'weight ' + w + ': an ' + kind + "'s weight is the number of copies in the airpark's list (the rule ignores Key weights), at most " + PORT_MAX_COPIES;
-      else if (lm && !LANDMARK.sizes.includes(n)) why = 'landmark lot ' + n + 'x' + n + ': landmarks are ' + LANDMARK.sizes.map(s_ => s_ + 'x' + s_).join(', ');
+      else if ((kind === 'landmark' || kind === 'reward') && !LANDMARK.sizes.includes(n)) why = kind + ' lot ' + n + 'x' + n + ': ' + kind + 's are ' + LANDMARK.sizes.map(s_ => s_ + 'x' + s_).join(', ');
       else if (port !== null && !port.sizes.includes(n)) why = kind + ' lot ' + n + 'x' + n + ': the ' + port.label.toLowerCase() + ' grows ' + port.sizes.map(s_ => s_ + 'x' + s_).join(' and ');
       else if (port === null && !lm && table && !(Number.isInteger(cls) && table.has(cls))) why = 'class ' + JSON.stringify(cls) + ' is not a growable class (' + [...table.keys()].join(', ') + ')';
       else if (port === null && !lm && table && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
@@ -2100,17 +2188,26 @@ function BLDWEB_LIB() {
       let desc = null;
       if (!why && lm) {
         desc = 'description' in m ? m.description : null;
-        desc = (typeof desc === 'string' && pyStrip(desc)) ? pyStrip(desc) : name;
-        if (cp1252Encode(desc) === null) why = 'description ' + JSON.stringify(desc) + " has characters the game's text files cannot hold (cp1252)";
+        desc = (typeof desc === 'string' && pyStrip(desc)) ? pyStrip(desc) : (kind === 'civic' ? null : name);
+        if (cp1252Encode(desc || '') === null) why = 'description ' + JSON.stringify(desc) + " has characters the game's text files cannot hold (cp1252)";
       }
       if (why) { rep.push('skip  [' + nid + '] ' + f + ': ' + why); continue; }
       if (port !== null) cls = port.landuse;          // the base's LandUse; models.json "class" is not used
-      if (lm) cls = LANDMARK.landuse;
+      if (kind === 'landmark') cls = LANDMARK.landuse;
+      else if (kind === 'civic') cls = civic ? civic.get('civic:' + base).landuse : null;   // the base's type id
+      else if (kind === 'reward') cls = nid;                                               // its own type id = its id
       out.push({ id: nid, file: f, name, lot: n, class: cls, weight: w, model: m, kind: (port !== null || lm) ? kind : 'growable' });
-      if (lm) out[out.length - 1].desc = desc;
+      const e0 = out[out.length - 1];
+      if (lm) e0.desc = desc;
+      if (kind === 'civic') e0.base = base;
+      if (kind === 'reward') { e0.population = +pop; e0.year = +year; }
     }
     let tg = table;
-    if (table) { tg = new Map(table); for (const [k, v] of ports) tg.set(k, v); for (const [k, v] of await landmarkTable(game)) tg.set(k, v); }
+    if (table) {
+      tg = new Map(table); for (const [k, v] of ports) tg.set(k, v); for (const [k, v] of await landmarkTable(game)) tg.set(k, v);
+      for (const [k, v] of civic) tg.set(k, v);
+      if (out.some(e => e.kind === 'reward')) for (const [k, v] of await rewardTable(game)) tg.set(k, v);
+    }
     return [out, rep, tg];
   }
 
@@ -2178,7 +2275,7 @@ function BLDWEB_LIB() {
     const cur = async rel => (src.has(rel) ? src.get(rel) : (await game.exists(rel) ? await game.read(rel) : null));
     const [entries, rep, table] = await plan(folder, game);
     // the overlay (road mod) only for growables / ports, or to put back what an earlier run wrote there (task plop)
-    const needOvl = entries.some(e => e.kind !== 'landmark') || [...src.keys()].some(r => r.startsWith(OVL));
+    const needOvl = entries.some(e => !PLUGIN_KINDS.includes(e.kind)) || [...src.keys()].some(r => r.startsWith(OVL));
     const langs = [];
     if (needOvl) {
       for (const rel of [OVL + OCC_KOREA, OVL + CS_KOREA]) if ((await cur(rel)) === null) throw new BldError(rel + ' not found: the road mod (sc3netmod, mods\\netmod) must be installed');
@@ -2187,6 +2284,7 @@ function BLDWEB_LIB() {
     }
     const occ = [], cs = [], pix = [], names = [], lines = new Map();
     const lmRecs = [], lmKeys = [];
+    const rwRecs = [], rwKeys = [], civLines = new Map(), civNames = [], rwRows = [], rwTypes = [], rwHier = [];   // task civmod
     const bld = await stockBuildings(game);
     let k0 = 0;
     for (const e of entries) {
@@ -2199,27 +2297,32 @@ function BLDWEB_LIB() {
       let ex = await baseExemplar(game, base, bfile);
       const [tab, tmpl] = await stockTableAndTemplate(game, ex);
       const nm = cp1252Encode(e.name);
-      const lm = e.kind === 'landmark';
+      const lm = PLUGIN_KINDS.includes(e.kind);
+      const baseType = tkb1Get(ex, 0x65)[0];
       ex = tkb1SetKey(ex, 0x67, [CS_TYPE, lm ? LM_CS_GROUP : GROUP, nid]);
       ex = tkb1SetKey(ex, 0x6D, [TEXT_TYPE, lm ? LM_TEXT_GROUP : TEXT_GROUP, nid]);
       ex = tkb1SetText(ex, 0x64, nm);
-      if (lm) {
-        ex = tkb1SetU32(ex, 0x65, LANDMARK.landuse);
-        ex = tkb1SetKey(ex, 0x7C, [TEXT_TYPE, LM_DESC_GROUP, nid]);
-      }
+      if (e.kind === 'landmark' || e.kind === 'reward') ex = tkb1SetU32(ex, 0x65, lu);   // a civic look keeps the base's type
+      if (lm && e.desc !== null) ex = tkb1SetKey(ex, 0x7C, [TEXT_TYPE, LM_DESC_GROUP, nid]);
       tkb1Props(ex);
+      const precs = e.kind === 'reward' ? rwRecs : lmRecs, pkeys = e.kind === 'reward' ? rwKeys : lmKeys;
       if (lm) {
-        lmRecs.push([LM_GROUP, nid, BLD_TYPE, ex]);
-        lmRecs.push([LM_TEXT_GROUP, nid, TEXT_TYPE, u8cat([packU32s(nm.length), nm])]);
-        const dsc = cp1252Encode(e.desc);
-        lmRecs.push([LM_DESC_GROUP, nid, TEXT_TYPE, u8cat([packU32s(dsc.length), dsc])]);
-        lmRecs.push([LM_CS_GROUP, nid, CS_TYPE, frameTable(tab, nid)]);
-        lmKeys.push([nid, nm]);
+        precs.push([LM_GROUP, nid, BLD_TYPE, ex]);
+        precs.push([LM_TEXT_GROUP, nid, TEXT_TYPE, u8cat([packU32s(nm.length), nm])]);
+        if (e.desc !== null) { const dsc = cp1252Encode(e.desc); precs.push([LM_DESC_GROUP, nid, TEXT_TYPE, u8cat([packU32s(dsc.length), dsc])]); }
+        precs.push([LM_CS_GROUP, nid, CS_TYPE, frameTable(tab, nid)]);
+        pkeys.push([nid, nm]);
+        if (e.kind === 'civic') { if (!civLines.has(base)) civLines.set(base, []); civLines.get(base).push(nid); civNames.push([nid, nm]); }
+        else if (e.kind === 'reward') {
+          rwRows.push(nid + '=' + latin1(nm) + ' ;' + e.population + ';' + e.year + ';0;0\r\n');
+          const [atV, atP] = await agentTypeRows(game, baseType, nid);
+          rwTypes.push(nid + '=' + atV + '\r\n'); rwHier.push(nid + '=' + atP + '\r\n');
+        }
       } else {
         occ.push([BLD_GROUP, nid, BLD_TYPE, ex]);
         cs.push([GROUP, nid, CS_TYPE, frameTable(tab, nid)]);
       }
-      const epix = lm ? lmRecs : pix;
+      const epix = lm ? precs : pix;
       let nudged = 0;
       for (let k = 0; k < FRAMES; k++) {
         const z = Math.floor((k % 20) / 4), r = k % 4;
@@ -2230,8 +2333,10 @@ function BLDWEB_LIB() {
         epix.push([GROUP, (nid * 65536 + k) >>> 0, 1, anchorPayload(L, T, w, h)]);
       }
       if (lm) {
+        const extra = e.kind === 'reward' ? ', type ' + nid + ', unlocks at population ' + e.population + (e.year ? ', year ' + e.year : '')
+          : e.kind === 'civic' ? ', type ' + lu + ', look ' + (civLines.get(base).length + 1) + ' of the button' : '';
         rep.push('plop  [' + nid + '] ' + e.file + ': "' + e.name + '", ' + tg.label + ', ' + n + 'x' + n + ', stats of stock ' + base +
-          ', in ' + LM_PIN + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
+          extra + ', in ' + (e.kind === 'reward' ? RW_PIN : LM_PIN) + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
         if (opt.onFrames) opt.onFrames(e, frames, info);
         continue;
       }
@@ -2253,6 +2358,19 @@ function BLDWEB_LIB() {
     if (lmRecs.length) {
       files.set(LM_PIN, pluginPin(lmKeys));
       files.set(LM_DAT, newContainer(lmRecs));
+    }
+    if (rwRecs.length) {
+      files.set(RW_PIN, pluginPin(rwKeys, RW_PLUGIN_NAME));
+      files.set(RW_DAT, newContainer(rwRecs));
+    }
+    if (civLines.size) files.set(CIVIC_INI, civicIni(civLines, civNames));
+    if (rwRows.length) {
+      files.set(REWARD_INI, ascii("; bldimport rewards (task civmod), read by sc3resize NEWREWARD with the game's own ini class.\r\n" +
+        '; <type>=<name> ;<population>;<year>;<petition 0>;<own rule 0>, the stock row format.\r\n[REWARD_BUILDINGS]\r\n' + rwRows.join('')));
+      files.set(TYPES_INI, ascii("; bldimport reward types (task civmod), declared as CitySim.ini declares the base reward's type.\r\n" +
+        "; The mods loader (sc3mods.dll) passes these rows to the game's own registry callbacks after\r\n" +
+        "; CitySim.ini's, with every mod on or off: a placed reward of an undeclared type stops the game on load.\r\n" +
+        '[AgentTypes]\r\n' + rwTypes.join('') + '\r\n[AgentTypeHierarchy]\r\n' + rwHier.join('')));
     }
     if (needOvl && (entries.length || src.size)) {
       files.set(OVL + OCC_KOREA, occ.length ? upsert(await cur(OVL + OCC_KOREA), occ) : await cur(OVL + OCC_KOREA));

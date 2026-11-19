@@ -95,7 +95,8 @@
       const rowOf = () => [...document.querySelectorAll('#form .row')].find(r => r.querySelector('label').textContent === 'Description');
       const card = f => document.getElementById('grid').querySelector('.card[data-file="' + f + '"]');
       editDesc = { before: rec.meta.description };
-      const other = S.recs.find(r => r.meta.kind !== 'landmark');
+      // civmod: civic looks and rewards have a Description too, so the check card is a kind without one
+      const other = S.recs.find(r => !['landmark', 'civic', 'reward'].includes(r.meta.kind));
       if (other) { card(other.file).click(); await new Promise(r => setTimeout(r, 0)); editDesc.hiddenFor = [other.file, other.meta.kind, rowOf().hidden]; }
       rec.meta.description = ''; if (rec.raw) delete rec.raw.description;
       editDesc.blankSaved = 'description' in (JSON.parse(window.bc.toJSONText()).models.find(m => m.file === ed.file) || {});

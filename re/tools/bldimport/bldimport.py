@@ -57,9 +57,11 @@ exemplar {0x207EDC0E, LM_GROUP, id} (stats of the first stock landmark of that l
 the frame table {0x6300, LM_CS_GROUP, id} and the 40 pixel / anchor records (GROUP, id << 16 | frame). No overlay file
 and no road mod are needed for a landmark: it works in a stock game. Lots 1x1 to 4x4, weight not used.
 
-Civic looks and new rewards (task civmod, 2026-11-19, re/analysis/CIVIC_REWARD.md): two more plugin kinds, written into
-the same bldimport.pin / .dat (exemplar, name, line under the name, frame table, pixels as for a landmark). They need
-sc3resize (CIVVAR / NEWREWARD) to be reachable in game; the two or three .ini files below are read only by it.
+Civic looks and new rewards (task civmod, 2026-11-19, re/analysis/CIVIC_REWARD.md): two more plugin kinds (exemplar,
+name, line under the name, frame table, pixels as for a landmark). Civic looks go into bldimport.pin / .dat, rewards into
+their own plugin Apps\PlugIn\bldimport_rewards (bldimport_rewards.pin / .dat), so sc3mods_patch -Restore can move the
+rewards out of PlugIn for the stock game. sc3resize (CIVVAR / NEWREWARD) makes them reachable in game, the mods loader
+(sc3mods.dll) declares the reward types. The .ini files below are read only by those two, never by the game.
   "kind": "civic"   a second look for a stock civic button. models.json fields:
                       base         the button: police, jail, fire, hospital, school, college, library, museum, small_park,
                                    big_park, zoo, baseball, playground, pond, fountain, bus_stop, train_station (CIVIC)
@@ -79,8 +81,10 @@ sc3resize (CIVVAR / NEWREWARD) to be reachable in game; the two or three .ini fi
                     to bldimport_rewards.ini [REWARD_BUILDINGS] (<type>=<name> ;<population>;<year>;0;0, the stock row
                     format, read with the game's own ini class) and bldimport_types.ini ([AgentTypes] /
                     [AgentTypeHierarchy], the base reward type's CitySim.ini rows with our type): a placed reward of an
-                    undeclared type stops the game while the city loads. So keep sc3resize installed while the plugin
-                    holds rewards; `restore` (plugin gone) loads such a city safely, with empty lots.
+                    undeclared type stops the game while the city loads. The loader declares them whenever it runs, mods
+                    on or off (owner call "Loader declares"). The bare stock exe does not: sc3mods_patch -Restore moves
+                    the rewards plugin to Apps\sc3mods_off\PlugIn, a normal patch run moves it back. `restore` (both
+                    plugins gone) loads such a city safely, with empty lots.
 
 Ids 38000-38999, kept per model file in <folder>\sc3build\ids.json so a saved city keeps finding its buildings.
 Needs the sc3mods road mod (sc3netmod) installed: the files go into mods\netmod\overlay like bat_growables.ps1's.
@@ -139,8 +143,14 @@ LM_PIN, LM_DAT = PLUGIN_DIR + PLUGIN_NAME + ".pin", PLUGIN_DIR + PLUGIN_NAME + "
 # task civmod (2026-11-19): civic looks and new rewards, also plugin kinds (re/analysis/CIVIC_REWARD.md 3). The two
 # files below are read by sc3resize (sc3resize_civic.c); the game's plugin scan reads only *.pin and sprite *.DAT.
 CIVIC_INI = PLUGIN_DIR + "bldimport_civic.ini"
-REWARD_INI = PLUGIN_DIR + "bldimport_rewards.ini"
-TYPES_INI = PLUGIN_DIR + "bldimport_types.ini"   # the reward types' [AgentTypes] / [AgentTypeHierarchy] rows
+# rewards are a plugin of their own (owner call 2026-11-19 "Loader declares"): a placed reward of an undeclared type stops
+# the game on load, so sc3mods_patch -Restore takes this one folder out of Apps\PlugIn and the bare stock exe never sees
+# a reward exemplar. The type declarations are made by the loader (sc3mods.dll) from TYPES_INI.
+RW_PLUGIN_NAME = "bldimport_rewards"
+RW_DIR = "Apps/PlugIn/" + RW_PLUGIN_NAME + "/"
+RW_PIN, RW_DAT = RW_DIR + RW_PLUGIN_NAME + ".pin", RW_DIR + RW_PLUGIN_NAME + ".dat"
+REWARD_INI = RW_DIR + "bldimport_rewards.ini"
+TYPES_INI = RW_DIR + "bldimport_types.ini"   # the reward types' [AgentTypes] / [AgentTypeHierarchy] rows
 PLUGIN_KINDS = ("landmark", "civic", "reward")
 # civic "base" -> the exemplar instance (group 0x57E) the stock button builds: the 17 plain commands of SIMGEOM's command
 # factory 0x1000a896 (CIVIC_REWARD.md 1). Marina, subway and rail-to-subway use other tools: not offered.
@@ -414,9 +424,10 @@ def tkb1_set_u32(buf, prop, v):
     raise ImportError_("prop 0x%x not present" % prop)
 
 
-def plugin_pin(keys):
-    """The .pin of the landmark plugin, in the Maxis landmark packs' layout (sc3plugin.py). keys: [(id, name bytes)]."""
-    nm = PLUGIN_NAME.encode()
+def plugin_pin(keys, name=PLUGIN_NAME):
+    """The .pin of a plugin (landmarks + civic looks: bldimport; rewards: bldimport_rewards), in the Maxis landmark packs'
+    layout (sc3plugin.py). keys: [(id, name bytes)]."""
+    nm = name.encode()
     out = (b"[Admin]\r\nEnabled=ON\r\n\r\n[DBSegments]\r\n0x00000001=0x80C381D7;%PluginDirectory%" + nm + b"\\" + nm +
            b".dat\r\n\r\n[SpriteSegments]\r\n" + nm + b"=addon-enabled\r\n\r\n[OccupantKeys]\r\n")
     for nid, name in keys:
@@ -789,6 +800,7 @@ def build_files(folder, game, src, log=print, force_render=False):
             raise ImportError_("no mods\\netmod\\overlay\\Apps\\Res\\Text\\<language>\\%s found" % NAMES)
     occ, cs, pix, names, lines = [], [], [], [], {}
     lm_recs, lm_keys = [], []
+    rw_recs, rw_keys = [], []                       # task civmod: the reward plugin's records and keys
     civ_lines, civ_names, rw_rows = {}, [], []      # task civmod: base -> [id], (id, name), reward rows
     rw_types, rw_hier = [], []                      # task civmod: the reward types' CitySim.ini-format declarations
     bld = BG.stock_buildings(game)
@@ -813,13 +825,14 @@ def build_files(folder, game, src, log=print, force_render=False):
             ex = BG.tkb1_set_key(ex, 0x7C, (TEXT_TYPE, LM_DESC_GROUP, nid))
         BG.tkb1_props(ex)
         if lm:
-            lm_recs.append((LM_GROUP, nid, BLD_TYPE, ex))
-            lm_recs.append((LM_TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
+            precs, pkeys = (rw_recs, rw_keys) if e["kind"] == "reward" else (lm_recs, lm_keys)
+            precs.append((LM_GROUP, nid, BLD_TYPE, ex))
+            precs.append((LM_TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
             if e["desc"] is not None:
                 dsc = e["desc"].encode("cp1252")
-                lm_recs.append((LM_DESC_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(dsc)) + dsc))
-            lm_recs.append((LM_CS_GROUP, nid, CS_TYPE, frame_table(tab, nid)))
-            lm_keys.append((nid, nm))
+                precs.append((LM_DESC_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(dsc)) + dsc))
+            precs.append((LM_CS_GROUP, nid, CS_TYPE, frame_table(tab, nid)))
+            pkeys.append((nid, nm))
             if e["kind"] == "civic":
                 civ_lines.setdefault(base, []).append(nid)
                 civ_names.append((nid, nm))
@@ -831,7 +844,7 @@ def build_files(folder, game, src, log=print, force_render=False):
         else:
             occ.append((BLD_GROUP, nid, BLD_TYPE, ex))
             cs.append((GROUP, nid, CS_TYPE, frame_table(tab, nid)))
-        epix = lm_recs if lm else pix
+        epix = (rw_recs if e["kind"] == "reward" else lm_recs) if lm else pix
         nudged = 0
         for k in range(FRAMES):
             z, r = (k % 20) // 4, k % 4
@@ -845,7 +858,7 @@ def build_files(folder, game, src, log=print, force_render=False):
                      else "") if e["kind"] == "reward" else ", type %d, look %d of the button" % (
                      lu, len(civ_lines[base]) + 1) if e["kind"] == "civic" else "")
             rep.append("plop  [%d] %s: \"%s\", %s, %dx%d, stats of stock %d%s, in %s, %s%s" % (
-                nid, e["file"], e["name"], tg["label"], n, n, base, extra, LM_PIN, describe(info),
+                nid, e["file"], e["name"], tg["label"], n, n, base, extra, RW_PIN if e["kind"] == "reward" else LM_PIN, describe(info),
                 ", %d magenta px nudged" % nudged if nudged else ""))
             continue
         names.append((TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
@@ -867,6 +880,9 @@ def build_files(folder, game, src, log=print, force_render=False):
     if lm_recs:
         files[LM_PIN] = plugin_pin(lm_keys)
         files[LM_DAT] = BG.new_container(lm_recs)
+    if rw_recs:
+        files[RW_PIN] = plugin_pin(rw_keys, RW_PLUGIN_NAME)
+        files[RW_DAT] = BG.new_container(rw_recs)
     if civ_lines:
         files[CIVIC_INI] = civic_ini(civ_lines, civ_names)
     if rw_rows:
@@ -874,8 +890,8 @@ def build_files(folder, game, src, log=print, force_render=False):
                              b"; <type>=<name> ;<population>;<year>;<petition 0>;<own rule 0>, the stock row format.\r\n"
                              b"[REWARD_BUILDINGS]\r\n" + b"".join(rw_rows))
         files[TYPES_INI] = (b"; bldimport reward types (task civmod), declared as CitySim.ini declares the base reward's type.\r\n"
-                            b"; sc3resize passes these rows to the game's own registry callbacks after CitySim.ini's, with or\r\n"
-                            b"; without the new-rewards switch: a placed reward of an undeclared type stops the game on load.\r\n"
+                            b"; The mods loader (sc3mods.dll) passes these rows to the game's own registry callbacks after\r\n"
+                            b"; CitySim.ini's, with every mod on or off: a placed reward of an undeclared type stops the game on load.\r\n"
                             b"[AgentTypes]\r\n" + b"".join(rw_types) + b"\r\n[AgentTypeHierarchy]\r\n" + b"".join(rw_hier))
     if need_ovl and (entries or src):
         files[OVL + OCC_KOREA] = upsert(cur(OVL + OCC_KOREA), occ) if occ else cur(OVL + OCC_KOREA)
@@ -1167,15 +1183,19 @@ def cmd_check(a):
         langs = [n for n in game.listdir(OVL + "Apps/Res/Text") if game.exists(OVL + "Apps/Res/Text/%s/%s" % (n, NAMES))]
     # task civmod: plugin kinds read the plugin .dat (exemplar, name, frame table and pixels together), the .pin's
     # [OccupantKeys] line, and for civic / reward the sc3resize ini lines
-    pdat, pin, civ, rwi, tyi = {}, b"", b"", b"", b""
+    pdat, rdat, pin, rpin, civ, rwi, tyi = {}, {}, b"", b"", b"", b"", b""
     if plug:
-        d = rd(LM_DAT)
+        d, d2 = rd(LM_DAT), rd(RW_DAT)
         pdat = BG.records(d)[0] if d else {}
-        pin, civ, rwi, tyi = rd(LM_PIN) or b"", rd(CIVIC_INI) or b"", rd(REWARD_INI) or b"", rd(TYPES_INI) or b""
+        rdat = BG.records(d2)[0] if d2 else {}
+        pin, rpin = rd(LM_PIN) or b"", rd(RW_PIN) or b""
+        civ, rwi, tyi = rd(CIVIC_INI) or b"", rd(REWARD_INI) or b"", rd(TYPES_INI) or b""
     bad = 0
+    ldat, lpin = pdat, pin
     for e in entries:
         nid, errs = e["id"], []
         pk = e["kind"] in PLUGIN_KINDS
+        pdat, pin = (rdat, rpin) if e["kind"] == "reward" else (ldat, lpin)   # rewards: their own plugin
         ex = (pdat if pk else occ).get((LM_GROUP if pk else BLD_GROUP, nid, BLD_TYPE))
         if ex is None:
             print("FAIL [%d] no exemplar" % nid)
@@ -1228,7 +1248,7 @@ def cmd_check(a):
             if (LM_TEXT_GROUP, nid, TEXT_TYPE) not in pdat:
                 errs.append("no name record")
             if b"0x%08X,0x%08X,0x%08X=%d " % (BLD_TYPE, LM_GROUP, nid, nid) not in pin:
-                errs.append("no [OccupantKeys] line in %s" % LM_PIN)
+                errs.append("no [OccupantKeys] line in %s" % (RW_PIN if e["kind"] == "reward" else LM_PIN))
             if e["kind"] == "civic":
                 base = table[target_of(e)]["bases"][e["lot"]][0]
                 m = re.search(rb"^0x%08X=([^\r\n]*)" % base, civ, re.M | re.I)

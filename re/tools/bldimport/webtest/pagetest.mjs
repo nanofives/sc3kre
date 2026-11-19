@@ -113,7 +113,7 @@ try {
     if (man.editDesc) {
       const e = res.editDesc || {}, t = man.editDesc.text;
       console.log('  editDesc: ' + JSON.stringify(e));
-      line('Description box hidden for a card that is not a landmark', !!e.hiddenFor && e.hiddenFor[2] === true, e.hiddenFor && e.hiddenFor.join(' '));
+      line('Description box hidden for a card that is not a landmark, civic look or reward', !!e.hiddenFor && e.hiddenFor[2] === true, e.hiddenFor && e.hiddenFor.join(' '));
       line('Description box shown for the landmark, empty after the blanking (and no description key written then)', e.shown === true && e.boxBefore === '' && e.blankSaved === false);
       line(`typed description reaches models.json ("${t}")`, e.saved === t && e.meta === t, String(e.saved));
     }

@@ -16,7 +16,9 @@
     The folder with SC3U.exe. Defaults to this script's folder, or an Apps subfolder of it.
 
 .PARAMETER Restore
-    Put the stock SC3U.exe back from the backup and stop loading the mods.
+    Put the stock SC3U.exe back from the backup and stop loading the mods. Also moves the importer's rewards plugin
+    (PlugIn\bldimport_rewards) to Apps\sc3mods_off\PlugIn, because the stock game cannot load a city that holds one of
+    those rewards. Running the script again without -Restore moves it back.
 
 .PARAMETER DllName
     The loader DLL to import. Default sc3mods.dll.
@@ -175,9 +177,39 @@ function Write-Atomic([string]$dest, [byte[]]$bytes) {
 }
 
 # ================================================================================================================
+# REWARD PLUGIN (2026-11-19, civmod, owner call "Loader declares")
+# ================================================================================================================
+# New rewards made by the building importer live in their own plugin, PlugIn\bldimport_rewards. Their type ids are
+# declared by the mods loader (sc3mods.dll), so the bare stock exe would stop while loading a city that holds one.
+# -Restore moves that one folder out of PlugIn (to Apps\sc3mods_off\PlugIn), a normal run moves it back. Civic looks
+# and landmarks (PlugIn\bldimport) stay: they use stock types.
+function Move-RewardPlugin([bool]$Out) {
+    $root = $Apps
+    $ini = Join-Path $Apps 'SC3U.ini'
+    if (Test-Path -LiteralPath $ini) {   # [Directories] PlugIn= moves the plugin root (cGZFileSystem::PlugInDirectory)
+        $m = Select-String -LiteralPath $ini -Pattern '^\s*PlugIn\s*=\s*(.+?)\s*$' | Select-Object -First 1
+        if ($m) { $root = $m.Matches[0].Groups[1].Value }
+    }
+    $live = Join-Path (Join-Path $root 'PlugIn') 'bldimport_rewards'
+    $off = Join-Path (Join-Path (Join-Path $Apps 'sc3mods_off') 'PlugIn') 'bldimport_rewards'
+    $from = if ($Out) { $live } else { $off }
+    $to = if ($Out) { $off } else { $live }
+    if (-not (Test-Path -LiteralPath $from)) { return }
+    if (Test-Path -LiteralPath $to) {
+        Write-Host "  note: $to already exists: left $from where it is." -ForegroundColor DarkYellow
+        return
+    }
+    New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+    Move-Item -LiteralPath $from -Destination $to
+    if ($Out) { Write-Host "Moved the imported rewards out of PlugIn (to $to): the stock game never sees their types." -ForegroundColor Green }
+    else { Write-Host "Moved the imported rewards back into PlugIn ($to)." -ForegroundColor Green }
+}
+
+# ================================================================================================================
 # RESTORE
 # ================================================================================================================
 if ($Restore) {
+    Move-RewardPlugin $true
     if (-not (Test-Path -LiteralPath $bak)) { throw "No backup SC3U.exe.orig in $Apps. Nothing to restore." }
     if (-not (Get-Build $bak)) { throw "Backup SC3U.exe.orig ($(Sha256Hex $bak)) is not a known stock build. Refusing to restore it." }
     if (Get-Build $exe) {
@@ -195,6 +227,7 @@ if ($Restore) {
 # ================================================================================================================
 # PATCH
 # ================================================================================================================
+Move-RewardPlugin $false
 $h = Sha256Hex $exe
 
 # already patched?

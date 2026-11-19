@@ -5,3 +5,4 @@ EXPORTS
     sc3mods_id DATA
     sc3mods_lang @3
     sc3mods_tr @4
+    sc3mods_reward_types @5
