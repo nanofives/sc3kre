@@ -731,9 +731,20 @@ resize.mt_gentle=Abbandono attenuato
 # en: Sandbox: no abandonment
 resize.mt_sandbox=Sandbox: niente abbandono
 # en: Simulation
-resize.mt_sim=Simulazione
 
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: Building style mix
 resize.mt_stylemix=Mix di stili
 resize.mt_hwyspeed=Autostrade più veloci
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Look %d of %d: %s
+resize.cv_look=Aspetto %d di %d: %s
+# en: Look %d of %d: original
+resize.cv_look_stock=Aspetto %d di %d: originale
+# en: Civic buildings: more looks
+resize.mt_civvar=Edifici civici: più aspetti
+# en: New rewards
+resize.mt_newreward=Nuove ricompense
+# en: Simulation and buildings
+resize.mt_simbld=Simulazione ed edifici

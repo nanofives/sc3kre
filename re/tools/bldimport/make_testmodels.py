@@ -20,11 +20,21 @@ Writes the airport / seaport test models instead (bldimport kinds airport / seap
 
     py -3.12 re/tools/bldimport/make_testmodels.py --landmarks <out folder>  (task plop, 2026-11-19)
 
-Writes the landmark test models (bldimport kind landmark, a plugin in Apps\PlugInldimport):
+Writes the landmark test models (bldimport kind landmark, a plugin in Apps\PlugIn\bldimport):
   obelisk_2x2.obj/.mtl    2x2 monument: a red and gold obelisk on a stepped white plaza with four lamp posts
   pavilion_3x3.obj/.mtl   3x3 pavilion: a teal dome on a round colonnade, a fountain basin in front
   models.json             kind landmark 2x2 and 3x3, plus two entries bldimport must refuse (landmark_5x5.obj: a
-                          5x5 landmark; civic_1x1.obj: kind civic, not imported)
+                          5x5 landmark; civic_1x1.obj: kind civic with no base)
+
+    py -3.12 re/tools/bldimport/make_testmodels.py --civmod <out folder>   (task civmod, 2026-11-19)
+
+Writes the civic look / reward test models (bldimport kinds civic and reward, plugin in Apps\PlugIn\bldimport):
+  police_3x3.obj/.mtl     3x3 police station look: a navy two-storey block, white band, blue roof light, car park
+  obelisk_2x2.obj         reward "Test reward obelisk", population 1000 (unlocks in any city past 1,000 people)
+  reward_locked.obj       reward "Test locked reward", population 100,000,000 (stays locked)
+  pavilion_3x3.obj        landmark "Test pavilion" (type 18000: the Mover fix)
+  models.json             those four, plus entries bldimport must refuse: a police look 2x2 (the base is 3x3), a civic
+                          look of an unknown base, a reward named with a ';'
 """
 import json
 import math
@@ -443,7 +453,59 @@ def landmarks(out):
     return 0
 
 
+def police_3x3(folder, name="police_3x3"):
+    o = Obj(name)
+    o.mat("lot", (0.45, 0.45, 0.47))
+    o.box(-23.6, 0, -23.6, 23.6, 0.3, 23.6, mats={"ny": None})
+    o.mat("walls", (0.14, 0.20, 0.42))
+    o.box(-17.0, 0.3, -17.0, 17.0, 9.0, 6.0, mats={"ny": None})
+    o.mat("band", (0.95, 0.95, 0.95))
+    o.box(-17.2, 4.2, -17.2, 17.2, 5.0, 6.2, mats={"ny": None})
+    o.mat("roof", (0.30, 0.30, 0.33))
+    o.box(-17.4, 9.0, -17.4, 17.4, 9.6, 6.4, mats={"ny": None})
+    o.mat("light", (0.10, 0.45, 0.95))
+    o.box(-1.5, 9.6, -6.0, 1.5, 12.0, -3.0, mats={"ny": None})
+    o.mat("car", (0.95, 0.95, 0.98))
+    for x in (-12.0, -4.0, 4.0, 12.0):
+        o.box(x - 1.5, 0.3, 12.0, x + 1.5, 1.8, 18.0, mats={"ny": None})
+    o.write(folder)
+
+
+def civmod(out):
+    """Task civmod: a police look, two rewards, a landmark, and entries to refuse."""
+    os.makedirs(out, exist_ok=True)
+    police_3x3(out)
+    police_3x3(out, "police_2x2")
+    police_3x3(out, "civic_unknown")
+    obelisk_2x2(out)
+    obelisk_2x2(out, "reward_locked")
+    obelisk_2x2(out, "reward_semicolon")
+    pavilion_3x3(out)
+    common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True, "weight": 1}
+    models = {"sc3models": 1, "generator": "make_testmodels.py --civmod", "models": [
+        dict(common, file="police_3x3.obj", name="Test police look", kind="civic", base="police", height_m=12.0,
+             notes="look 2 of the Police Station button, stats of stock 0xD2 (type 13130)"),
+        dict(common, file="obelisk_2x2.obj", name="Test reward obelisk", kind="reward", lot=[2, 2], population=1000,
+             year=0, height_m=28.5, description="Test reward, bldimport", notes="unlocks past 1,000 people"),
+        dict(common, file="reward_locked.obj", name="Test locked reward", kind="reward", lot=[2, 2],
+             population=100000000, height_m=28.5, notes="stays locked"),
+        dict(common, file="pavilion_3x3.obj", name="Test pavilion", kind="landmark", lot=[3, 3], height_m=22.4,
+             notes="landmark, type 18000: Mover"),
+        dict(common, file="police_2x2.obj", name="Refused: police 2x2", kind="civic", base="police", lot=[2, 2],
+             height_m=12.0, notes="a police look keeps the 3x3 lot: skipped"),
+        dict(common, file="civic_unknown.obj", name="Refused: unknown base", kind="civic", base="castle",
+             height_m=12.0, notes="no such civic button: skipped"),
+        dict(common, file="reward_semicolon.obj", name="Refused; semicolon", kind="reward", lot=[2, 2],
+             height_m=28.5, notes="the reward row cannot hold ';': skipped")]}
+    with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
+        json.dump(models, fh, indent=2)
+    print("wrote civmod test models to", out)
+    return 0
+
+
 def main(argv):
+    if len(argv) == 2 and argv[0] == "--civmod":
+        return civmod(argv[1])
     if len(argv) == 2 and argv[0] == "--ports":
         return ports(argv[1])
     if len(argv) == 2 and argv[0] == "--landmarks":

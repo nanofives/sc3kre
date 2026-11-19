@@ -731,9 +731,20 @@ resize.mt_gentle=Milder verval
 # en: Sandbox: no abandonment
 resize.mt_sandbox=Sandbox: geen verval
 # en: Simulation
-resize.mt_sim=Simulatie
 
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: Building style mix
 resize.mt_stylemix=Mix van bouwstijlen
 resize.mt_hwyspeed=Snellere auto's op snelweg
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Look %d of %d: %s
+resize.cv_look=Uiterlijk %d van %d: %s
+# en: Look %d of %d: original
+resize.cv_look_stock=Uiterlijk %d van %d: origineel
+# en: Civic buildings: more looks
+resize.mt_civvar=Openbare gebouwen: meer uiterlijken
+# en: New rewards
+resize.mt_newreward=Nieuwe beloningen
+# en: Simulation and buildings
+resize.mt_simbld=Simulatie en gebouwen
