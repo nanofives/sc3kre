@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sc3pack view test</title>
+<link rel="stylesheet" href="../../../../docs/assets/sc3ui.css">
+<style>
+  body { background: var(--ui-page, #1c2350); }
+  .ui-wrap { padding-top: 12px; padding-bottom: 24px; }
+  .sc3pack-missing td { color: var(--ui-warn, #ffb000); }
+  .ui-table td { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<!-- sc3pack_view.html - task sc3compat-b (2026-11-19e): sc3pack.js in a real browser, driven by sc3pack_pagetest.mjs.
+     ?t=<manifest url>: opens each pack as the page would (a picked .zip, a folder's File list), reports with the game
+     folder (BLDWEB.listFS over the game's files), compares with sc3pack.py's JSON, draws SC3PACK.view of one pack. -->
+<div class="ui-wrap"><div id="view"></div></div>
+<pre id="result" hidden></pre>
+<script src="../bldweb.js"></script>
+<script src="../sc3pack.js"></script>
+<script>
+(async () => {
+  const out = { pass: false, checks: [] };
+  try {
+    const man = await (await fetch(new URLSearchParams(location.search).get('t'))).json();
+    // a File as the browser gives it for a folder pick: lazy, with webkitRelativePath = <folder>/<rel>
+    const lazy = (url, name, rel) => ({ name, size: 0, webkitRelativePath: rel,
+      arrayBuffer: async () => (await fetch(url)).arrayBuffer(),
+      slice: (a, b) => ({ arrayBuffer: async () => (await (await fetch(url)).arrayBuffer()).slice(a, b) }) });
+    const game = BLDWEB.listFS(man.game.files.map(r => lazy(man.game.base + r.split('/').map(encodeURIComponent).join('/'), r.split('/').pop(), 'SimCity 3000 Unlimited/' + r)));
+    let shown = null;
+    for (const p of man.packs) {
+      const t0 = performance.now();
+      const files = p.zip ? [lazy(p.base + encodeURIComponent(p.zip), p.zip, '')]
+        : p.files.map(r => lazy(p.base + r.split('/').map(encodeURIComponent).join('/'), r.split('/').pop(), p.name + '/' + r));
+      const ents = await SC3PACK.openFiles(files);
+      const rep = await SC3PACK.report(ents, game);
+      const want = await (await fetch(p.want)).text();
+      out.checks.push({ name: p.name, ok: SC3PACK.dumps(rep) === want, files: ents.length, seconds: (performance.now() - t0) / 1000 });
+      if (p.name === man.show) shown = rep;
+    }
+    let clicked = null;
+    SC3PACK.view(document, document.getElementById('view'), shown, { onInstall: (ow, kinds) => { clicked = { ow, kinds }; }, onRemove: () => {} });
+    const v = document.getElementById('view');
+    out.view = { groups: v.querySelectorAll('details').length, buttons: [...v.querySelectorAll('button')].map(b => b.textContent),
+      missingRows: v.querySelectorAll('tr.sc3pack-missing').length, checkboxes: v.querySelectorAll('input[type=checkbox]').length,
+      selects: v.querySelectorAll('select').length, scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth };
+    v.querySelector('input[type=checkbox]').click();
+    v.querySelector('select').value = 'detail';
+    v.querySelector('button.primary').click();
+    out.click = clicked;
+    out.pass = true;
+  } catch (e) { out.error = String(e && e.stack || e); }
+  document.getElementById('result').textContent = JSON.stringify(out);
+  document.title = 'sc3pack done';
+})();
+</script>
+</body>
+</html>
