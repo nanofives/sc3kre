@@ -38,6 +38,12 @@ here="$(cd "$(dirname "$0")" && pwd)"
 work="$1"; game="$2"; kits="$3"; sc4zip="${4:-}"; sc4dir="${5:-}"; sc4packs="${6:-}"
 py="${PY:-$HOME/bin/py -3.12}"
 packs="${SC3PACK_PACKS:-$here/../../../../stage/st_packs}"
+# In a dev worktree (dev\<name>\wt) the default above is dev\<name>\wt\stage, which never exists: fall back to the main
+# checkout's stage, found through git's common dir (MAIN\.git).
+if [ -z "${SC3PACK_PACKS:-}" ] && [ ! -d "$packs" ]; then
+    common="$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+    [ -n "$common" ] && [ -d "$(dirname "$common")/stage/st_packs" ] && packs="$(dirname "$common")/stage/st_packs"
+fi
 steps=22; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
 # sc4props (2026-11-19g): SC4 lot props from the BSC Common Dependencies Pack, when the 6th argument's folder holds it
 # (and the JMyers .zip + folder are given): sc4_props_setup.py (sc4conv.py --deps) + sc4_props.mjs (sc4web.js streams
