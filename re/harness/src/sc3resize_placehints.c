@@ -215,7 +215,10 @@ static DWORD __fastcall ph_label(BYTE *view, void *edx, DWORD show, LONG cost, D
     g_ph_lview = view; g_ph_lshow = show & 0xff; g_ph_lcost = (DWORD)cost; g_ph_lnf = nofunds;   /* for a Shift edge */
     __try {
         BYTE *s = view + 0x134;
-        if (g_ph && g_ph_hint[0] && (show & 0xff) && ph_shift()) {
+        char look[128];   /* CIVVAR (civmod): the civic look the building tool will place, always shown */
+        int hint = g_ph_hint[0] && ph_shift();
+        if (!((show & 0xff) && cv_label(view, look, sizeof(look)))) look[0] = 0;
+        if (g_ph && (show & 0xff) && (hint || look[0])) {
             void *f = ((PH_FN0)(g_ph_spr + 0x4ff6a))();
             char buf[600];
             const char *d;
@@ -226,10 +229,16 @@ static DWORD __fastcall ph_label(BYTE *view, void *edx, DWORD show, LONG cost, D
                 d = (const char *)ho_v(s, 0x18, 0, 0, 0, 0, 0, 0);
                 n = ho_v(s, 0x1c, 0, 0, 0, 0, 0, 0);
                 if (!d || n > 100 || IsBadReadPtr(d, n)) n = 0;
-                if (n) memcpy(buf, d, n);
-                buf[n] = 0;
-                lstrcatA(buf, n ? "  |  " : "");
-                lstrcpynA(buf + lstrlenA(buf), g_ph_hint, (int)(sizeof(buf) - lstrlenA(buf)));
+                {   char cst[104];   /* look  |  cost  |  hint */
+                    if (n) memcpy(cst, d, n);
+                    cst[n] = 0;
+                    lstrcpynA(buf, look, 120);
+                    if (look[0] && n) lstrcatA(buf, "  |  ");
+                    lstrcatA(buf, cst); }
+                if (hint) {
+                    lstrcatA(buf, n || look[0] ? "  |  " : "");
+                    lstrcpynA(buf + lstrlenA(buf), g_ph_hint, (int)(sizeof(buf) - lstrlenA(buf)));
+                }
                 if (g_ph_lines && g_ph_tip_orig) ph_wrap(buf);   /* TIPLINES: 2 or 3 lines at the "|" groups */
                 ho_v(s, 0x10, 1, (DWORD)buf, 0, 0, 0, 0);
                 *(LONG *)(view + 0x130) = cost;

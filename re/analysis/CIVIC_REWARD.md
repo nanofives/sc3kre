@@ -6,6 +6,11 @@ SIMGEOM, SIMUI, SIMSPR, SIMADV, SIMSERV and SIMINIT exports, PE disassembly of t
 (`re/data/syspak/`) and `Apps\Res\Occupant\OccupantAttribs.IXF`. No game was run. Every claim carries an address, a
 file check or `[UNCERTAIN]`. Follows `PLOPPABLES.md` (landmarks as data).
 
+> **Built and measured (civmod, round 2026-11-19j): section 5.** Two claims below were wrong when run in game and are
+> corrected there: the civic window `0x1000b19d` sees only 1 of the 17 cases (the hook is on the call at `0x1000b1a3`),
+> and a reward of a type that is not in `CitySim.ini [AgentTypes]` faults the City Planner on placement and on load
+> (`SIMADV 0x1000b392`), so the new types are declared at run time.
+
 **Verdict.**
 
 - **Civic.** Each civic button is one GZCOM command class id. A per-click lookup asks every registered command factory,
@@ -230,7 +235,7 @@ removing a reward clears only "placed", so a move cannot lose it.
 | exemplar copy with a NEW type id (unique), own art and name, `[OccupantKeys]` line | yes | the map is keyed by type, the lookup returns the first exemplar of a type |
 | a `[REWARD_BUILDINGS]` row for that type, `d = 0`, `c = 0` | yes | the only source of reward items |
 | an unlock | yes, code | 2.2: neither column unlocks a new type |
-| `CitySim.ini [AgentTypes]` entry for the new type | not for the unlock, placement or save (none of them reads it) | what the query dialog, the news or other `IsA` users show for an undeclared type was not read `[UNCERTAIN]` |
+| `CitySim.ini [AgentTypes]` entry for the new type | **yes** (measured, section 5.2): the City Planner's occupant-inserted handler `0x1000b32a` reads the agent type object of the occupant (QI `0xe0faadc7`, vt+0x2c) and dereferences it; for an undeclared type it is NULL | the static reading above missed it |
 | petition art / text | no | c = 0 raises none |
 
 ## 3. Proposal (not built)
@@ -339,3 +344,69 @@ under `[REWARD_BUILDINGS]`. Population and year come from the page (defaults e.g
 - Meaning of the advisor fields the unlock compares (`+0x1f8`, `+0x204`, `+0x1bc`, `+0x1fc`, `+0x1fd`, `+0x21c`,
   `+0x230`, `+0x1aa`, `+0x1ac`): only their ini thresholds are tied down here.
 - `[OccupantKeys]` value text (`=38000 Test obelisk`): read as a key list only (`FUN_1000c5b6` parses the entry name).
+
+## 5. Built (civmod, round 2026-11-19j)
+
+Code: `re/harness/src/sc3resize_civic.c` (included by `sc3resize.c`), cost label line in `sc3resize_placehints.c`
+`ph_label`, Mover list `rl_movable`, two rows on the "Activar mods" page. Data: `bldimport.py` kinds `civic` and `reward`.
+Measurements: `verify/civmod/RESULTS.md`.
+
+### 5.1 Civic looks (CIVVAR)
+
+- **Correction.** Each of the 17 plain cases pushes its own args (`push edi; push edi; lea eax,[ebp-0x3c]`) and 16 of
+  them `jmp 0x1000b1a2` (`push eax`); only the last falls through `0x1000b19d`. Jumps found by a scan of
+  `0x1000a896..0x1000b1ec`: 16 `jmp 0x1000b1a2` plus the fall-through. The 5-byte window proposed in 3.1 is clean but sees
+  one case: with it, the Police hotkey built the stock tool without passing the hook (measured). `[CONFIRMED @
+  0x1000b1a3, disassembly + game]`
+- **Hook.** The rel32 of `0x1000b1a3 call 0x10009443` points at `cv_call`, which runs `cv_pick(&key)` (`[esp+4]`) and
+  jumps on to `0x10009443` with the stack untouched. A base listed in `bldimport_civic.ini` cycles per press: stock, then
+  each variant, then stock. Installed only when the file lists a variant.
+- **Label.** `ph_label` reads the city view's current tool (`+0x228`, a SIMGEOM building tool vtable), its key at
+  `+0x108`, and prefixes "Aspecto i de n: <name>" whenever the key is a base with variants or one of its variants.
+- **In game.** A copy of the police exemplar under `{0x207EDC0E, 0xB1D10002, 0x9470}` placed with the stock tool is
+  type 13130, $500 like the stock one, drawn at zoom 3 and 4, and draws its own coverage circle on the criminality map
+  when powered (section 2 of RESULTS). Unpowered, neither it nor a stock station draws one.
+- **Without the plugin** a placed look comes back as the stock exemplar of the same type (`{0x207EDC0E, 0x57E, 0xd2}`),
+  so it keeps working as a police station. Measured; same as growables (`verify/airsea` 4), unlike landmarks.
+
+### 5.2 New rewards (NEWREWARD)
+
+- **Rows.** The City Planner loader has one call site, `0x10006f80 call 0x10007989` (`ecx` = the advisor). Its rel32
+  points at `rw_load_wrap`: the stock loader, then our `bldimport_rewards.ini` through SIMADV's own
+  `cSC3CompressibleINIFile` with no compressed path. `InitFileType` `0x10029ba7` then takes the loose route (type 1,
+  `cRZIniFile::EnumEntries` `0x100269f1`), which keeps the `;` columns in the value. Measured: `EnumEntries true`, both
+  rows became items with the right population, year, petition 0, own rule 0. So the SYS.PAK fallback is not needed.
+- **Unlock.** 6-byte jmp at `0x1000a7fa` to `rw_stub`: our types go to `0x1000a832`, all others to `0x1000a800`.
+  Measured: unlocked at population 1000 in a city of ~150,000, the 100,000,000 row stayed locked; listed in
+  Rewards and Opportunities with our name and description; gone from the list once placed, also after save + reload.
+- **Correction: the type must be declared.** Placing type 38001 undeclared: the building is inserted and drawn, then
+  `0x1000b32a` (City Planner occupant inserted) QIs the occupant for `0xe0faadc7`, calls vt+0x2c, gets NULL and reads
+  address 0 at `0x1000b392`. The game's handler swallows the fault, the commit stops after the insert: "placed" never
+  set, tool still armed (`verify/civmod/owner_shots/16`). Loading a city that holds such a building faults at the same
+  address and the game exits (measured twice: rewards file removed, and the stock game with the plugin installed).
+- **Declaration at run time.** The agent type tree (SIMINIT `sc3_agenttype_tree_init` `0x10002eb1`) is built from the
+  GZ registry categories `sc3agenttype` / `sc3typehierarchy` (SC3U `0x004cffa0` / `0x004cffa4`). `cSC3App::LoadRegistry`
+  `0x0040b761` fills them from `CitySim.ini` with `EnumEntries` at `0x0040bc80` (callback `RegisterAgentTypeCallback`
+  `0x0040cb70`) and `0x0040bccb` (`RegisterAgentRelationCallback` `0x0040cc08`). Both rel32 point at our wrappers, which
+  run the stock `EnumEntries` (`0x00486f55`) and then hand `bldimport_types.ini`'s rows to the same callback as exe
+  `cRZString` (`0x00402a40` / `0x00402a96`). Patched from DllMain; LoadRegistry runs later. Measured: both types declared
+  before the tree is built, the reward placed with no fault, saved, reloaded, moved.
+- **Row format.** `[AgentTypes] 38001=bldimport38001:<the base reward type's text key>`, `[AgentTypeHierarchy]
+  38001=<the base type's parent>` (Mayor's House 10110 -> 10001).
+- **Not gated on the switch.** The declarations are made whenever `bldimport_types.ini` exists, with NEWREWARD on or
+  off, because a placed reward otherwise stops the game on load.
+- **Open risk.** The stock game (no sc3resize) with the plugin installed exits while loading a city that holds a placed
+  new reward (measured: PID 17576 gone within 10 s; the same setup on the original Madison ran 90 s). Fixes, owner's
+  call: (a) a SYS.PAK `CitySim.ini` edit in the netmod overlay (ties rewards to sc3netmod, and still not stock); (b)
+  give rewards one of the 24 building types `CitySim.ini` declares but no stock exemplar uses (1001 Arcology, 12260
+  Parking, 12510 Dam, 13008 PostOffice, 13320 FreeClinic, 14160 HistoricBuilding, 14910 Church, ...; 18xxx are
+  landmark cities and would join the landmark dialog), stock-safe but about eight rewards at most and each type's
+  stock meaning (IsA checks, land value row) has to be read first. `bldimport.py restore` (plugin removed) loads such a
+  city safely.
+
+### 5.3 Mover
+
+`rl_movable` now accepts `18000 <= t < 19000` (bldimport landmarks are 18000 itself) and the reward block
+`38000..38999`. Measured: "Mover" in the "?" of a type 18000 landmark and of a type 38001 reward, both moved, one copy
+left; the picker refuses both ("solo uno por ciudad"); a civic look is picked by its own key.
+

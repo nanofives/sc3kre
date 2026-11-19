@@ -57,6 +57,31 @@ exemplar {0x207EDC0E, LM_GROUP, id} (stats of the first stock landmark of that l
 the frame table {0x6300, LM_CS_GROUP, id} and the 40 pixel / anchor records (GROUP, id << 16 | frame). No overlay file
 and no road mod are needed for a landmark: it works in a stock game. Lots 1x1 to 4x4, weight not used.
 
+Civic looks and new rewards (task civmod, 2026-11-19, re/analysis/CIVIC_REWARD.md): two more plugin kinds, written into
+the same bldimport.pin / .dat (exemplar, name, line under the name, frame table, pixels as for a landmark). They need
+sc3resize (CIVVAR / NEWREWARD) to be reachable in game; the two or three .ini files below are read only by it.
+  "kind": "civic"   a second look for a stock civic button. models.json fields:
+                      base         the button: police, jail, fire, hospital, school, college, library, museum, small_park,
+                                   big_park, zoo, baseball, playground, pond, fountain, bus_stop, train_station (CIVIC)
+                      lot          optional, must be the base's lot (police 3x3, library 2x2, small_park 1x1, ...)
+                      description  optional: the line under the name; else the base's own
+                    The exemplar is the base's own (same type id, coverage, price, prop 0x65 kept). Each press of the
+                    stock button builds the next look: the stock building, then the civic entries of that base in
+                    models.json order, then the stock one again. Written to bldimport_civic.ini [Variants] / [Names].
+                    Without the plugin a placed look comes back as the stock building of its type (measured).
+  "kind": "reward"  a new entry of Rewards and Opportunities. models.json fields:
+                      lot          1x1 to 4x4; stats of the first stock reward of that lot (REWARD)
+                      population   whole number, default 20000: unlocked once the city has that many people
+                      year         whole number, default 0 (any year)
+                      description  optional: the line under the name; else the name
+                      name         may not hold ; = or line breaks (it goes into the reward row)
+                    Its type id = its id (38000-38999, the ids.json block; 38xxx is free in every SYS.PAK ini). Written
+                    to bldimport_rewards.ini [REWARD_BUILDINGS] (<type>=<name> ;<population>;<year>;0;0, the stock row
+                    format, read with the game's own ini class) and bldimport_types.ini ([AgentTypes] /
+                    [AgentTypeHierarchy], the base reward type's CitySim.ini rows with our type): a placed reward of an
+                    undeclared type stops the game while the city loads. So keep sc3resize installed while the plugin
+                    holds rewards; `restore` (plugin gone) loads such a city safely, with empty lots.
+
 Ids 38000-38999, kept per model file in <folder>\sc3build\ids.json so a saved city keeps finding its buildings.
 Needs the sc3mods road mod (sc3netmod) installed: the files go into mods\netmod\overlay like bat_growables.ps1's.
 Re-runnable: each run first puts back the files it wrote last time (state.json + backups), then installs again; a
@@ -111,6 +136,24 @@ LM_GROUP, LM_CS_GROUP, LM_TEXT_GROUP, LM_DESC_GROUP = 0xB1D10002, 0xB1D10003, 0x
 PLUGIN_NAME = "bldimport"
 PLUGIN_DIR = "Apps/PlugIn/" + PLUGIN_NAME + "/"
 LM_PIN, LM_DAT = PLUGIN_DIR + PLUGIN_NAME + ".pin", PLUGIN_DIR + PLUGIN_NAME + ".dat"
+# task civmod (2026-11-19): civic looks and new rewards, also plugin kinds (re/analysis/CIVIC_REWARD.md 3). The two
+# files below are read by sc3resize (sc3resize_civic.c); the game's plugin scan reads only *.pin and sprite *.DAT.
+CIVIC_INI = PLUGIN_DIR + "bldimport_civic.ini"
+REWARD_INI = PLUGIN_DIR + "bldimport_rewards.ini"
+TYPES_INI = PLUGIN_DIR + "bldimport_types.ini"   # the reward types' [AgentTypes] / [AgentTypeHierarchy] rows
+PLUGIN_KINDS = ("landmark", "civic", "reward")
+# civic "base" -> the exemplar instance (group 0x57E) the stock button builds: the 17 plain commands of SIMGEOM's command
+# factory 0x1000a896 (CIVIC_REWARD.md 1). Marina, subway and rail-to-subway use other tools: not offered.
+CIVIC = {"police": 0xD2, "jail": 0x1F41, "fire": 0xD3, "hospital": 0xD1, "school": 0x1F94, "college": 0xD6,
+         "library": 0xF5, "museum": 0xD4, "small_park": 0xD, "big_park": 0xD5, "zoo": 0xDA, "baseball": 0xD7,
+         "playground": 0x234B, "pond": 0x234C, "fountain": 0x234E, "bus_stop": 0x1F96, "train_station": 0xED}
+# reward: stats of the first stock exemplar by id whose type is a [REWARD_BUILDINGS] row of Advisor-CityPlanner.ini, with
+# a square lot of that size, a plain 0x6300 frame table and a name key, the 4-piece tool's instances left out (their
+# tool is not the plain one). Its own type id = its id (ID_FIRST..ID_LAST): the City Planner keys rewards by type
+# (SIMADV FUN_100089e7, the exemplar is the first one of that type), and sc3resize unlocks and moves types in that
+# block. Population / year: the row's columns 1 and 2, petition 0 and own-rule 0 (the plain population + year rule).
+REWARD = {"sizes": (1, 2, 3, 4), "label": "Reward", "population": 20000, "year": 0,
+          "four_piece": set(range(0x1F5D, 0x1F61)) | set(range(0x1F8B, 0x1F8F)) | set(range(0x1F98, 0x1F9C))}
 
 
 class ImportError_(Exception):
@@ -276,9 +319,87 @@ def landmark_table(game):
                          "copies": False, "label": LANDMARK["label"]}}
 
 
+def civic_table(game):
+    """-> {"civic:<base>": {"bases" {size: (instance, file)}, "landuse", "label", ...}} for every CIVIC base (task civmod).
+    One size per base: the base's own square lot (a copy keeps the base's coverage, so it keeps its lot too)."""
+    bld = BG.stock_buildings(game)
+    out = {}
+    for name, inst in CIVIC.items():
+        if inst not in bld:
+            raise ImportError_("civic %s: stock exemplar 0x%X not found" % (name, inst))
+        f, p = bld[inst]
+        fp, lu, cs = BG.tkb1_get(p, 0x66), BG.tkb1_get(p, 0x65), BG.tkb1_get(p, 0x67)
+        if not fp or fp[0] != fp[2] or not lu or not cs or cs[0] != CS_TYPE:
+            raise ImportError_("civic %s: stock exemplar 0x%X is not a square plain building" % (name, inst))
+        out["civic:" + name] = {"families": [], "bases": {fp[0]: (inst, f)}, "landuse": lu[0], "copies": False,
+                                "label": "Civic look of %s" % BG.tkb1_get(p, 0x64).decode("cp1252")}
+    return out
+
+
+def syspak_sections(game, member):
+    """-> {"[section]" (lower case): [(key, value), ...]} of one SYS.PAK ini member, rows in file order."""
+    import syspak_parse
+    names, _, _, recs = syspak_parse.parse(game.read("Apps/Sys/SYS.PAK"))
+    i = [k for k, n in enumerate(names) if n.lower() == member.lower()]
+    if len(i) != 1:
+        raise ImportError_("SYS.PAK has %d %s members" % (len(i), member))
+    sec, out = None, {}
+    for ln in recs[i[0]]["lines"]:
+        s = ln.strip()
+        if s.startswith("["):
+            sec = s.lower()
+            out.setdefault(sec, [])
+        elif sec and "=" in s and not s.startswith(";"):
+            k, v = s.split("=", 1)
+            out[sec].append((k.strip(), v.strip()))
+    return out
+
+
+def reward_types(game):
+    """[REWARD_BUILDINGS] type ids of SYS.PAK's Advisor-CityPlanner.ini, in row order."""
+    return [int(k, 0) for k, _ in syspak_sections(game, "Advisor-CityPlanner.ini").get("[reward_buildings]", [])]
+
+
+def agent_type_rows(game, base_type, nid):
+    """-> ([AgentTypes] value, [AgentTypeHierarchy] parent) for a new reward type (task civmod): the base reward type's
+    CitySim.ini rows with our own name token. A type that is not declared has no agent type object, and placing it
+    faults the City Planner (SIMADV 0x1000b392); sc3resize NEWREWARD passes these rows to the game's own registry
+    callbacks right after CitySim.ini's (SC3U cSC3App::LoadRegistry 0x0040bc80 / 0x0040bccb)."""
+    cs = syspak_sections(game, "CitySim.ini")
+    at = {int(k, 0): v for k, v in cs.get("[agenttypes]", [])}
+    hi = {int(k, 0): v for k, v in cs.get("[agenttypehierarchy]", [])}
+    if base_type not in at or base_type not in hi:
+        raise ImportError_("CitySim.ini has no [AgentTypes] / [AgentTypeHierarchy] row for type %d" % base_type)
+    name, _, key = at[base_type].partition(":")
+    return ("bldimport%d:%s" % (nid, key)).encode("ascii"), hi[base_type].encode("ascii")
+
+
+def reward_table(game):
+    """-> {"reward": {"bases" {size: (id, file)}, ...}} (task civmod), the base rule in REWARD above."""
+    bld = BG.stock_buildings(game)
+    types = set(reward_types(game))
+    bases = {}
+    for bid in sorted(bld):
+        f, p = bld[bid]
+        lu, fp, cs = BG.tkb1_get(p, 0x65), BG.tkb1_get(p, 0x66), BG.tkb1_get(p, 0x67)
+        if bid in REWARD["four_piece"] or not lu or lu[0] not in types or not fp or fp[0] != fp[2]:
+            continue
+        if fp[0] not in REWARD["sizes"] or fp[0] in bases or not cs or cs[0] != CS_TYPE or BG.tkb1_get(p, 0x6D) is None:
+            continue
+        bases[fp[0]] = (bid, f)
+    miss = [n for n in REWARD["sizes"] if n not in bases]
+    if miss:
+        raise ImportError_("reward: no stock base reward for lot %s" % ", ".join("%dx%d" % (n, n) for n in miss))
+    return {"reward": {"families": [], "bases": dict(sorted(bases.items())), "landuse": None, "copies": False,
+                       "label": REWARD["label"]}}
+
+
 def target_of(e):
-    """Key of an entry's target in plan()'s table: the lot class (growable) or the kind (airport / seaport / landmark)."""
-    return e["kind"] if e["kind"] in PORTS or e["kind"] == "landmark" else e["class"]
+    """Key of an entry's target in plan()'s table: the lot class (growable), the kind (airport / seaport / landmark /
+    reward) or "civic:<base>"."""
+    if e["kind"] == "civic":
+        return "civic:" + e["base"]
+    return e["kind"] if e["kind"] in PORTS or e["kind"] in PLUGIN_KINDS else e["class"]
 
 
 def tkb1_set_u32(buf, prop, v):
@@ -300,6 +421,18 @@ def plugin_pin(keys):
            b".dat\r\n\r\n[SpriteSegments]\r\n" + nm + b"=addon-enabled\r\n\r\n[OccupantKeys]\r\n")
     for nid, name in keys:
         out += b"0x%08X,0x%08X,0x%08X=%d %s\r\n" % (BLD_TYPE, LM_GROUP, nid, nid, name)
+    return out
+
+
+def civic_ini(lines, names):
+    """bldimport_civic.ini (task civmod): [Variants] <base instance>=<ids in group LM_GROUP, models.json order> and
+    [Names] <id>=<name>, read by sc3resize CIVVAR (each press of the stock button: stock look, then each variant)."""
+    out = (b"; bldimport civic looks (task civmod), read by sc3resize CIVVAR. Each press of the stock button builds the\r\n"
+           b"; next look: the stock building, then these, in order. Variants are instances in group 0x%08X.\r\n"
+           b"[Variants]\r\n" % LM_GROUP)
+    for b in sorted(lines):
+        out += b"0x%08X=%s\r\n" % (b, b",".join(b"0x%08X" % i for i in lines[b]))
+    out += b"\r\n[Names]\r\n" + b"".join(b"0x%08X=%s\r\n" % (i, nm) for i, nm in names)
     return out
 
 
@@ -443,12 +576,17 @@ def plan(folder, game, log=print):
     ids = ids_for(folder, models)
     table = BG.class_table(game) if game else None
     ports = port_table(game) if game else None
+    civic = civic_table(game) if game else None
     out, rep = [], []
     for m in models:
         f = m.get("file", "?")
         nid = ids.get(f)
         name = (m.get("name") or os.path.splitext(f)[0]).strip()
         why = None
+        kind0 = m.get("kind", "growable")
+        base = m.get("base")
+        if kind0 == "civic" and "lot" not in m and civic and isinstance(base, str) and "civic:" + base in civic:
+            m = dict(m, lot=[next(iter(civic["civic:" + base]["bases"]))] * 2)   # civic: the base's lot by default
         n, lot_err = lot_of(m)
         if is_bld(f) and os.path.isfile(os.path.join(folder, f)) and not lot_err:
             try:
@@ -463,11 +601,23 @@ def plan(folder, game, log=print):
         w = m.get("weight", 1)
         kind = m.get("kind", "growable")
         port = PORTS.get(kind) if isinstance(kind, str) else None
-        lm = kind == "landmark"
+        lm = kind in PLUGIN_KINDS                     # a plugin building: landmark, civic look or reward (no class)
+        pop, year = m.get("population", REWARD["population"]), m.get("year", REWARD["year"])
         if not m.get("enabled", True):
             why = "enabled is false"
         elif kind != "growable" and port is None and not lm:
-            why = "kind %r: only growable, airport, seaport and landmark buildings" % (kind,)
+            why = "kind %r: only growable, airport, seaport, landmark, civic and reward buildings" % (kind,)
+        elif kind == "civic" and not (isinstance(base, str) and base in CIVIC):
+            why = "civic base %r: one of %s" % (base, ", ".join(sorted(CIVIC)))
+        elif kind == "civic" and civic is not None and not lot_err and n not in civic["civic:" + base]["bases"]:
+            why = "civic lot %dx%d: a %s look keeps the stock lot, %s" % (n, n, base, " ".join(
+                "%dx%d" % (s, s) for s in civic["civic:" + base]["bases"]))
+        elif kind == "reward" and not (isinstance(pop, int) and 0 <= pop <= 100000000):
+            why = "population %r is not a whole number from 0 to 100000000" % (pop,)
+        elif kind == "reward" and not (isinstance(year, int) and 0 <= year <= 9999):
+            why = "year %r is not a whole number from 0 to 9999 (0 = any year)" % (year,)
+        elif kind == "reward" and any(c in name for c in ";=\r\n"):
+            why = "reward name %r: the reward row cannot hold ; = or line breaks" % name
         elif not os.path.isfile(os.path.join(folder, f)):
             why = "file not in the folder"
         elif not (f.lower().endswith(".obj") or is_bld(f)):
@@ -482,8 +632,8 @@ def plan(folder, game, log=print):
         elif port is not None and port["copies"] and w > PORT_MAX_COPIES:
             why = ("weight %d: an %s's weight is the number of copies in the airpark's list (the rule ignores Key "
                    "weights), at most %d" % (w, kind, PORT_MAX_COPIES))
-        elif lm and n not in LANDMARK["sizes"]:
-            why = "landmark lot %dx%d: landmarks are %s" % (n, n, ", ".join("%dx%d" % (s, s) for s in LANDMARK["sizes"]))
+        elif kind in ("landmark", "reward") and n not in LANDMARK["sizes"]:
+            why = "%s lot %dx%d: %ss are %s" % (kind, n, n, kind, ", ".join("%dx%d" % (s, s) for s in LANDMARK["sizes"]))
         elif port is not None and n not in port["sizes"]:
             why = "%s lot %dx%d: the %s grows %s" % (kind, n, n, port["label"].lower(), " and ".join(
                 "%dx%d" % (s, s) for s in port["sizes"]))
@@ -500,9 +650,9 @@ def plan(folder, game, log=print):
         desc = None
         if not why and lm:
             desc = m.get("description")
-            desc = desc.strip() if isinstance(desc, str) and desc.strip() else name
+            desc = desc.strip() if isinstance(desc, str) and desc.strip() else (None if kind == "civic" else name)
             try:
-                desc.encode("cp1252")
+                (desc or "").encode("cp1252")
             except UnicodeEncodeError:
                 why = "description %r has characters the game's text files cannot hold (cp1252)" % desc
         if why:
@@ -510,16 +660,27 @@ def plan(folder, game, log=print):
             continue
         if port is not None:
             cls = port["landuse"]                       # the base's LandUse; models.json "class" is not used
-        if lm:
+        if kind == "landmark":
             cls = LANDMARK["landuse"]
+        elif kind == "civic":
+            cls = civic["civic:" + base]["landuse"] if civic else None   # the base's type id (police 13130, ...)
+        elif kind == "reward":
+            cls = nid                                                   # its own type id = its id
         out.append({"id": nid, "file": f, "name": name, "lot": n, "class": cls, "weight": w, "model": m,
                     "kind": kind if (port is not None or lm) else "growable"})
         if lm:
             out[-1]["desc"] = desc
+        if kind == "civic":
+            out[-1]["base"] = base
+        if kind == "reward":
+            out[-1]["population"], out[-1]["year"] = pop, year
     if table is not None:
         table = dict(table)
         table.update(ports)
         table.update(landmark_table(game))
+        table.update(civic)
+        if any(e["kind"] == "reward" for e in out):
+            table.update(reward_table(game))
     return out, rep, table
 
 
@@ -617,7 +778,7 @@ def build_files(folder, game, src, log=print, force_render=False):
 
     entries, rep, table = plan(folder, game, log)
     # the overlay (road mod) only for growables / ports, or to put back what an earlier run wrote there (task plop)
-    need_ovl = any(e["kind"] != "landmark" for e in entries) or any(r.startswith(OVL) for r in src)
+    need_ovl = any(e["kind"] not in PLUGIN_KINDS for e in entries) or any(r.startswith(OVL) for r in src)
     langs = []
     if need_ovl:
         for rel in (OVL + OCC_KOREA, OVL + CS_KOREA):
@@ -628,6 +789,8 @@ def build_files(folder, game, src, log=print, force_render=False):
             raise ImportError_("no mods\\netmod\\overlay\\Apps\\Res\\Text\\<language>\\%s found" % NAMES)
     occ, cs, pix, names, lines = [], [], [], [], {}
     lm_recs, lm_keys = [], []
+    civ_lines, civ_names, rw_rows = {}, [], []      # task civmod: base -> [id], (id, name), reward rows
+    rw_types, rw_hier = [], []                      # task civmod: the reward types' CitySim.ini-format declarations
     bld = BG.stock_buildings(game)
     for e in entries:
         nid, n, lu = e["id"], e["lot"], e["class"]
@@ -639,21 +802,32 @@ def build_files(folder, game, src, log=print, force_render=False):
         ex = BG.base_exemplar(game, base, bfile)
         tab, tmpl = stock_table_and_template(game, ex)
         nm = e["name"].encode("cp1252")
-        lm = e["kind"] == "landmark"
+        lm = e["kind"] in PLUGIN_KINDS
+        base_type = BG.tkb1_get(ex, 0x65)[0]
         ex = BG.tkb1_set_key(ex, 0x67, (CS_TYPE, LM_CS_GROUP if lm else GROUP, nid))
         ex = BG.tkb1_set_key(ex, 0x6D, (TEXT_TYPE, LM_TEXT_GROUP if lm else TEXT_GROUP, nid))
         ex = BG.tkb1_set_text(ex, 0x64, nm)
-        if lm:
-            ex = tkb1_set_u32(ex, 0x65, LANDMARK["landuse"])
+        if e["kind"] in ("landmark", "reward"):
+            ex = tkb1_set_u32(ex, 0x65, lu)     # landmark 18000, reward its own type; a civic look keeps the base's
+        if lm and e["desc"] is not None:
             ex = BG.tkb1_set_key(ex, 0x7C, (TEXT_TYPE, LM_DESC_GROUP, nid))
         BG.tkb1_props(ex)
         if lm:
             lm_recs.append((LM_GROUP, nid, BLD_TYPE, ex))
             lm_recs.append((LM_TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
-            dsc = e["desc"].encode("cp1252")
-            lm_recs.append((LM_DESC_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(dsc)) + dsc))
+            if e["desc"] is not None:
+                dsc = e["desc"].encode("cp1252")
+                lm_recs.append((LM_DESC_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(dsc)) + dsc))
             lm_recs.append((LM_CS_GROUP, nid, CS_TYPE, frame_table(tab, nid)))
             lm_keys.append((nid, nm))
+            if e["kind"] == "civic":
+                civ_lines.setdefault(base, []).append(nid)
+                civ_names.append((nid, nm))
+            elif e["kind"] == "reward":
+                rw_rows.append(b"%d=%s ;%d;%d;0;0\r\n" % (nid, nm, e["population"], e["year"]))
+                at_v, at_p = agent_type_rows(game, base_type, nid)
+                rw_types.append(b"%d=%s\r\n" % (nid, at_v))
+                rw_hier.append(b"%d=%s\r\n" % (nid, at_p))
         else:
             occ.append((BLD_GROUP, nid, BLD_TYPE, ex))
             cs.append((GROUP, nid, CS_TYPE, frame_table(tab, nid)))
@@ -667,8 +841,11 @@ def build_files(folder, game, src, log=print, force_render=False):
             epix.append((GROUP, (nid << 16) | k, 0, p0))
             epix.append((GROUP, (nid << 16) | k, 1, anchor_payload(L, T, w, h)))
         if lm:
-            rep.append("plop  [%d] %s: \"%s\", %s, %dx%d, stats of stock %d, in %s, %s%s" % (
-                nid, e["file"], e["name"], tg["label"], n, n, base, LM_PIN, describe(info),
+            extra = (", type %d, unlocks at population %d%s" % (nid, e["population"], ", year %d" % e["year"] if e["year"]
+                     else "") if e["kind"] == "reward" else ", type %d, look %d of the button" % (
+                     lu, len(civ_lines[base]) + 1) if e["kind"] == "civic" else "")
+            rep.append("plop  [%d] %s: \"%s\", %s, %dx%d, stats of stock %d%s, in %s, %s%s" % (
+                nid, e["file"], e["name"], tg["label"], n, n, base, extra, LM_PIN, describe(info),
                 ", %d magenta px nudged" % nudged if nudged else ""))
             continue
         names.append((TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
@@ -690,6 +867,16 @@ def build_files(folder, game, src, log=print, force_render=False):
     if lm_recs:
         files[LM_PIN] = plugin_pin(lm_keys)
         files[LM_DAT] = BG.new_container(lm_recs)
+    if civ_lines:
+        files[CIVIC_INI] = civic_ini(civ_lines, civ_names)
+    if rw_rows:
+        files[REWARD_INI] = (b"; bldimport rewards (task civmod), read by sc3resize NEWREWARD with the game's own ini class.\r\n"
+                             b"; <type>=<name> ;<population>;<year>;<petition 0>;<own rule 0>, the stock row format.\r\n"
+                             b"[REWARD_BUILDINGS]\r\n" + b"".join(rw_rows))
+        files[TYPES_INI] = (b"; bldimport reward types (task civmod), declared as CitySim.ini declares the base reward's type.\r\n"
+                            b"; sc3resize passes these rows to the game's own registry callbacks after CitySim.ini's, with or\r\n"
+                            b"; without the new-rewards switch: a placed reward of an undeclared type stops the game on load.\r\n"
+                            b"[AgentTypes]\r\n" + b"".join(rw_types) + b"\r\n[AgentTypeHierarchy]\r\n" + b"".join(rw_hier))
     if need_ovl and (entries or src):
         files[OVL + OCC_KOREA] = upsert(cur(OVL + OCC_KOREA), occ) if occ else cur(OVL + OCC_KOREA)
         files[OVL + CS_KOREA] = upsert(cur(OVL + CS_KOREA), cs) if cs else cur(OVL + CS_KOREA)
@@ -966,23 +1153,36 @@ def cmd_check(a):
     entries, rep, table = plan(folder, game)
 
     def rd(rel):
-        return root.read(rel) if root.exists(rel) else game.read(rel)
+        return root.read(rel) if root.exists(rel) else game.read(rel) if game.exists(rel) else None
 
-    occ, _ = BG.records(rd(OVL + OCC_KOREA))
-    cs, _ = BG.records(rd(OVL + CS_KOREA))
-    px, _ = BG.records(rd(OVL + PIX_DAT))
-    fams = BG.family_records(rd(OVL + BUILDFAM))
-    langs = [n for n in game.listdir(OVL + "Apps/Res/Text") if game.exists(OVL + "Apps/Res/Text/%s/%s" % (n, NAMES))]
+    grow = [e for e in entries if e["kind"] not in PLUGIN_KINDS]
+    plug = [e for e in entries if e["kind"] in PLUGIN_KINDS]
+    occ = cs = px = fams = {}
+    langs = []
+    if grow:
+        occ, _ = BG.records(rd(OVL + OCC_KOREA))
+        cs, _ = BG.records(rd(OVL + CS_KOREA))
+        px, _ = BG.records(rd(OVL + PIX_DAT))
+        fams = BG.family_records(rd(OVL + BUILDFAM))
+        langs = [n for n in game.listdir(OVL + "Apps/Res/Text") if game.exists(OVL + "Apps/Res/Text/%s/%s" % (n, NAMES))]
+    # task civmod: plugin kinds read the plugin .dat (exemplar, name, frame table and pixels together), the .pin's
+    # [OccupantKeys] line, and for civic / reward the sc3resize ini lines
+    pdat, pin, civ, rwi, tyi = {}, b"", b"", b"", b""
+    if plug:
+        d = rd(LM_DAT)
+        pdat = BG.records(d)[0] if d else {}
+        pin, civ, rwi, tyi = rd(LM_PIN) or b"", rd(CIVIC_INI) or b"", rd(REWARD_INI) or b"", rd(TYPES_INI) or b""
     bad = 0
     for e in entries:
         nid, errs = e["id"], []
-        ex = occ.get((BLD_GROUP, nid, BLD_TYPE))
+        pk = e["kind"] in PLUGIN_KINDS
+        ex = (pdat if pk else occ).get((LM_GROUP if pk else BLD_GROUP, nid, BLD_TYPE))
         if ex is None:
             print("FAIL [%d] no exemplar" % nid)
             bad += 1
             continue
         key = BG.tkb1_get(ex, 0x67)
-        if tuple(key) != (CS_TYPE, GROUP, nid):
+        if tuple(key) != (CS_TYPE, LM_CS_GROUP if pk else GROUP, nid):
             errs.append("0x67 = %r" % (key,))
         if BG.tkb1_get(ex, 0x65) != (e["class"],):
             errs.append("0x65 = %r" % (BG.tkb1_get(ex, 0x65),))
@@ -991,13 +1191,17 @@ def cmd_check(a):
             errs.append("0x66 = %r" % (fp,))
         if BG.tkb1_get(ex, 0x64) != e["name"].encode("cp1252"):
             errs.append("0x64 name")
-        tab = cs.get((GROUP, nid, CS_TYPE))
+        tab = pdat.get((LM_CS_GROUP, nid, CS_TYPE)) if pk else cs.get((GROUP, nid, CS_TYPE))
+        if tab is None:
+            print("FAIL [%d] no frame table" % nid)
+            bad += 1
+            continue
         anc = json.load(open(os.path.join(frame_dir(folder, e["model"]), "anchors.json"), encoding="utf-8"))
         same = 0
         for k in range(FRAMES):
             idx, g, i, fl, u1, u2 = struct.unpack_from("<HIIBHH", tab, 0x18 + 15 * k)
             z, r = (k % 20) // 4, k % 4
-            p0, p1 = px.get((g, i, 0)), px.get((g, i, 1))
+            p0, p1 = (pdat if pk else px).get((g, i, 0)), (pdat if pk else px).get((g, i, 1))
             if idx != k or fl != 0 or p0 is None or p1 is None:
                 errs.append("frame %d entry" % k)
                 continue
@@ -1016,10 +1220,26 @@ def cmd_check(a):
                 same += 1
             else:
                 errs.append("frame %d pixels (%d differ)" % (k, int((~eq).sum())))
-        for lang in langs:
+        for lang in ([] if pk else langs):
             nr, _ = BG.records(rd(OVL + "Apps/Res/Text/%s/%s" % (lang, NAMES)))
             if (TEXT_GROUP, nid, TEXT_TYPE) not in nr:
                 errs.append("no name in %s" % lang)
+        if pk:
+            if (LM_TEXT_GROUP, nid, TEXT_TYPE) not in pdat:
+                errs.append("no name record")
+            if b"0x%08X,0x%08X,0x%08X=%d " % (BLD_TYPE, LM_GROUP, nid, nid) not in pin:
+                errs.append("no [OccupantKeys] line in %s" % LM_PIN)
+            if e["kind"] == "civic":
+                base = table[target_of(e)]["bases"][e["lot"]][0]
+                m = re.search(rb"^0x%08X=([^\r\n]*)" % base, civ, re.M | re.I)
+                if not m or nid not in [int(x, 0) for x in m.group(1).split(b",") if x.strip()]:
+                    errs.append("not in %s [Variants] of base 0x%X" % (CIVIC_INI, base))
+            if e["kind"] == "reward":
+                row = b"%d=%s ;%d;%d;0;0" % (nid, e["name"].encode("cp1252"), e["population"], e["year"])
+                if row not in rwi:
+                    errs.append("no row %r in %s" % (row, REWARD_INI))
+                if b"\n%d=bldimport%d:" % (nid, nid) not in tyi or len(re.findall(rb"(?m)^%d=" % nid, tyi)) != 2:
+                    errs.append("no [AgentTypes] / [AgentTypeHierarchy] rows for type %d in %s" % (nid, TYPES_INI))
         tg = table[target_of(e)]
         for f in tg["families"]:
             ws = [int(mm.group(1)) for mm in re.finditer(rb"Key:\s*1406,545184782,%d,(\d+)" % nid, fams[f])]

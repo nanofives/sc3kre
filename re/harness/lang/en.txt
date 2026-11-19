@@ -523,6 +523,10 @@ resize.camera=Camera
 resize.city_keeps_running_while=City keeps running while scrolling
 # sc3resize.c
 resize.copy_id=Copy ID
+# sc3resize_civic.c
+resize.cv_look=Look %d of %d: %s
+# sc3resize_civic.c
+resize.cv_look_stock=Look %d of %d: original
 # sc3resize.c
 resize.drag_speed=Drag speed
 # sc3resize.c
@@ -560,6 +564,8 @@ resize.mt_churn=Building renewal
 # sc3resize.c
 resize.mt_city=Now, in this city (on OK, no restart)
 # sc3resize.c
+resize.mt_civvar=Civic buildings: more looks
+# sc3resize.c
 resize.mt_dataview=Extra data layers
 # sc3resize.c
 resize.mt_features=Features
@@ -568,6 +574,8 @@ resize.mt_gentle=Gentler abandonment
 # sc3resize.c
 resize.mt_graphs=Improved graphs
 # sc3resize.c
+resize.mt_hwyspeed=Faster highway cars
+# sc3resize.c
 resize.mt_keys=P and 1-4 keys
 # sc3resize.c
 resize.mt_landfill=Landfills
@@ -575,6 +583,8 @@ resize.mt_landfill=Landfills
 resize.mt_mods=Mods
 # sc3resize.c
 resize.mt_netmod=Avenues and highways
+# sc3resize.c
+resize.mt_newreward=New rewards
 # sc3resize.c
 resize.mt_note=Changes apply the next time the game starts.
 # sc3resize.c
@@ -600,7 +610,7 @@ resize.mt_saltfix=Salt water only at sea
 # sc3resize.c
 resize.mt_sandbox=Sandbox: no abandonment
 # sc3resize.c
-resize.mt_sim=Simulation
+resize.mt_simbld=Simulation and buildings
 # sc3resize.c
 resize.mt_simrun=Simulation tweaks
 # sc3resize.c
@@ -609,7 +619,6 @@ resize.mt_sirens=Siren fix
 resize.mt_stationwarn=Station warnings
 # sc3resize.c
 resize.mt_stylemix=Building style mix
-resize.mt_hwyspeed=Faster highway cars
 # sc3resize.c
 resize.mt_terrpanel=Larger terrain panel
 # sc3resize.c

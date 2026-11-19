@@ -9165,7 +9165,11 @@ static void lang_click(void *win) {
  * it hosts this page. Each feature row names the env switches its code already reads (atoi / v[0]=='0').
  * A row whose env starts with '+' is a feature that is OFF by default (task abandon 2026-11-15: sc3simrun SANDBOX and
  * GENTLE): checked = [env] NAME=1, unchecked = no key. Those rows sit in the left column under "Simulacion", because
- * the feature column is full (the city section must stay clear of Volver). */
+ * the feature column is full (the city section must stay clear of Volver).
+ * A row whose env starts with '-' is a default-on feature placed in the left column too, after the '+' rows (civmod
+ * 2026-11-19: CIVVAR, NEWREWARD); the heading reads "Simulacion y edificios". To make room the mods rows are 17 px
+ * like the features: left column 84 + 10 x 17 + 6 + 20 + 4 x 19 = 356 = the features column's end, so the notes and
+ * the city section stay where they were. */
 typedef struct { SC3TXT t; const char *dll; const char *env; } MT_ROW;   /* dll set = a [mods] row, else env = ';' list */
 static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_bigcity"),   "Ciudades grandes",        "Big cities" },             "sc3bigcity.dll",    NULL },
@@ -9195,7 +9199,9 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_stylemix"),  "Mezcla de estilos",       "Building style mix" },     NULL, "SC3NETMOD_STYLEMIX" },
     { { SC3KEY("resize.mt_hwyspeed"),  "Autos rápidos en autopista", "Faster highway cars" }, NULL, "SC3SIMRUN_HWYSPEED" },
     { { SC3KEY("resize.mt_sandbox"),   "Sandbox: sin abandono",   "Sandbox: no abandonment" }, NULL, "+SC3SIMRUN_SANDBOX" },
-    { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" } };
+    { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" },
+    { { SC3KEY("resize.mt_civvar"),    "Cívicos: varios aspectos", "Civic buildings: more looks" }, NULL, "-SC3RESIZE_CIVVAR" },
+    { { SC3KEY("resize.mt_newreward"), "Premios nuevos",          "New rewards" },            NULL, "-SC3RESIZE_NEWREWARD" } };
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
 static int g_mt_on0[MT_N];   /* state shown when the page was built */
 
@@ -9206,7 +9212,7 @@ static int mt_state(const MT_ROW *r) {
     mp_ini(p, sizeof(p), "sc3mods.ini");
     if (r->dll) return GetPrivateProfileIntA("mods", r->dll, 1, p) != 0;
     if (r->env[0] == '+') { GetPrivateProfileStringA("env", r->env + 1, "", v, sizeof(v), p); return v[0] == '1' && !v[1]; }
-    for (s = r->env; s && *s; s = *e ? e + 1 : e) {
+    for (s = r->env + (r->env[0] == '-'); s && *s; s = *e ? e + 1 : e) {
         int k;
         e = strchr(s, ';'); if (!e) e = s + lstrlenA(s);
         k = (int)(e - s); if (k >= (int)sizeof(nm)) k = sizeof(nm) - 1;
@@ -9223,7 +9229,7 @@ static void mt_write(const MT_ROW *r, int on) {
     mp_ini(p, sizeof(p), "sc3mods.ini");
     if (r->dll) { WritePrivateProfileStringA("mods", r->dll, on ? NULL : "0", p); return; }
     if (r->env[0] == '+') { WritePrivateProfileStringA("env", r->env + 1, on ? "1" : NULL, p); return; }
-    for (s = r->env; s && *s; s = *e ? e + 1 : e) {
+    for (s = r->env + (r->env[0] == '-'); s && *s; s = *e ? e + 1 : e) {
         int k;
         e = strchr(s, ';'); if (!e) e = s + lstrlenA(s);
         k = (int)(e - s); if (k >= (int)sizeof(nm)) k = sizeof(nm) - 1;
@@ -9259,14 +9265,19 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
     for (i = 0; i < MT_N; i++) {
         const MT_ROW *r = &k_mt_rows[i];
         g_mt_on0[i] = mt_state(r);
-        if (r->dll) { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19; }
-        else if (r->env[0] != '+') { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += MT_FEAT_DY; }
+        if (r->dll) { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += MT_FEAT_DY; }
+        else if (r->env[0] != '+' && r->env[0] != '-') { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += MT_FEAT_DY; }
     }
     ym += 6;   /* the default-off rows (env '+'): left column, under their own heading */
-    n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_sim", "Simulación", "Simulation"), 18, ym, 200); ym += 20;
-    for (i = 0; i < MT_N; i++) {
+    n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_simbld", "Simulación y edificios", "Simulation and buildings"), 18, ym, 220); ym += 20;
+    for (i = 0; i < MT_N; i++) {   /* '+' rows (default off), then '-' rows (default on, civmod) */
         const MT_ROW *r = &k_mt_rows[i];
         if (r->dll || r->env[0] != '+') continue;
+        n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19;
+    }
+    for (i = 0; i < MT_N; i++) {
+        const MT_ROW *r = &k_mt_rows[i];
+        if (r->dll || r->env[0] != '-') continue;
         n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19;
     }
     i = (ym > yf ? ym : yf) + 4;   /* 16 feature rows at 17 px, 4 px gap (hwyspeed: +8 put the city checkbox at 422,
@@ -10365,6 +10376,7 @@ static void gx_install(HMODULE sui) {
 #include "sc3resize_stationwarn.c"   /* STATIONWARN: poorly connected stations flagged ("?" rows, Cuadros line, red marker) (SC3RESIZE_STATIONWARN=0) */
 #include "sc3resize_vdbars.c"   /* VDBARS: Cuadros tabs + bar charts (education, health, water, transport) (SC3RESIZE_VDBARS=0, SC3RESIZE_TRIPMODES=0) */
 #include "sc3resize_rcibars.c"  /* RCIBARS: Aeropuerto / Puerto capacity-in-use bars on the RCI (SC3RESIZE_RCIBARS=0) */
+#include "sc3resize_civic.c"    /* CIVVAR + NEWREWARD: civic looks per button press, new rewards (SC3RESIZE_CIVVAR=0, SC3RESIZE_NEWREWARD=0) */
 
 /* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
  * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
@@ -10408,7 +10420,9 @@ static const DWORD rl_types[] = {   /* [REWARD_BUILDINGS] then [BUSINESS_DEAL_BU
     20001, 20002, 19003, 19004, 19001, 19002, 19999 };
 static int rl_movable(DWORD t) {
     int i;
-    if (t > 18000 && t < 19000) return 1;      /* landmarks: 18001..18045 under 18000 in [AgentTypeHierarchy] */
+    if (t >= 18000 && t < 19000) return 1;     /* landmarks: 18001..18045 under 18000 in [AgentTypeHierarchy], and 18000
+                                                  itself, the type bldimport gives its landmarks (civmod 2026-11-19) */
+    if (t >= RW_TYPE_LO && t <= RW_TYPE_HI) return 1;   /* bldimport rewards: type id = its id (sc3resize_civic.c) */
     for (i = 0; i < (int)(sizeof(rl_types) / sizeof(rl_types[0])); i++) if (rl_types[i] == t) return 1;
     return 0;
 }
@@ -18871,6 +18885,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           vb_install(sui);   /* VDTABS / VDBARS: Cuadros tabs, bars, trip modes */
           rcb_install(sui);  /* RCIBARS: A / P capacity-in-use bars on the RCI meter */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
+          {   HANDLE t = CreateThread(NULL, 0, cvrw_thread, NULL, 0, NULL);   /* CIVVAR + NEWREWARD: civic looks,
+                                                                              new rewards (bldimport plugin data) */
+              if (t) CloseHandle(t); else { cv_install(); rw_install(); } }
           pkr_install(sui);  /* PICKER: eyedropper (minimap button, Ctrl+F) */
           {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /
                                                                             power drags over zoned buildings demolish them */
@@ -18974,7 +18991,12 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPOS_BOLSA", v, sizeof(v))) g_hudpos_bolsa = atoi(v);
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
-              g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
+              g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0;
+              g_civvar = GetPrivateProfileIntA("buildings", "civicvariants", 1, bp) ? 1 : 0;     /* CIVVAR (civmod) */
+              g_newreward = GetPrivateProfileIntA("buildings", "newrewards", 1, bp) ? 1 : 0; }   /* NEWREWARD (civmod) */
+          if (GetEnvironmentVariableA("SC3RESIZE_CIVVAR", v, sizeof(v))) g_civvar = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_NEWREWARD", v, sizeof(v))) g_newreward = atoi(v);
+          at_install();      /* NEWREWARD: our reward types into the agent type registry, before app init reads CitySim.ini */
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);
           g_rl_envoff = GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v)) && !atoi(v) &&
