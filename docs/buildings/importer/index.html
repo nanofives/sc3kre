@@ -573,6 +573,12 @@ const CLASSES = [
 ];
 const CLS = new Map(CLASSES.map(c => [c[0], c]));
 const KINDS = ['growable','airport','seaport','ploppable'];
+// task airsea (2026-11-19): what bldimport.py / bldweb.js PORTS grow for each port kind (re/analysis/PORT_PICK.md):
+// the airpark grows 1x1 fillers only and ignores Key weights (weight = copies, at most 20); the dockyard draws by weight
+const PORT_KINDS = {
+  airport: { sizes: [1], maxWeight: 20, what: 'airport zones (as a 1x1 airpark building next to the terminals, stats of Parked Airplane)' },
+  seaport: { sizes: [1, 2], maxWeight: 1000, what: 'seaport zones (dockyard, beside the piers, stats of Seaport Crane or Loading Bay)' },
+};
 
 const DEFAULT_RULES = {
   cell_m: 16,
@@ -959,8 +965,12 @@ function suggest(rec) {
   else { zone = 'R'; why.push(`no keyword, footprint ${area.toFixed(0)} m2: residential`); }
   const set = { kind, height_m: round(m.h, 10) };
   if (kind !== 'growable') {
-    set.class = null; set.lot = [want, want];
+    const pk = PORT_KINDS[kind];
+    const lotN = pk ? (pk.sizes.includes(want) ? want : pk.sizes.filter(s => s <= want).pop() || pk.sizes[0]) : want;
+    set.class = null; set.lot = [lotN, lotN];
     why.push(`lot ${want}x${want} from footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m at ${cell} m per cell`);
+    if (pk && lotN !== want) why.push(`${kind} buildings grow as ${pk.sizes.map(s => s + 'x' + s).join(' or ')}: lot ${lotN}x${lotN}`);
+    if (pk) why.push('grows in ' + pk.what);
     return { set, why: why.join('. ') };
   }
   let dens = m.h <= R.light_max_m ? 1 : m.h <= R.medium_max_m ? 2 : 3;
@@ -997,6 +1007,13 @@ function warnings(rec) {
     else if (!CLS.has(m.class)) w.push('class ' + m.class + ' is not in the lot class table');
     else if (m.lot && m.lot[0] === m.lot[1] && !CLS.get(m.class)[5].includes(m.lot[0])) w.push(`class ${m.class} offers ${CLS.get(m.class)[5].map(s => s + 'x' + s).join(', ')}, not ${m.lot[0]}x${m.lot[1]}`);
   }
+  const pk = PORT_KINDS[m.kind];
+  if (pk) {
+    const n = rec.bld ? rec.bld.lot : (m.lot ? m.lot[0] : 1);
+    if (!pk.sizes.includes(n) || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`${m.kind} buildings grow as ${pk.sizes.map(s => s + 'x' + s).join(' or ')} only: bldimport skips this one`);
+    if (m.kind === 'airport' && m.weight > pk.maxWeight) w.push(`an airport's weight is the number of copies in the airpark's list, at most ${pk.maxWeight}: bldimport skips this one`);
+  }
+  if (m.kind === 'ploppable') w.push('ploppable buildings are not imported yet: bldimport skips this one');
   if (rec.bld) {
     if (m.lot && (m.lot[0] !== rec.bld.lot || m.lot[1] !== rec.bld.lot)) w.push(`the .bld file is a ${rec.bld.lot}x${rec.bld.lot} building: bldimport uses the file's lot`);
     if ((m.scale || 1) !== 1 || (m.rotate_deg || 0) !== 0) w.push('scale and rotate do not apply to a .bld file (its art is drawn by the Building Architect)');
