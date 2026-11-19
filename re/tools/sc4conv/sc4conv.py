@@ -3,6 +3,7 @@ r"""sc4conv.py - task sc4conv (2026-11-18h): SimCity 4 buildings -> OBJ + MTL + 
 
   py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --out <folder> [--all] [--style baked|baked_raw|baked_sharp] [--no-fill]
   py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --list
+  ... --deps "<BSC Common Dependencies Pack V9e.zip>" [--deps <more>] [--deps-cache DIR] [--no-props]   (task sc4props)
 
 Then, as for any models folder:   py -3.12 re/tools/bldimport/bldimport.py build <folder> --game <game>
 
@@ -26,6 +27,12 @@ What one SC4 building becomes (re/analysis/SC4_FORMATS.md 7, decision renders in
                x_bldrender.style = 'baked' (the light is painted into the SC4 texture) unless --style says otherwise,
                x_sc4 = where it came from. One colour per design is enabled (the k-th design its k-th colour, for variety) unless --all.
 
+Lot props (task sc4props, 2026-11-19g, props.py / deps.py): the fences, trees, cars of the building's smallest SC4 lot,
+found in the download or in the dependency packs given with --deps (read by streaming, indexed once and cached), are
+placed at their lot positions and written with the house into <stem>_props.obj; models.json names that file while
+x_sc4.props.on is true, x_sc4.props lists what was placed, left outside the 16 m SC3 lot, of another season and not
+found; the report names every prop id found in no pack. <stem>.obj stays the house alone.
+
 Diagonal buildings (task sc4diag, 2026-11-19c): a house the SC4 author set at 45 degrees on its lot (its foundation
 model's outline runs at 45 degrees, views.foundation_diagonal) is written with enabled false and a note, also with
 --all, since SC3 has no diagonal buildings; a design whose picked colour is diagonal gets a non-diagonal colour
@@ -44,6 +51,8 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import catalog as C  # noqa: E402
+import deps as DP  # noqa: E402
+import props as PR  # noqa: E402
 import views as V  # noqa: E402
 
 EDITABLE = ('name', 'class', 'lot', 'weight', 'enabled', 'scale', 'rotate_deg', 'notes', 'x_bldrender')
@@ -155,7 +164,7 @@ def diag_note(dg):
             % (dg['foundation'], int(round(dg['share_45'] * 100))))
 
 
-def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=False, versions=None):
+def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=False, versions=None, pctx=None):
     vs = V.load_views(idx, b, ZOOM5)
     stem = stem_of(b['name'])
     obj = ['# %s, converted from SimCity 4 by sc4conv.py (local use only: see the pack licence)' % b['name'],
@@ -191,6 +200,7 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         fh.write('\n'.join(obj) + '\n')
     with open(os.path.join(out, stem + '.mtl'), 'w', newline='\n') as fh:
         fh.write('\n'.join(mtl))
+    pinfo = write_props(b, vs, stem, obj, mtl, out, pctx, fill) if pctx is not None else None
     cls, why = class_for(b)
     n = lot_for(b)
     design, colour = design_of(b['name'])
@@ -223,7 +233,117 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         entry['x_sc4']['tiles'] = {v['name']: v['tiles'] for v in vs}
     if versions:                          # task sc4pass2: the same model on ploppable / landmark lots (not converted)
         entry['x_sc4']['versions'] = versions
+    if pinfo is not None:                 # task sc4props: the SC4 lot's props, baked into <stem>_props.obj
+        entry['x_sc4']['props'] = pinfo
+        if pinfo['on']:
+            entry['file'] = stem + '_props.obj'
     return entry
+
+
+# ---------------------------------------------------------------------------------------------- task sc4props
+# Lot props (round 2026-11-19g, props.py): the props of the building's smallest SC4 lot, found in the download or
+# the dependency packs (--deps), placed at their lot positions in the house's model frame and written with the house
+# into <stem>_props.obj (+ .mtl); <stem>.obj stays the house alone, byte for byte as before. models.json 'file'
+# names the _props OBJ while x_sc4.props.on is true (the default when at least one prop is placed); a rerun keeps
+# the player's x_sc4.props.on. Prop textures are written once per pack texture: sc4prop_<group>_<instance>.png.
+def write_props(b, vs, stem, obj, mtl, out, pctx, fill):
+    n = lot_for(b)
+    v0 = vs[0]['P']
+    box = (float(v0[:, 0].min()), float(v0[:, 0].max()), float(v0[:, 2].min()), float(v0[:, 2].max()))
+    pl = PR.plan(b, pctx['lots'], pctx['sources'], box, n)
+    if pl is None:
+        return None
+    slots = PR.placed_meshes(pl, pctx['cache'], fill)
+    info = PR.summary(pl)
+    info = dict({'on': info['placed'] > 0 and not pctx.get('off')}, **info)
+    pctx['plans'].append((b, pl))
+    if not info['placed']:
+        return info
+    pobj = [obj[0], 'mtllib %s_props.mtl' % stem] + obj[2:]
+    pmtl = list(mtl)
+    seen = set()
+    vbase = sum(1 for ln in obj if ln.startswith('v '))
+    tbase = sum(1 for ln in obj if ln.startswith('vt '))
+    for slot in range(4):
+        pobj.append('g sc3slot%d' % slot)
+        cur = None
+        for P, UV, tris, fk, src in slots[slot]:
+            mname = 'sc4p_%08X_%08X' % (fk[1], fk[2])
+            if mname not in seen:
+                seen.add(mname)
+                png = 'sc4prop_%08X_%08X.png' % (fk[1], fk[2])
+                if png not in pctx['pngs']:
+                    pctx['pngs'].add(png)
+                    Image.fromarray(PR.FS.read_fsh(src.read(fk))[0]['image']).save(os.path.join(out, png))
+                pmtl += ['newmtl ' + mname, 'Kd 1 1 1', 'map_Kd ' + png, '']
+            if mname != cur:
+                pobj.append('usemtl ' + mname)
+                cur = mname
+            for p in P:
+                pobj.append('v %.5f %.5f %.5f' % (p[0], p[1], p[2]))
+            for uv in UV:
+                pobj.append('vt %.6f %.6f' % (uv[0], 1.0 - uv[1]))
+            for t in tris:
+                pobj.append('f ' + ' '.join('%d/%d' % (vbase + 1 + i, tbase + 1 + i) for i in t))
+            vbase += len(P)
+            tbase += len(UV)
+    x0, x1, z0, z1 = pl['window']
+    y0 = float(min(v['P'][:, 1].min() for v in vs))
+    pobj += ['g sc4lot', 'usemtl sc4lot',
+             'v %.5f %.5f %.5f' % (x0, y0, z0), 'v %.5f %.5f %.5f' % (x1, y0, z1), 'v %.5f %.5f %.5f' % (x1, y0, z1),
+             'f %d %d %d' % (vbase + 1, vbase + 2, vbase + 3)]
+    pmtl += ['newmtl sc4lot', 'Kd 1 1 1', '']
+    with open(os.path.join(out, stem + '_props.obj'), 'w', newline='\n') as fh:
+        fh.write('\n'.join(pobj) + '\n')
+    with open(os.path.join(out, stem + '_props.mtl'), 'w', newline='\n') as fh:
+        fh.write('\n'.join(pmtl))
+    return info
+
+
+def props_notes(plans):
+    """Report lines for the lot props of every converted building (sc4web.js propsNotes: the same text)."""
+    from collections import Counter
+    if not plans:
+        return []
+    st, miss = Counter(), Counter()
+    for _b, pl in plans:
+        for r in pl['rows']:
+            st[r['state'] if r['state'] in ('ok', 'outside', 'season', 'missing') else 'unreadable'] += 1
+            if r['state'] == 'missing':
+                miss[r['id']] += 1
+    tot = sum(st.values())
+    nb = sum(1 for _b, pl in plans if any(r['state'] == 'ok' for r in pl['rows']))
+    lines = ['Lot props: %d of %d prop rows placed (%s), %d outside the SC3 lot, %d of another season, %d in no pack'
+             ' given, %d without a readable model' % (st['ok'], tot, nw(nb, 'building', 'buildings'), st['outside'], st['season'],
+                                        st['missing'], st['unreadable'])]
+    if miss:
+        lines.append("Props not found (%d ids, rows in brackets; SimCity 4's own props or a dependency not given): %s"
+                     % (len(miss), ', '.join('%08X (%d)' % (k, v)
+                                             for k, v in sorted(miss.items(), key=lambda kv: (-kv[1], kv[0])))))
+    return lines
+
+
+def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print):
+    """Task sc4props: the prop sources (the download, then each --deps pack) and one fetch of every prop model the
+    buildings' lots place, before any building is written."""
+    sources = [PR.OwnSource(idx)] + [DP.DepsIndex(d, cache, log=log) for d in deps]
+    ctx = {'lots': lots, 'sources': sources, 'cache': {}, 'pngs': set(), 'plans': [], 'off': off}
+    want = {}
+    for b in bs:
+        try:
+            v0 = V.load_views(idx, b, ZOOM5)[0]['P']
+        except ValueError:
+            continue
+        box = (float(v0[:, 0].min()), float(v0[:, 0].max()), float(v0[:, 2].min()), float(v0[:, 2].max()))
+        pl = PR.plan(b, lots, sources, box, lot_for(b))
+        if pl is None:
+            continue
+        for r in pl['rows']:
+            if r['state'] == 'ok' and isinstance(r['src'], DP.DepsIndex):
+                want.setdefault(id(r['src']), (r['src'], set()))[1].update(PR.view_keys(r['model']))
+    for s, keys in want.values():
+        s.fetch(sorted(keys))
+    return ctx
 
 
 # ---------------------------------------------------------------------------------------------- task sc4pass2
@@ -386,6 +506,13 @@ def main(argv):
                     help='leave out the hidden back walls + floor of each view box (cut-outs then show the lot)')
     ap.add_argument('--notes-json', help='also write the pack notes (lot-only packs, versions) and the buildings'
                                          ' without a model to this file (task sc4pass2, for the page golden)')
+    ap.add_argument('--deps', action='append', default=[],
+                    help='an SC4 dependency download (.zip / .jar / .dat / folder) holding lot props; repeatable'
+                         ' (task sc4props)')
+    ap.add_argument('--deps-cache', help='where the dependency index and fetched props are cached'
+                                         ' (default %%LOCALAPPDATA%%\\sc4conv)')
+    ap.add_argument('--no-props', action='store_true', help='write the lot props but leave them off'
+                                                           ' (x_sc4.props.on false)')
     a = ap.parse_args(argv[1:])
     idx = C.Index(a.src)
     bs, lots = C.buildings(idx)
@@ -428,6 +555,9 @@ def main(argv):
     if os.path.isfile(mj):
         for m in json.load(open(mj, encoding='utf-8')).get('models', []):
             old[m.get('file')] = m
+            ex = (m.get('x_sc4') or {}).get('exemplar')
+            if ex:                        # task sc4props: 'file' changes with the props switch, the exemplar does not
+                old[ex] = m
     models = []
     fam = {}                              # one SC4 family per design; enable colour k of the k-th design
     for b in bs:
@@ -435,27 +565,37 @@ def main(argv):
     pick = {}
     for d, c in zip(fam, pick_colours(list(fam.values()), is_diag)):
         pick[d] = c['tgi'] if c is not None else None
+    pctx = props_context(idx, bs, lots, a.deps, a.deps_cache, not a.no_fill, a.no_props)
     for b in bs:
         design = tuple(b['families']) or design_of(b['name'])[0].lower()
         first = pick[design] == b['tgi']
         try:
             e = write_building(idx, b, a.out, a.all or first, a.style, not a.no_fill, diag[b['tgi']], a.diagonal,
-                               versions.get(b['tgi']))
+                               versions.get(b['tgi']), pctx)
         except ValueError as ex:
             print('  skip %s: %s' % (b['name'], ex))
             continue
         auto = {k: e[k] for k in EDITABLE}
         e['x_sc4']['auto'] = auto         # what this tool wrote, so a rerun can tell the player's edits apart
-        o = old.get(e['file'])
+        pr = e['x_sc4'].get('props')
+        if pr is not None:
+            auto['props_on'] = pr['on']
+        o = old.get(e['x_sc4']['exemplar']) or old.get(e['file'])
         if o:                             # keep a field the player changed (classifier page) since the last run
             prev = (o.get('x_sc4') or {}).get('auto') or {}
             for k in EDITABLE:
                 if k in o and k in prev and o[k] != prev[k]:
                     e[k] = o[k]
+            op = (o.get('x_sc4') or {}).get('props')
+            if pr is not None and isinstance(op, dict) and 'props_on' in prev and op.get('on') != prev['props_on']:
+                pr['on'] = bool(op.get('on')) and pr['placed'] > 0     # task sc4props: the player's switch
+                e['file'] = stem_of(b['name']) + ('_props.obj' if pr['on'] else '.obj')
         models.append(e)
         print('  %-32s -> %-36s class %s lot %s %s%s' % (b['name'], e['file'], e['class'], e['lot'],
                                                        'enabled' if e['enabled'] else '',
                                                        ' diagonal' if e['x_sc4']['diagonal'] else ''))
+    for ln in props_notes(pctx['plans']):
+        print(ln)
     top = {'sc3models': 1, 'models': models}
     if missing:                           # task sc4pass2: buildings of the download without a model, by name
         top['x_sc4_missing'] = missing

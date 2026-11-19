@@ -110,10 +110,12 @@ class Entry:
 
 
 class DBPF:
-    def __init__(self, path):
+    def __init__(self, path, data=None):
         self.path = path
-        with open(path, 'rb') as f:
-            self.data = f.read()
+        if data is None:
+            with open(path, 'rb') as f:
+                data = f.read()
+        self.data = data                  # task sc4props: a file inflated from a zip / jar member
         d = self.data
         if d[:4] != b'DBPF':
             raise ValueError('%s: not a DBPF file' % path)

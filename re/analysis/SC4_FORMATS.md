@@ -307,3 +307,59 @@ Lot props resolved against it: the I-M lots' 97 distinct prop ids, 61 are BSC pr
 download nor the BSC pack; the tower lots' 9 prop ids (`2AC20000` .. `2CB00000` and the tower's own prop), 0 are in
 the BSC pack. [UNCERTAIN: where the unresolved ids live; the SC4 game files were not read, no SC4 install here.]
 Feasibility: verify/sc4pass2/RESULTS.md section 4.
+
+## 9. Lot props (round 2026-11-19g, stream sc4props: `deps.py`, `props.py`, `sc4conv.write_props`)
+
+### 9.1 Reading a dependency pack by streaming (`deps.DepsIndex`, `sc4web.js depsIndex`)
+
+The BSC Common Dependencies Pack V9e zip (8.5) holds its 168 `.dat` files inside one deflated 1.64 GB jar. A zip reader
+cannot seek inside a deflated member, so the jar is read front to back by its LOCAL headers: none of its 384 members
+uses a data descriptor (flag bit 3 clear), so every local header carries the compressed and uncompressed sizes.
+Measured walk: 4.4 s to pass the jar without inflating any member; 20 s to inflate and index all of them (Python and
+the page alike). Index kept: every prop exemplar (exemplar type 0x1E: 17,410 instance keys, a later file winning) and
+cohort (1,481), and where each S3D / FSH entry is (789,999 rows: type, group, instance, file number). Python caches it
+on disk (`%LOCALAPPDATA%\sc4conv\<zip>-<size>-<mtime>.idx.json` + `.map.npy`, 1 s to load); a conversion then walks
+the jar once more and inflates only the files holding the props it places (JMyers: 4 files, 224 entries, 4-5 s), and
+Python keeps those entries in `entries\` for the next run. The page keeps both in memory for the session.
+
+### 9.2 What a lot's prop row names
+
+Lot object kind 1 (section 3), word 12 = an exemplar instance of type 0x1E, or a prop family (0x27812870). Over the 42
+JMyers lots: 2,266 prop rows, 231 distinct ids; against the BSC pack 646 rows are prop instances, 134 families, 1,486
+in neither (85 ids, the most used `1EDF0000` 602 rows and `28330000` 342: instance ids ending in `0000`, the pattern of
+SC4's own exemplars [UNCERTAIN: not checked, no SC4 install]). Prop exemplar properties the converter reads:
+
+| id | holds (BSC pack) |
+|---|---|
+| 0x27812821 | Resource Key Type 1 {S3D type, group, instance}: views at instance + zoom << 8 + rotation << 4, as buildings (14,130 props) |
+| 0x27812824 | Resource Key Type 4: records of 8 u32 {state, 0, 0, 0, 0x27812821, type, group, instance} (3,107 props; fences carry a state-1 and a state-0 record, seasonal trees one state-0 record). The converter takes the first record of state 0 |
+| 0x27812820 | Resource Key Type 0 (98 props): not read |
+| 0x27812870 | family ids (a lot row naming a family gets one member) |
+| 0x0A751675 / 0xCA7515CC / 0x4A764564 | interval in days / start {month, day} / duration in days. The four seasonal variants of a tree share one lot position, each with interval 365 and its own start and duration (Dogwood: Summer {5, 19} 123 days, Winter {11, 19} 92 days). Fences carry interval 14,600 / duration 3,650 [UNCERTAIN: meaning], treated as always shown |
+
+Lot textures (kind 2) name FSH instances of group 0x0986135E, 19 of the 25 most used ones are in the BSC pack. Not
+baked (section 9.4).
+
+### 9.3 Lot frame and rotations
+
+- The street side of a JMyers lot is its +z edge: the front setback of the house is 13.3-13.7 m on every 1x2 and 1x3
+  lot with house rotation 2, the back yard 9.0-25.3 m. The house model's front is +Z (section 7), so house rotation 2
+  maps the model frame to the lot frame unturned, and rotation k turns it k - 2 quarter turns.
+- The sense of a quarter turn: diagonal fence pieces show the parity only (a diagonal line turned 90 degrees either way
+  is the same line). Lot textures decide it: on `R$2_1x2_JFM_FourSeasons Corner Lot` (house rotation 1) the driveway
+  tiles (D400F165 rotation 1, D400F155 rotation 2, DD7A7900 rotation 3) join into one drive that ends at the car only
+  when rotation k turns the image (x, z) -> (-z, x) per step; the other sense puts a driveway band under the house.
+  That is also the sense in which the BAT views turn the model (section 6), so an object of rotation k drawn under
+  camera rotation c uses view c + k. [UNCERTAIN: no SC4 render of a lot was compared; a lot with a rotation-1 or -3 house
+  or an odd-rotation car shows its props turned the wrong way round if this is wrong.] `props.QUARTER` holds it.
+- The converter takes props from the building's smallest SC4 lot. On the JMyers pack that lot has the house at
+  rotation 2 for 104 of the 110 buildings; the 6 Four Seasons colours take `R$2_1x2_JFM_FourSeasons Corner Lot`
+  (rotation 1), the one place where the sense moves prop positions. Elsewhere it only turns props of odd relative
+  rotation (fences along x, cars parked across) end for end.
+
+### 9.4 Results on the JMyers pack with the BSC pack (110 buildings)
+
+5,190 prop rows over the 110 buildings' chosen lots: 486 placed (72 buildings), 866 outside the SC3 lot (the SC3 lot
+is 16 m square, the SC4 lots 16 x 32-48 m), 378 seasonal variants of another season (DATE = 1 July), 3,454 in no pack
+given (54 ids), 6 whose model is in no pack given. Not baked: lot textures (driveways, paths, the SC4 grass), so cars
+stand on SC3's lawn.
