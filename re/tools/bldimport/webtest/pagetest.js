@@ -62,6 +62,14 @@
         cards: document.querySelectorAll('#grid .card').length, note: document.getElementById('sc4Note').textContent, status: document.getElementById('status').textContent };
       mfs = window.bc.modelsFolder();
     }
+    if (man.action === 'open' && sc4 && !window.bc.S.recs.length) {   // task sc4pass2: a lot-only download converts to nothing
+      await new Promise(r => setTimeout(r, 0));   // the note / status observer of sc4web.js runs
+      sc4.note = document.getElementById('sc4Note').textContent; sc4.status = document.getElementById('status').textContent;
+      sc4.noteShown = !document.getElementById('sc4Note').hidden;
+      sc4.buttons = Object.fromEntries(['btnInstall', 'btnZipInstall', 'btnSave'].map(id => [id, document.getElementById(id).disabled]));
+      done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4, empty: true });
+      return;
+    }
     if (man.action === 'open') {           // task sc4web: open only (pictures of the grid and the preview)
       const S = window.bc.S, pick = S.recs.find(r => r.meta.enabled) || S.recs[0];
       document.getElementById('grid').querySelector('.card[data-file="' + pick.file + '"]').click();

@@ -85,6 +85,12 @@ def as_list(v):
     return v if isinstance(v, list) else [v]
 
 
+def sc(v):
+    """Task sc4pass2: a one-value property stored as a list of one (the I-M pack's exemplar type, wealth, purpose:
+    key type 0x80, count 1) -> the value."""
+    return v[0] if isinstance(v, list) and len(v) == 1 else v
+
+
 def buildings(idx):
     """-> list of building dicts, with the lots that grow them."""
     lots = []
@@ -93,7 +99,7 @@ def buildings(idx):
             ex = idx.exemplar(k)
         except (ValueError, KeyError, struct.error):
             continue
-        t = pv(ex, 0x10)
+        t = sc(pv(ex, 0x10))
         if t == 0x10:
             objs = []
             for pid in ex['order']:
@@ -114,7 +120,7 @@ def buildings(idx):
             ex = idx.exemplar(k)
         except (ValueError, KeyError, struct.error):
             continue
-        if pv(ex, 0x10) != 2:
+        if sc(pv(ex, 0x10)) != 2:
             continue
         rk = pv(ex, 0x27812821)
         if not rk or len(rk) < 3 or rk[0] != D.T_S3D:
@@ -127,7 +133,7 @@ def buildings(idx):
         cap = as_list(pv(ex, 0x27812834, []))
         b = {'tgi': k, 'name': pv(ex, 0x20, ''), 'title': title, 'model': tuple(rk[:3]),
              'size_m': [float(x) for x in as_list(pv(ex, 0x27812810, [0, 0, 0]))],
-             'wealth': pv(ex, 0x27812832), 'purpose': pv(ex, 0x27812833),
+             'wealth': sc(pv(ex, 0x27812832)), 'purpose': sc(pv(ex, 0x27812833)),
              'capacity': [(cap[i], cap[i + 1]) for i in range(0, len(cap) - 1, 2)],
              'families': fams, 'foundation': pv(ex, 0x88FCD877), 'lots': []}
         for lot in lots:
@@ -139,6 +145,35 @@ def buildings(idx):
         out.append(b)
     out.sort(key=lambda b: b['name'].lower())
     return out, lots
+
+
+def others(idx):
+    """Task sc4pass2 (2026-11-19f): what the converter does not convert but should name.
+    -> (buildings without an S3D model key [{tgi, name, title, landmark, jobs}], prop exemplars with one
+       {instance: {tgi, name, model}}).
+    A building exemplar without a model key is drawn by a prop on its lot: the Global Office Center's ploppable
+    ('Jobs') and landmark lots hold such a building (occupant size 1 x 0 x 1) and the tower as a lot prop (exemplar
+    type 0x1E with the tower's model key). landmark = the building has property 0x2781284F (the JP Stevens landmark
+    holds [85, 75] there, the jobs version does not), jobs = it has a capacity (0x27812834)."""
+    blds, props = [], {}
+    for k in idx.of_type(D.T_EXEMPLAR):
+        try:
+            ex = idx.exemplar(k)
+        except (ValueError, KeyError, struct.error):
+            continue
+        t = sc(pv(ex, 0x10))
+        rk = pv(ex, 0x27812821)
+        has_model = isinstance(rk, list) and len(rk) >= 3 and rk[0] == D.T_S3D
+        if t == 0x1E and has_model:
+            props[k[2]] = {'tgi': k, 'name': pv(ex, 0x20, ''), 'model': tuple(rk[:3])}
+        elif t == 2 and not has_model:
+            name_key = pv(ex, 0x8A416A99)
+            title = None
+            if name_key and isinstance(name_key, list) and len(name_key) == 3 and idx.has(tuple(name_key)):
+                title = X.ltext(idx.read(tuple(name_key))).strip()
+            blds.append({'tgi': k, 'name': pv(ex, 0x20, ''), 'title': title,
+                         'landmark': 0x2781284F in ex['props'], 'jobs': 0x27812834 in ex['props']})
+    return blds, props
 
 
 def views(idx, b, zoom=4):
