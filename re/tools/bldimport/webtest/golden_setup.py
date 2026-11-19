@@ -17,6 +17,9 @@ models folder the Python route installs from), packed like the others. Also py\s
 after edits as the page saves them: JSON.stringify layout, whole floats as ints) and py\sc4\rerun\ (sc4conv.py run
 again over it: the merge that keeps the player's edits). sc4_golden.mjs converts the SC4 .zip / folder in JS and
 compares.
+Task sc4diag (2026-11-19c): py\sc4\diagonal\models.json (sc4conv.py --diagonal: buildings set at 45 degrees treated as
+any other) and py\sc4\pick_cases.json (sc4conv.pick_colours on made-up designs that mix diagonal and straight colours,
+which the JMyers pack has none of).
 """
 import argparse
 import json
@@ -137,6 +140,19 @@ def main():
             open(os.path.join(rd, "models.json"), "w", encoding="utf-8", newline="\n").write(text)
             with open(os.path.join(a.out, "sc4conv_rerun_log.txt"), "w", encoding="utf-8") as log:
                 run([SC4CONV, a.sc4, "--out", rd], log)
+            # task sc4diag: --diagonal, and the colour pick on designs that mix diagonal and straight colours
+            dd = os.path.join(a.out, "py", "sc4", "diagonal")
+            shutil.rmtree(dd, ignore_errors=True)
+            with open(os.path.join(a.out, "sc4conv_diagonal_log.txt"), "w", encoding="utf-8") as log:
+                run([SC4CONV, a.sc4, "--out", dd, "--diagonal"], log)
+            sys.path.insert(0, os.path.dirname(SC4CONV))
+            import sc4conv
+            groups = [[["a", 0], ["b", 1], ["c", 0]], [["d", 1], ["e", 1]], [["f", 1], ["g", 0], ["h", 1], ["i", 0]],
+                      [["j", 0]], [["k", 1]], [["l", 0], ["m", 1]], [["n", 1], ["o", 1], ["p", 0]],
+                      [["q", 0], ["r", 0], ["s", 1], ["t", 1], ["u", 1], ["v", 0], ["w", 1], ["x", 1]]]
+            picked = sc4conv.pick_colours(groups, lambda m: m[1] == 1)
+            json.dump({"groups": groups, "picked": [p[0] if p else None for p in picked]},
+                      open(os.path.join(a.out, "py", "sc4", "pick_cases.json"), "w"), indent=1)
         elif c == "styles":
             # every render style and option bldrender has: clean (screen sun), stock_sharp (native zoom 4), rotation,
             # no shadow, no ground, a cell size, a model wider than its lot

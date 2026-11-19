@@ -54,7 +54,10 @@
       const t1 = performance.now();
       await window.bc.openSc4(window.SC4WEB.fileInputs(files), { name: man.sc4.files.join(', ') });
       const S = window.bc.S;
-      sc4 = { seconds: (performance.now() - t1) / 1000, recs: S.recs.length, enabled: S.recs.filter(r => r.meta.enabled).length,
+      await new Promise(res => setTimeout(res, 0));   // task sc4diag: the badge observer runs after the grid is built
+      const diagCards = [...document.querySelectorAll('#grid .card')].filter(c => c.querySelector('.b.diag'));
+      sc4 = { diag: diagCards.length, diagTitle: diagCards.length ? diagCards[0].querySelector('.b.diag').title : '',
+        diagFiles: diagCards.map(c => c.dataset.file), seconds: (performance.now() - t1) / 1000, recs: S.recs.length, enabled: S.recs.filter(r => r.meta.enabled).length,
         errors: S.recs.filter(r => r.err).map(r => r.file + ': ' + r.err).slice(0, 5), groups: document.querySelectorAll('#grid .grp').length,
         cards: document.querySelectorAll('#grid .card').length, note: document.getElementById('sc4Note').textContent, status: document.getElementById('status').textContent };
       mfs = window.bc.modelsFolder();

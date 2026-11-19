@@ -524,7 +524,7 @@ function SC4WEB_LIB(B) {
       const cap = asList(pv(ex, 0x27812834, []));
       const capPairs = []; for (let i = 0; i + 1 < cap.length; i += 2) capPairs.push([cap[i], cap[i + 1]]);
       const b = { tgi: k, name: pv(ex, 0x20, ''), title, model: rk.slice(0, 3), size_m: asList(pv(ex, 0x27812810, [0, 0, 0])).map(x => Number(num(x))),
-        wealth: pv(ex, 0x27812832), purpose: pv(ex, 0x27812833), capacity: capPairs, families: fams, lots: [] };
+        wealth: pv(ex, 0x27812832), purpose: pv(ex, 0x27812833), capacity: capPairs, families: fams, foundation: pv(ex, 0x88FCD877), lots: [] };
       for (const lot of lots) for (const o of lot.objects) {
         if (o.type === 0 && (o.ids.includes(k[2]) || fams.some(f => o.ids.includes(f))))
           b.lots.push({ name: lot.name, size: lot.size, stage: lot.stage, rot: o.rot, x: o.x, z: o.z, via: o.ids.includes(k[2]) ? 'building' : 'family' });
@@ -628,6 +628,81 @@ function SC4WEB_LIB(B) {
     return [P.map(p => toModel1(p, v.r)), UV, tris];
   }
 
+  // ================================================================================================ diagonal (task sc4diag)
+  // views.foundation_diagonal: an SC4 lot turns a building in quarter turns only, so a house set at 45 degrees is told
+  // by its foundation model (exemplar 0x88FCD877 -> type 0x11 exemplar, group 0x361CF9D5): the share of its
+  // horizontal outline that runs at 26.6-63.4 degrees. Same steps and float order as views.py (byte identity).
+  const FND_GROUP = 0x361CF9D5, DIAG_SHARE = 0.5;
+  const cross3 = (P, t) => {
+    const a = P[t[0]], b = P[t[1]], c = P[t[2]];
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    return [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  };
+  const lexLE = (a, b) => { for (let i = 0; i < 3; i++) { if (a[i] < b[i]) return true; if (a[i] > b[i]) return false; } return true; };
+  function outlineShare45(P, tris) {        // views.outline_share_45 -> [share, length] or null
+    const edges = new Map();
+    for (let ti = 0; ti < tris.length; ti++) {
+      const t = tris[ti];
+      for (let i = 0; i < 3; i++) {
+        const a = P[t[i]], b = P[t[(i + 1) % 3]];
+        const [x, y] = lexLE(a, b) ? [a, b] : [b, a];
+        const key = x.join(',') + '|' + y.join(',');
+        if (!edges.has(key)) edges.set(key, { a: x, b: y, ts: [] });
+        edges.get(key).ts.push(ti);
+      }
+    }
+    let tot = 0.0, diag = 0.0;
+    for (const { a, b, ts } of edges.values()) {
+      if (ts.length === 2) {
+        const n1 = cross3(P, tris[ts[0]]), n2 = cross3(P, tris[ts[1]]);
+        const d = (n1[0] * n2[0] + n1[1] * n2[1]) + n1[2] * n2[2];
+        const l1 = (n1[0] * n1[0] + n1[1] * n1[1]) + n1[2] * n1[2];
+        const l2 = (n2[0] * n2[0] + n2[1] * n2[1]) + n2[2] * n2[2];
+        if (d > 0 && d * d >= 0.998 * (l1 * l2)) continue;
+      }
+      const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]), dz = Math.abs(b[2] - a[2]);
+      const ln = Math.sqrt(dx * dx + dz * dz);
+      if (dy > 0.05 || ln < 0.05) continue;
+      tot += ln;
+      if (Math.min(dx, dz) >= 0.5 * Math.max(dx, dz)) diag += ln;
+    }
+    return tot > 0 ? [diag / tot, tot] : null;
+  }
+  function foundationDiagonal(idx, b, zoom = 4) {   // views.foundation_diagonal -> { diagonal, foundation, share_45 } or null
+    const inst = b.foundation;
+    if (typeof inst !== 'number' || !Number.isInteger(inst)) return null;
+    const k = [T_EXEMPLAR, FND_GROUP, inst >>> 0];
+    if (!idx.has(...k)) return null;
+    let ex;
+    const P = [], tris = [];
+    try {
+      ex = parseExemplar(idx.read(...k));
+      const rk = pv(ex, 0x27812821);
+      if (!Array.isArray(rk) || rk.length < 3 || rk[0] !== T_S3D) return null;
+      const key = [rk[0], rk[1], rk[2] + (zoom << 8)];
+      if (!idx.has(...key)) return null;
+      for (const m of readS3D(idx.read(...key))) {
+        const base = P.length;
+        for (const t of m.tris) tris.push(t.map(i => base + i));
+        for (const p of m.P) P.push(p);
+      }
+    } catch (e) { if (!(e instanceof Sc4Error) && !(e instanceof RangeError)) throw e; return null; }
+    const r = outlineShare45(P, tris);
+    if (!r) return null;
+    const name = pv(ex, 0x20);
+    return { diagonal: r[0] >= DIAG_SHARE, foundation: name !== null ? name : hexU(k[2], 8), share_45: r[0] };
+  }
+  function pickColours(groups, isDiag) {    // sc4conv.pick_colours
+    return groups.map((members, k) => {
+      let c = members[k % members.length];
+      if (isDiag(c)) { const ok = members.filter(m => !isDiag(m)); c = ok.length ? ok[k % ok.length] : null; }
+      return c;
+    });
+  }
+  const pct = x => Math.trunc(Number(pyFixed(x * 100, 0)));   // int(round(x * 100))
+  const diagNote = dg => 'Diagonal, off by default: the SC4 author set this house at 45 degrees on its lot (its foundation ' + dg.foundation +
+    ' runs at 45 degrees for ' + pct(dg.share_45) + '% of its outline), and SC3 has no diagonal buildings. ';
+
   // ================================================================================================ sc4conv rules
   const EDITABLE = ['name', 'class', 'lot', 'weight', 'enabled', 'scale', 'rotate_deg', 'notes', 'x_bldrender'];
   const CELL_M = 16.0, ZOOM5 = 4;
@@ -666,7 +741,7 @@ function SC4WEB_LIB(B) {
   const tgiHex = t => t.map(x => hexU(x, 8)).join('-');
   const textBytes = s => { const b = B.cp1252Encode(s); return b || new TextEncoder().encode(s); };   // open(..., 'w'): cp1252
 
-  function writeBuilding(idx, b, files, enabled, style, fill) {   // sc4conv.write_building -> entry
+  function writeBuilding(idx, b, files, enabled, style, fill, dg = null, keepDiag = false) {   // sc4conv.write_building -> entry
     const vs = loadViews(idx, b, ZOOM5);
     const stem = stemOf(b.name);
     const obj = ['# ' + b.name + ', converted from SimCity 4 by sc4conv.py (local use only: see the pack licence)', 'mtllib ' + stem + '.mtl'];
@@ -697,11 +772,12 @@ function SC4WEB_LIB(B) {
     if (!lines.length) throw new Sc4Error(b.name + ': empty name');
     const title = pyStrip(lines[0]).replace(/,+$/, '');
     const sc4lots = [...new Set(b.lots.map(l => { const s = l.size.slice().sort((x, y) => x - y); return s[0] + 'x' + s[1]; }))].sort();
+    const diag = !!(dg && dg.diagonal);
     const entry = {
       file: stem + '.obj', name: title, kind: 'growable', class: cls, lot: [n, n], weight: 1,
       height_m: new PyFloat(pyRound(b.size_m[1], 2)), scale: new PyFloat(1.0), rotate_deg: 0, style: 'any',
-      enabled: !!(enabled && cls !== null),
-      notes: why + '. SC4 lots ' + (sc4lots.join(', ') || 'none') + ', the SC3 lot keeps the house (' + pyFixed(b.size_m[0], 1) + ' x ' + pyFixed(b.size_m[2], 1) + ' m) and drops the yard.',
+      enabled: !!(enabled && cls !== null && (keepDiag || !diag)),
+      notes: (diag ? diagNote(dg) : '') + why + '. SC4 lots ' + (sc4lots.join(', ') || 'none') + ', the SC3 lot keeps the house (' + pyFixed(b.size_m[0], 1) + ' x ' + pyFixed(b.size_m[2], 1) + ' m) and drops the yard.',
       x_bldrender: { style },
       x_sc4: {
         exemplar: b.name, design, colour, building_tgi: tgiHex(b.tgi), model_key: tgiHex(b.model),
@@ -709,6 +785,8 @@ function SC4WEB_LIB(B) {
         capacity: b.capacity.map(([g, c]) => [hexU(num(g), 4), jv(c)]),
         family: b.families.map(f => hexU(f, 8)), size_m: b.size_m.map(x => new PyFloat(pyRound(x, 3))),
         lots: b.lots.map(l => ({ size: l.size, stage: jv(l.stage), name: l.name })),
+        diagonal: diag,
+        foundation: dg ? { name: dg.foundation, share_45: new PyFloat(pyRound(dg.share_45, 2)) } : null,
         views: Object.fromEntries([0, 1, 2, 3].map(s => ['slot' + s, matchView(vs, s).name])),
         camera: Object.fromEntries(vs.map(v => [v.name, { azimuth: new PyFloat(pyRound(v.cam.azimuth_model, 2)),
           elevation: new PyFloat(pyRound(v.cam.elevation, 2)), px_per_m: new PyFloat(pyRound(v.cam.px_per_m, 3)) }])),
@@ -723,6 +801,7 @@ function SC4WEB_LIB(B) {
   // convert(sources, opt) -> { files: Map rel -> Uint8Array (OBJ, MTL, PNG, models.json), models, report }
   //   opt.old: the previous models.json text (keeps the fields the player changed since the converter wrote them)
   //   opt.all, opt.style ('baked'), opt.fill (true), opt.log, opt.progress(i, n)
+  //   opt.diagonal: treat buildings set at 45 degrees as any other (sc4conv.py --diagonal; default: off, with a note)
   async function convert(sources, opt = {}) {
     const log = opt.log || (() => {}), style = opt.style || 'baked', fill = opt.fill !== false;
     const idx = await buildIndex(sources, log);
@@ -734,15 +813,17 @@ function SC4WEB_LIB(B) {
     const keyOf = b => b.families.length ? 'F' + b.families.join(',') : 'D' + designOf(b.name)[0].toLowerCase();
     const fam = new Map();
     for (const b of bs) { const k = keyOf(b); if (!fam.has(k)) fam.set(k, []); fam.get(k).push(b); }
-    const pick = new Map(); let kk = 0;
-    for (const [d, members] of fam) pick.set(d, members[kk++ % members.length].tgi);
+    const diag = new Map(bs.map(b => [b, foundationDiagonal(idx, b)]));
+    const isDiag = opt.diagonal ? (() => false) : (b => !!(diag.get(b) && diag.get(b).diagonal));
+    const pick = new Map(), chosen = pickColours([...fam.values()], isDiag);
+    [...fam.keys()].forEach((d, i) => pick.set(d, chosen[i] ? chosen[i].tgi : null));
     const files = new Map(), models = [];
     for (let bi = 0; bi < bs.length; bi++) {
       const b = bs[bi];
       if (opt.progress) await opt.progress(bi, bs.length, b);
       const first = pick.get(keyOf(b)) === b.tgi;
       let e;
-      try { e = writeBuilding(idx, b, files, opt.all || first, style, fill); }
+      try { e = writeBuilding(idx, b, files, opt.all || first, style, fill, diag.get(b), !!opt.diagonal); }
       catch (ex) { if (!(ex instanceof Sc4Error)) throw ex; const line = '  skip ' + b.name + ': ' + ex.message; log(line); report.push(line); continue; }
       const auto = {}; for (const k of EDITABLE) auto[k] = e[k];
       e.x_sc4.auto = auto;
@@ -756,10 +837,41 @@ function SC4WEB_LIB(B) {
     const text = pyDump({ sc3models: 1, models }, 1);
     for (const [k, v] of files) if (!(v instanceof Uint8Array)) files.set(k, B.encodePNG(v));
     files.set('models.json', new TextEncoder().encode(text));
-    const ne = models.filter(m => m.enabled).length;
-    report.push(models.length + ' models, ' + ne + ' enabled');
+    const ne = models.filter(m => m.enabled).length, nd = models.filter(m => m.x_sc4.diagonal);
+    report.push(models.length + ' models, ' + ne + ' enabled' + (nd.length ? ', ' + nd.length + ' set at 45 degrees in SC4 (' +
+      new Set(nd.map(m => m.x_sc4.design)).size + ' designs) off by default since SC3 has no diagonal buildings' : ''));
+    lastDiag.clear();
+    for (const m of models) if (m.x_sc4.diagonal) lastDiag.set(m.file.toLowerCase(), m.x_sc4.foundation);
     log(report[report.length - 1]);
     return { files, models: JSON.parse(text).models, text, report };
+  }
+
+  // ================================================================================================ page note (task sc4diag)
+  // The importer's cards come from classifier.html (not edited by this task): this marks the card of every building
+  // the last convert() found set at 45 degrees with a 'diagonal' badge and the reason as its tooltip.
+  const lastDiag = new Map();               // OBJ file name (lower case) -> x_sc4.foundation
+  function markDiagonalCards(root) {
+    if (!root || !root.querySelectorAll) return 0;
+    let n = 0;
+    for (const card of root.querySelectorAll('.card')) {
+      const f = lastDiag.get(String(card.dataset.file || '').toLowerCase());
+      if (!f || card.querySelector('.b.diag')) continue;
+      const bd = card.querySelector('.badges');
+      if (!bd) continue;
+      const sp = card.ownerDocument.createElement('span');
+      sp.className = 'b off diag'; sp.textContent = 'diagonal';
+      sp.title = 'Set at 45 degrees on its SimCity 4 lot (its foundation ' + f.name + ' runs at 45 degrees for ' +
+        pct(num(f.share_45)) + '% of its outline). SC3 has no diagonal buildings, so it is off by default.';
+      bd.appendChild(sp); n++;
+    }
+    return n;
+  }
+  if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
+    const watch = () => {
+      const grid = document.getElementById('grid');
+      if (grid) new MutationObserver(() => { if (lastDiag.size) markDiagonalCards(grid); }).observe(grid, { childList: true });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch); else watch();
   }
 
   // ================================================================================================ inputs
@@ -879,6 +991,7 @@ function SC4WEB_LIB(B) {
     pyFixed, pyRound, pyRepr, pyDump, pyLoad, pyEq,
     qfsDecompress, readDbpf, parseExemplar, ltext, readS3D, readFshFirst, fshDecode,
     buildIndex, buildings, loadViews, fitCamera, matchView, hiddenFaces, classFor, lotFor, designOf, stemOf,
+    outlineShare45, foundationDiagonal, pickColours, markDiagonalCards,
     convert, sourcesFrom, handleInputs, fileInputs, zipEntries, zipRead, overlayFS, isDbpfName, isArchive,
   };
 }
