@@ -19,7 +19,7 @@
     The folder with the .bld files (or a text file with one .bld path per line).
 
 .PARAMETER Apps
-    The game's Apps folder. Defaults to this script's folder, its Apps subfolder, or ..\Apps.
+    The game's Apps folder. Defaults to this script's folder, its Apps subfolder, ..\Apps or ..\..\Apps (the sc3mods zip puts the kit in tools\bld_render).
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File render_bld.ps1 "C:\Downloads\my buildings"
@@ -38,7 +38,7 @@ $ErrorActionPreference = 'Stop'
 if (-not (Test-Path -LiteralPath $Folder)) { throw "$Folder does not exist." }
 $Folder = (Resolve-Path -LiteralPath $Folder).Path
 if (-not $Apps) {
-    foreach ($c in @($PSScriptRoot, (Join-Path $PSScriptRoot 'Apps'), (Join-Path (Split-Path $PSScriptRoot) 'Apps'))) {
+    foreach ($c in @($PSScriptRoot, (Join-Path $PSScriptRoot 'Apps'), (Join-Path (Split-Path $PSScriptRoot) 'Apps'), (Join-Path (Split-Path (Split-Path $PSScriptRoot)) 'Apps'))) {
         if (Test-Path -LiteralPath (Join-Path $c 'Baapp.exe')) { $Apps = $c; break }
     }
     if (-not $Apps) { throw "Baapp.exe not found next to this script. Pass -Apps <the game's Apps folder>." }

@@ -18,7 +18,8 @@ No game file is shipped. `BaappW.exe` is made on your PC from your own `Baapp.ex
 
 ## Use
 
-1. Put the four kit files in the game's `Apps` folder (or anywhere, and pass `-Apps <game>\Apps`).
+1. The sc3mods zip puts the kit in `tools\bld_render\` inside the game folder, and the scripts find the game's
+   `Apps` folder from there. Kept anywhere else, pass `-Apps <game>\Apps`.
 2. Close the Building Architect if it is open.
 3. Drop the folder with your `.bld` files on `render_bld.cmd`.
    The Building Architect opens in an 800x600 window for one or two minutes (17 buildings took 65 s). Leave it alone:
