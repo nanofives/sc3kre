@@ -98,7 +98,21 @@ STYLES = {
               "grass_amp": 0.10},
 }
 STYLES["stock_sharp"] = dict(STYLES["stock"], zoom4="native")     # stock colours and light, zoom 4 drawn natively
+# task sc4conv: art that already has its light painted in (SC4 BAT renders): the texture as it is (no light, no
+# vibrance, contrast or grain), the stock style's lawn, rim, zoom-3-doubled zoom 4 and 255-colour palette.
+# `tone` = (gamma, gain) on the albedo luminance, hue kept: fitted on the 18 JMyers designs (72 zoom-3 frames:
+# structure luminance p10 / p50 / p90 0.098 / 0.203 / 0.449 raw against the stock 0.201 / 0.400 / 0.688; with the
+# tone 0.75 / 1.33 the prediction is 0.23 / 0.40 / 0.73, measured in verify/sc4conv/RESULTS.md). `baked_raw` = none.
+STYLES["baked"] = dict(STYLES["stock"], light="sun", ambient=1.0, diffuse=0.0, shadow_keep=0.0, sat=1.0,
+                       contrast=1.0, grain=0.0, tone=(0.75, 1.33))
+STYLES["baked_raw"] = dict(STYLES["baked"], tone=None)
+STYLES["baked_sharp"] = dict(STYLES["baked"], zoom4="native")   # SC4 zoom 5 has 7.0 px/m, SC3 zoom 4 5.66
 DEFAULT_STYLE = "stock"
+
+# task sc4conv switches (2026-11-18h). Both are inert for models without transparent texels / sc3slot groups.
+ALPHA_TEST = os.environ.get("SC3BLD_ALPHA", "1") != "0"      # texture alpha < 0.5 = see-through (depth peeling)
+SLOT_GROUPS = os.environ.get("SC3BLD_SLOTGROUPS", "1") != "0"  # OBJ group/object sc3slot<r> = drawn in slot r only
+PEEL_LAYERS = 4
 
 
 def _pz(v, z):
@@ -152,19 +166,29 @@ def _read_mtl(path):
             name = p[-1]                                       # options (-s, -o ...) come before the file name
             tp = os.path.join(base, name)
             if os.path.isfile(tp):
-                cur["tex"] = np.asarray(Image.open(tp).convert("RGB"), dtype=np.float32) / 255.0
+                im = Image.open(tp)
+                cur["tex"] = np.asarray(im.convert("RGB"), dtype=np.float32) / 255.0
                 cur["tex_file"] = name
+                # task sc4conv: texture alpha (cut-out art, SC4 view textures). Kept only when some texel is
+                # transparent, so an opaque texture renders exactly as before. Off switch: SC3BLD_ALPHA=0.
+                if ALPHA_TEST and ("A" in im.getbands() or "transparency" in im.info):
+                    a = np.asarray(im.convert("RGBA"), dtype=np.uint8)[..., 3]
+                    if (a < 128).any():
+                        cur["alpha"] = a.astype(np.float32) / 255.0
     return mats
 
 
 def load_obj(path):
-    """-> mesh dict: tri (N,3,3) xyz metres, uv (N,3,2) or None per tri via has_uv (N,), mat (N,), mats [dict]."""
+    """-> mesh dict: tri (N,3,3) xyz metres, uv (N,3,2) or None per tri via has_uv (N,), mat (N,), mats [dict],
+    slot (N,) int8: -1 = drawn in every rotation slot, r = only in slot r (faces in an OBJ group or object named
+    `sc3slot<r>`, task sc4conv: a model that brings its own art per view, such as a converted SC4 building)."""
     V, VT = [], []
-    tris, uvs, has, mid = [], [], [], []
+    tris, uvs, has, mid, slots = [], [], [], [], []
     mats = {}
     mat_names = ["_default"]
     mat_list = [{"kd": (0.8, 0.8, 0.8), "tex": None, "name": "_default"}]
     cur = 0
+    cur_slot = -1
     base = os.path.dirname(os.path.abspath(path))
     for ln in open(path, encoding="utf-8", errors="replace"):
         p = ln.split()
@@ -186,6 +210,10 @@ def load_obj(path):
                 mat_names.append(name)
                 mat_list.append(m)
             cur = mat_names.index(name)
+        elif k in ("g", "o"):
+            nm = " ".join(p[1:]).lower()
+            cur_slot = int(nm[7]) if SLOT_GROUPS and nm.startswith("sc3slot") and nm[7:8] in "0123" \
+                and len(nm) >= 8 else -1
         elif k == "f":
             idx = []
             for t in p[1:]:
@@ -204,10 +232,24 @@ def load_obj(path):
                 uvs.append([VT[b] for _, b in tri] if ok else [[0, 0]] * 3)
                 has.append(ok)
                 mid.append(cur)
+                slots.append(cur_slot)
     if not tris:
         raise RenderError("%s: no faces" % path)
     return {"tri": np.array(tris, dtype=np.float64), "uv": np.array(uvs, dtype=np.float64),
-            "has_uv": np.array(has, dtype=bool), "mat": np.array(mid, dtype=np.int32), "mats": mat_list}
+            "has_uv": np.array(has, dtype=bool), "mat": np.array(mid, dtype=np.int32), "mats": mat_list,
+            "slot": np.array(slots, dtype=np.int8)}
+
+
+def slot_mesh(mesh, r):
+    """The faces drawn in rotation slot r (every face of a model without sc3slot groups)."""
+    s = mesh.get("slot")
+    if s is None or not (s >= 0).any():
+        return mesh
+    keep = (s < 0) | (s == r)
+    out = dict(mesh)
+    for k in ("tri", "uv", "has_uv", "mat", "slot"):
+        out[k] = mesh[k][keep]
+    return out
 
 
 def bbox(mesh):
@@ -256,9 +298,10 @@ def depth_of(t):
     return t[..., 1] * F[0] + t[..., 0] * F[1] + t[..., 2] * F[2]
 
 
-def rasterize(sx, sy, dep, w, h, cull=None):
+def rasterize(sx, sy, dep, w, h, cull=None, zmin=None):
     """Triangles (N,3) in sample space -> (tri id buffer (h, w) int32 (-1 empty), barycentrics (h, w, 3), depth).
-    Pixel (i, j) samples at (i + 0.5, j + 0.5)."""
+    Pixel (i, j) samples at (i + 0.5, j + 0.5). zmin (h, w): a sample only takes surfaces farther than it (depth
+    peeling for alpha-tested textures; inf = take nothing there)."""
     zb = np.full((h, w), np.inf)
     ib = np.full((h, w), -1, dtype=np.int32)
     bb = np.zeros((h, w, 3), dtype=np.float32)
@@ -286,6 +329,8 @@ def rasterize(sx, sy, dep, w, h, cull=None):
         d = w0 * dep[k, 0] + w1 * dep[k, 1] + w2 * dep[k, 2]
         sub = zb[j0:j1 + 1, i0:i1 + 1]
         m = inside & (d < sub)
+        if zmin is not None:
+            m &= d > zmin[j0:j1 + 1, i0:i1 + 1] + 1e-7
         if not m.any():
             continue
         sub[m] = d[m]
@@ -426,6 +471,7 @@ def _edge_mask(ib, nrm_buf, kind_buf, ss):
 def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, ground_tex=None, style=None):
     """One frame. mesh tri in slot-0 tile coords (u, v, h). -> (RGBA PIL image, (L, T))."""
     sname, st = style_of(style)
+    mesh = slot_mesh(mesh, r)
     W = 8 << z
     dx, dy, g_px = (calib or CALIB)[z]
     g_px = _growth(g_px, n)
@@ -448,7 +494,33 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
     Ww = n * W
     sx = (X + dx) * ss
     sy = (Y + top + dy) * ss
-    ib, bb, zb = rasterize(sx, sy, depth_of(t), Ww * ss, Hh * ss)
+    dep = depth_of(t)
+    ib, bb, zb = rasterize(sx, sy, dep, Ww * ss, Hh * ss)
+    alpha_mats = [k for k, m in enumerate(mesh["mats"]) if m.get("alpha") is not None]
+    for _ in range(PEEL_LAYERS if alpha_mats else 0):
+        # task sc4conv: a sample whose texel is transparent (alpha < 0.5) takes the next surface behind it
+        hole = np.zeros(ib.shape, dtype=bool)
+        c = ib >= 0
+        ids = ib[c]
+        nm = len(mesh["tri"])
+        mod = ids < nm
+        idm = ids[mod]
+        mids = mesh["mat"][idm]
+        tr = np.zeros(len(idm), dtype=bool)
+        uvt = (mesh["uv"][idm] * bb[c][mod][:, :, None]).sum(1)
+        for k in alpha_mats:
+            sel = (mids == k) & mesh["has_uv"][idm]
+            if sel.any():
+                tr[sel] = _sample_tex(mesh["mats"][k]["alpha"][..., None], uvt[sel])[:, 0] < 0.5
+        cm = np.zeros(len(ids), dtype=bool)
+        cm[np.where(mod)[0]] = tr
+        hole[c] = cm
+        if not hole.any():
+            break
+        ib2, bb2, zb2 = rasterize(sx, sy, dep, Ww * ss, Hh * ss, zmin=np.where(hole, zb, np.inf))
+        ib[hole] = ib2[hole]
+        bb[hole] = bb2[hole]
+        zb[hole] = zb2[hole]
     cov = ib >= 0
     rgb = np.zeros(ib.shape + (3,), dtype=np.float32)
     if cov.any():
@@ -508,6 +580,11 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
                 sel = (mids == k) & hu
                 if sel.any():
                     a2[sel] = _sample_tex(m["tex"], uvt[sel])
+            if st.get("tone"):                                           # task sc4conv: pre-lit art
+                gam, gain = st["tone"]
+                y = (a2 @ np.array([0.299, 0.587, 0.114], dtype=np.float32))[:, None]
+                y2 = np.clip(gain * np.power(np.maximum(y, 0), gam), 0, 1)
+                a2 = np.clip(a2 * (y2 / np.maximum(y, 1e-4)), 0, 1)
             if _pz(st["sat"], z) != 1.0:
                 # vibrance: stock walls and roofs are more saturated, but a colour that is already saturated is
                 # pushed less (a plain gain turns a red roof pure red)
