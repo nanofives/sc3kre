@@ -6,7 +6,7 @@ carries its own copy of the shared stylesheet between the `sc3ui.css begin` / `s
 
     py -3.12 re/tools/bldimport/sync_css.py            # rewrite the copy in classifier.html
     py -3.12 re/tools/bldimport/sync_css.py --check    # exit 1 when the copy differs from docs/assets/sc3ui.css
-    py -3.12 re/tools/bldimport/sync_css.py --publish  # also copy classifier.html + bldweb.js to docs/buildings/importer/
+    py -3.12 re/tools/bldimport/sync_css.py --publish  # also copy classifier.html + bldweb.js + sc4web.js to docs/buildings/importer/
 """
 import os, re, shutil, sys
 
@@ -38,8 +38,9 @@ def main():
         dst = os.path.join(ROOT, 'docs', 'buildings', 'importer')
         os.makedirs(dst, exist_ok=True)
         shutil.copyfile(PAGE, os.path.join(dst, 'index.html'))
-        shutil.copyfile(os.path.join(HERE, 'bldweb.js'), os.path.join(dst, 'bldweb.js'))
-        print('copied classifier.html + bldweb.js to', dst)
+        for js in ("bldweb.js", "sc4web.js"):   # sc4web.js: task sc4web (SC4 downloads in the page)
+            shutil.copyfile(os.path.join(HERE, js), os.path.join(dst, js))
+        print("copied classifier.html + bldweb.js + sc4web.js to", dst)
 
 
 if __name__ == '__main__':

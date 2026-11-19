@@ -1,17 +1,53 @@
-"""Runs classifier.html?demo=1&selftest=1 in headless Chrome, dumps the DOM and checks the models.json round trip.
+"""Runs classifier.html?demo=1&selftest=1 in headless Chrome, reads the self-test result (DevTools) and checks the models.json round trip.
 Usage: py -3.12 check_roundtrip.py   (needs Chrome; exit 0 = pass)"""
 import json, os, re, subprocess, sys, tempfile, html, pathlib
 here = pathlib.Path(__file__).resolve().parent
 chrome = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 url = here.joinpath('classifier.html').as_uri() + '?demo=1&selftest=1'
-prof = tempfile.mkdtemp(prefix='bcrt')
-out = subprocess.run([chrome, '--headless=new', '--allow-file-access-from-files', '--enable-unsafe-swiftshader', '--use-angle=swiftshader',
-                      '--user-data-dir=' + prof, '--virtual-time-budget=15000', '--dump-dom', url],
-                     capture_output=True, text=True, timeout=120).stdout
-m = re.search(r'<pre id="selftest"[^>]*>(.*?)</pre>', out, re.S)
-if not m or not m.group(1).strip():
+# task sc4web: --dump-dom fires when the virtual-time budget runs out, often before the self-test has written its result
+# (main's page failed 2 of 4 runs on 2026-11-19, and every run under the full suite's load). So the page is watched
+# over the DevTools protocol until its title says "[selftest done]" (at most 180 s), as webtest/pagetest.mjs does. Chrome
+# is stopped by the PID this script started. Without node: the old --dump-dom run.
+CDP = r"""
+import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+import { spawn, execFileSync } from 'node:child_process';
+const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'bcrt-'));
+const ch = spawn(process.env.RT_CHROME, ['--headless=new', '--allow-file-access-from-files', '--enable-unsafe-swiftshader', '--use-angle=swiftshader',
+  '--remote-debugging-port=0', '--user-data-dir=' + prof, '--no-first-run', '--no-default-browser-check', process.env.RT_URL], { stdio: 'ignore' });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let out = '';
+try {
+  let port = null;
+  for (let t = 0; t < 150 && !port; t++) { await sleep(200); const f = path.join(prof, 'DevToolsActivePort'); if (fs.existsSync(f)) port = fs.readFileSync(f, 'utf8').split('\n')[0].trim(); }
+  let target = null;
+  for (let t = 0; t < 100 && !target; t++) { await sleep(200); const l = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); target = l.find(x => x.type === 'page' && x.url.startsWith('file:')); }
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  let seq = 0; const waiters = new Map();
+  ws.onmessage = ev => { const m = JSON.parse(ev.data); if (m.id && waiters.has(m.id)) { waiters.get(m.id)(m); waiters.delete(m.id); } };
+  const evalJs = e => new Promise(res => { const id = ++seq; waiters.set(id, m => res(m.result && m.result.result && m.result.result.value)); ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression: e, returnByValue: true } })); });
+  const t0 = Date.now();
+  while (Date.now() - t0 < 180000 && !/selftest done/.test(await evalJs('document.title') || '')) await sleep(500);
+  out = await evalJs("document.getElementById('selftest').textContent") || '';
+  ws.close();
+} finally { try { execFileSync('taskkill', ['/PID', String(ch.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (e) {} }
+process.stdout.write(out);
+"""
+text = ''
+try:
+    text = subprocess.run(['node', '--input-type=module', '-e', CDP], capture_output=True, text=True, timeout=240,
+                          env=dict(os.environ, RT_CHROME=chrome, RT_URL=url)).stdout.strip()
+except (OSError, subprocess.TimeoutExpired) as e:
+    print('node / DevTools route failed (%s): --dump-dom instead' % e)
+    prof = tempfile.mkdtemp(prefix='bcrt')
+    out = subprocess.run([chrome, '--headless=new', '--allow-file-access-from-files', '--enable-unsafe-swiftshader', '--use-angle=swiftshader',
+                          '--user-data-dir=' + prof, '--virtual-time-budget=15000', '--dump-dom', url],
+                         capture_output=True, text=True, timeout=120).stdout
+    m = re.search(r'<pre id="selftest"[^>]*>(.*?)</pre>', out, re.S)
+    text = html.unescape(m.group(1)).strip() if m else ''
+if not text:
     print('FAIL: no selftest output'); sys.exit(1)
-res = json.loads(html.unescape(m.group(1)))
+res = json.loads(text)
 if 'error' in res:
     print('FAIL', res['error']); sys.exit(1)
 saved = json.loads(res.pop('savedText'))

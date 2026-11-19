@@ -45,14 +45,36 @@
     };
     const models = tree(man.models.base, man.models.files), game = tree(man.game.base, man.game.files);
     const B = window.BLDWEB, t0 = performance.now();
-    let rep;
+    let rep, sc4 = null, mfs = null;
+    if (man.sc4) {
+      // task sc4web: the SC4 download as the player picks it (Open SC4 .zip): the page converts it, the grid fills,
+      // and Install reads the converted files from the page's in-memory models folder
+      const files = [];
+      for (const f of man.sc4.files) { const r = await fetch(man.sc4.base + encodeURIComponent(f)); if (!r.ok) throw new Error('fetch ' + f); files.push(new File([await r.blob()], f)); }
+      const t1 = performance.now();
+      await window.bc.openSc4(window.SC4WEB.fileInputs(files), { name: man.sc4.files.join(', ') });
+      const S = window.bc.S;
+      sc4 = { seconds: (performance.now() - t1) / 1000, recs: S.recs.length, enabled: S.recs.filter(r => r.meta.enabled).length,
+        errors: S.recs.filter(r => r.err).map(r => r.file + ': ' + r.err).slice(0, 5), groups: document.querySelectorAll('#grid .grp').length,
+        cards: document.querySelectorAll('#grid .card').length, note: document.getElementById('sc4Note').textContent, status: document.getElementById('status').textContent };
+      mfs = window.bc.modelsFolder();
+    }
+    if (man.action === 'open') {           // task sc4web: open only (pictures of the grid and the preview)
+      const S = window.bc.S, pick = S.recs.find(r => r.meta.enabled) || S.recs[0];
+      document.getElementById('grid').querySelector('.card[data-file="' + pick.file + '"]').click();
+      await new Promise(r => setTimeout(r, +(qs.get('wait') || 3000)));
+      const meshes = []; if (pick.obj) pick.obj.traverse(n => { if (n.isMesh) meshes.push([n.name, n.visible, [].concat(n.material).map(m => m.type + (m.map ? ' map ' + (m.map.image ? m.map.image.width + 'x' + m.map.image.height : 'no image') : ' no map')).join('|')]); });
+      done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4, focus: pick.file, err: pick.err, meshes, thumb: (pick.thumb || '').length });
+      return;
+    }
     if ((man.action || 'install') === 'remove') rep = ['restored ' + await B.restore(B.handleFS(game), () => {}) + ' file(s)'];
-    else rep = (await window.bc.installWith(B.handleFS(models), B.handleFS(game), { style: 'stock' })).rep;
+    else rep = (await window.bc.installWith(mfs || B.handleFS(models), B.handleFS(game), { style: 'stock' })).rep;
     const res = { pass: true, action: man.action || 'install', seconds: (performance.now() - t0) / 1000, rep, files: {}, models: {}, deleted: [],
-      worker: B.lastWorkerMode || null };
+      worker: B.lastWorkerMode || null, sc4 };
     const b64 = d => { let s = ''; for (let k = 0; k < d.length; k += 8192) s += String.fromCharCode.apply(null, d.subarray(k, k + 8192)); return btoa(s); };
     for (const [p, d] of written(game)) res.files[p] = { sha: B.sha256(d), size: d.length, b64: man.apply ? b64(d) : undefined };
     for (const [p, d] of written(models)) res.models[p] = { sha: B.sha256(d), size: d.length, b64: man.apply ? b64(d) : undefined };
+    if (mfs) for (const [p, d] of mfs.written) res.models[p] = { sha: B.sha256(d), size: d.length, b64: man.apply ? b64(d) : undefined };
     const live = new Set(); (function walk(dd, pre) { for (const k of dd.kids.values()) { const q = pre ? pre + '/' + k.name : k.name; if (k.kind === 'directory') walk(k, q); else live.add(q.toLowerCase()); } })(game, '');
     res.deleted = man.game.files.filter(f => !live.has(f.toLowerCase()));
     res.progressShown = document.getElementById('progText').textContent;

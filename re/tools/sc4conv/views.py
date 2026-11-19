@@ -42,21 +42,69 @@ def to_model(p, r):
     return p
 
 
+def _solve(G, R):
+    """G (n x n) X = R (n x m), Gaussian elimination with partial pivoting (first largest |pivot|), plain float
+    arithmetic in a fixed order. Task sc4web: the importer page (sc4web.js) runs the same steps, so the fit is the
+    same to the last bit in both (numpy's lstsq goes through LAPACK, whose rounding JS cannot reproduce)."""
+    n, m = len(G), len(R[0])
+    a = [list(G[i]) + list(R[i]) for i in range(n)]
+    for c in range(n):
+        p = c
+        for i in range(c + 1, n):
+            if abs(a[i][c]) > abs(a[p][c]):
+                p = i
+        if a[p][c] == 0.0:
+            raise ValueError('camera fit: singular normal equations')
+        a[c], a[p] = a[p], a[c]
+        for i in range(c + 1, n):
+            f = a[i][c] / a[c][c]
+            for j in range(c, n + m):
+                a[i][j] = a[i][j] - f * a[c][j]
+    x = [[0.0] * m for _ in range(n)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m):
+            s = a[i][n + j]
+            for k in range(i + 1, n):
+                s = s - a[i][k] * x[k][j]
+            x[i][j] = s / a[i][i]
+    return x
+
+
 def fit_camera(P, UV, tw, th):
     """Orthographic projection fit: [u*tw, v*th] = A [x y z 1]. -> (A (4x2), max error px, forward unit vector
     in the same frame (pointing from the camera into the scene: the 2x3 part's cross product, sign chosen so that
-    it points down))."""
-    P = np.asarray(P, np.float64)
-    X = np.c_[P, np.ones(len(P))]
-    T = np.asarray(UV, np.float64) * [tw, th]
-    A = np.linalg.lstsq(X, T, rcond=None)[0]
-    err = float(np.abs(X @ A - T).max())
-    M = A[:3].T
-    d = np.cross(M[0], M[1])
-    d /= np.linalg.norm(d)
+    it points down)).
+    Least squares by the normal equations, every sum in point order (task sc4web, for byte identity with the page;
+    the 2026-11-18h prototype used np.linalg.lstsq: same fit to about 1e-13 px)."""
+    X = [[float(p[0]), float(p[1]), float(p[2]), 1.0] for p in P]
+    T = [[float(t[0]) * tw, float(t[1]) * th] for t in UV]
+    G = [[0.0] * 4 for _ in range(4)]
+    R = [[0.0] * 2 for _ in range(4)]
+    for i in range(4):
+        for j in range(4):
+            s = 0.0
+            for k in range(len(X)):
+                s = s + X[k][i] * X[k][j]
+            G[i][j] = s
+        for j in range(2):
+            s = 0.0
+            for k in range(len(X)):
+                s = s + X[k][i] * T[k][j]
+            R[i][j] = s
+    A = _solve(G, R)
+    err = 0.0
+    for k in range(len(X)):
+        for j in range(2):
+            e = abs((((X[k][0] * A[0][j] + X[k][1] * A[1][j]) + X[k][2] * A[2][j]) + A[3][j]) - T[k][j])
+            err = max(err, e)
+    m0 = (A[0][0], A[1][0], A[2][0])
+    m1 = (A[0][1], A[1][1], A[2][1])
+    d = [m0[1] * m1[2] - m0[2] * m1[1], m0[2] * m1[0] - m0[0] * m1[2], m0[0] * m1[1] - m0[1] * m1[0]]
+    ln = math.sqrt((d[0] * d[0] + d[1] * d[1]) + d[2] * d[2])
+    d = [d[0] / ln, d[1] / ln, d[2] / ln]
     if d[1] > 0:
-        d = -d
-    return A, err, d
+        d = [-d[0], -d[1], -d[2]]
+    return np.array(A, dtype=np.float64), float(err), np.array(d, dtype=np.float64)
 
 
 def azimuth(d):
@@ -92,7 +140,7 @@ def load_views(idx, b, zoom=4):
                     'mesh_name': mname, 'mat': mat,
                     'cam': {'fit_err_px': err, 'forward_view': d.tolist(), 'forward_model': dm.tolist(),
                             'azimuth_model': azimuth(dm), 'elevation': elevation(d),
-                            'px_per_m': float(np.linalg.norm(A[:3, 0]))}})
+                            'px_per_m': math.sqrt((A[0, 0] * A[0, 0] + A[1, 0] * A[1, 0]) + A[2, 0] * A[2, 0])}})
     return out
 
 
@@ -136,7 +184,9 @@ def hidden_faces(v, floor_y=0.05):
     quads.append([np.array([lo[0], y, lo[2]]), np.array([hi[0], y, lo[2]]), np.array([hi[0], y, hi[2]]),
                   np.array([lo[0], y, hi[2]])])
     P = np.array([p for q in quads for p in q])
-    UV = (np.c_[P, np.ones(len(P))] @ v['A']) / np.array(v['tex_size'], np.float64)
+    A, (tw, th) = v['A'], v['tex_size']
+    UV = np.array([[(((p[0] * A[0, j] + p[1] * A[1, j]) + p[2] * A[2, j]) + A[3, j]) / (tw, th)[j] for j in range(2)]
+                   for p in P], dtype=np.float64)                   # task sc4web: sums in a fixed order (no BLAS)
     tris = []
     for k in range(len(quads)):
         tris += [(4 * k, 4 * k + 1, 4 * k + 2), (4 * k, 4 * k + 2, 4 * k + 3)]

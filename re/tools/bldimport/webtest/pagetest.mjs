@@ -1,6 +1,8 @@
 // pagetest.mjs - task bldweb (2026-11-18d): the page itself (classifier.html, file://, Web Worker) in headless Chrome.
 //
 //   node pagetest.mjs --golden <dir from golden_setup.py> --game <tree> [--case kenney] [--chrome <exe>]
+//   node pagetest.mjs --golden <dir> --game <tree> --case sc4 --sc4zip <SC4 download .zip>   (task sc4web: the page
+//        opens the .zip itself, as Open SC4 .zip does, converts it and installs from memory)
 //
 // Opens classifier.html?bldtest=<manifest> from disk in a headless Chrome of its own (temporary profile,
 // --allow-file-access-from-files so the test hook can fetch the folders), waits for the hook (webtest/pagetest.js)
@@ -18,6 +20,7 @@ const arg = (k, d = null) => { const i = process.argv.indexOf('--' + k); return 
 const golden = arg('golden'), tree = arg('game'), cs = arg('case', 'kenney');
 const modelsDir = arg('models', golden && path.join(golden, 'src', cs)), action = arg('action', 'install');
 const apply = process.argv.includes('--apply'), compare = !process.argv.includes('--no-compare'), shot = arg('shot');
+const sc4zip = arg('sc4zip');
 const chrome = arg('chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 function walk(d, base = d, out = []) {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -28,10 +31,11 @@ function walk(d, base = d, out = []) {
 }
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const dirUrl = d => pathToFileURL(d).href.replace(/\/?$/, '/');
-const man = { models: { base: dirUrl(modelsDir), files: walk(modelsDir) }, game: { base: dirUrl(tree), files: walk(tree) }, action, apply };
+const man = { models: { base: dirUrl(modelsDir), files: sc4zip ? [] : walk(modelsDir) }, game: { base: dirUrl(tree), files: walk(tree) }, action, apply,
+  sc4: sc4zip ? { base: dirUrl(path.dirname(path.resolve(sc4zip))), files: [path.basename(sc4zip)] } : null };
 const manPath = path.join(golden || os.tmpdir(), `pagetest_${cs}_${action}.json`);
 fs.writeFileSync(manPath, JSON.stringify(man));
-const page = pathToFileURL(path.join(here, '..', 'classifier.html')).href + '?bldtest=' + encodeURIComponent(pathToFileURL(manPath).href);
+const page = pathToFileURL(path.join(here, '..', 'classifier.html')).href + '?bldtest=' + encodeURIComponent(pathToFileURL(manPath).href) + (arg('wait') ? '&wait=' + arg('wait') : '');
 const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'bldweb-chrome-'));
 const ch = spawn(chrome, ['--headless=new', '--window-size=1280,1100', '--allow-file-access-from-files', '--remote-debugging-port=0', '--user-data-dir=' + prof,
   '--no-first-run', '--no-default-browser-check', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', page], { stdio: 'ignore' });
@@ -62,7 +66,7 @@ try {
   process.stdout.write('\n');
   const res = JSON.parse(await evalJs("document.getElementById('bldtest').textContent") || '{}');
   if (shot) {
-    await evalJs("document.getElementById('logBox').open = true; window.scrollTo(0, 0); 1");
+    await evalJs(action === 'open' ? "document.getElementById('gameBox').hidden = true; window.scrollTo(0, 0); 1" : "document.getElementById('logBox').open = true; window.scrollTo(0, 0); 1");
     const id = ++seq;
     const img = await new Promise(r => { waiters.set(id, m => r(m.result && m.result.data)); ws.send(JSON.stringify({ id, method: 'Page.captureScreenshot', params: { format: 'jpeg', quality: 85, captureBeyondViewport: false } })); });
     if (img) { fs.writeFileSync(shot, Buffer.from(img, 'base64')); console.log('  screenshot ' + shot); }
@@ -78,11 +82,18 @@ try {
     console.log(`  applied: ${Object.keys(res.files).length} game files written, ${res.deleted.length} removed, ${Object.keys(res.models).length} models-folder files`);
   }
   if (!res.pass) { total = 1; line('page ' + action + ' ran', false, res.error || title); }
-  else if (!compare) { total = 1; console.log('  ' + res.rep.join('\n  ')); line(`page ${action} ran (${res.seconds.toFixed(1)} s, renderer ${res.worker})`, true); }
+  else if (!compare) { total = 1; if (res.meshes) console.log('  ' + JSON.stringify({ focus: res.focus, err: res.err, meshes: res.meshes, thumb: res.thumb })); console.log('  ' + res.rep.join('\n  ')); line(`page ${action} ran (${res.seconds.toFixed(1)} s, renderer ${res.worker})`, true); }
   else {
     const pyOut = path.join(golden, 'py', cs, 'out');
     const want = walk(pyOut);
-    total = want.length + 4;
+    total = want.length + 4 + (res.sc4 ? 2 : 0);
+    if (res.sc4) {
+      const s4 = res.sc4, pm = JSON.parse(fs.readFileSync(path.join(golden, 'src', cs, 'models.json'), 'utf8')).models;
+      const designs = new Set(pm.map(m => m.x_sc4 && m.x_sc4.design)).size;
+      console.log(`  page SC4: converted + grid in ${s4.seconds.toFixed(1)} s. ${s4.status}`);
+      line(`page grid: ${s4.cards} SC4 cards, ${s4.enabled} on, ${s4.groups} design groups`, s4.recs === pm.length && s4.cards === pm.length && s4.enabled === pm.filter(m => m.enabled).length && s4.groups === designs && !s4.errors.length, s4.errors.join('; '));
+      line('page shows the SC4 licence rule', /never share the converted buildings without the author's permission/.test(s4.note), s4.note.slice(0, 140));
+    }
     console.log(`  page: ${res.seconds.toFixed(1)} s, renderer ${res.worker}, ${res.resultRows} result rows, "${res.progressShown}"`);
     for (const rel of want) {
       const got = res.files[rel], exp = sha(fs.readFileSync(path.join(pyOut, rel)));

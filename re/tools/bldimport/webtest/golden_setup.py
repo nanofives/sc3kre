@@ -11,6 +11,12 @@ Writes into <dir>:
   py\<case>\out\         the files pack --out wrote (game-root relative)
   py\<case>\log.txt      the tool's report
 golden.mjs runs bldweb.js over src\<case> against the same game and compares every byte.
+
+Case sc4 (task sc4web, needs --sc4 <SC4 plugin folder>): src\sc4\ is sc4conv.py's output for that folder (the
+models folder the Python route installs from), packed like the others. Also py\sc4\rerun_old.json (that models.json
+after edits as the page saves them: JSON.stringify layout, whole floats as ints) and py\sc4\rerun\ (sc4conv.py run
+again over it: the merge that keeps the player's edits). sc4_golden.mjs converts the SC4 .zip / folder in JS and
+compares.
 """
 import argparse
 import json
@@ -22,6 +28,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.join(os.path.dirname(HERE), "bldimport.py")
 MAKE = os.path.join(os.path.dirname(HERE), "make_testmodels.py")
+SC4CONV = os.path.join(os.path.dirname(os.path.dirname(HERE)), "sc4conv", "sc4conv.py")
 
 BLD = [  # file, models.json extras
     ("Dupont House.bld", {}),                                             # auto: BAT.DAT art when the tree has it
@@ -52,6 +59,7 @@ def main():
     ap.add_argument("--kits", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--cases", default="testmodels,bld,kenney,styles")
+    ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
     a = ap.parse_args()
     cases = a.cases.split(",")
     src = os.path.join(a.out, "src")
@@ -98,6 +106,37 @@ def main():
                 models.append({"file": new + ".obj", "name": name, "kind": "growable", "class": cls, "lot": [lot, lot],
                                "weight": 2, "scale": scale, "rotate_deg": 0, "enabled": True})
             json.dump({"sc3models": 1, "models": models}, open(os.path.join(d, "models.json"), "w"), indent=1)
+        elif c == "sc4":
+            if not a.sc4:
+                raise SystemExit("case sc4 needs --sc4 <SC4 plugin folder>")
+            with open(os.path.join(a.out, "sc4conv_log.txt"), "w", encoding="utf-8") as log:
+                run([SC4CONV, a.sc4, "--out", d], log)
+            # the rerun merge: edits as the page saves them (JSON.stringify, indent 2, 1.0 written as 1)
+            j = json.load(open(os.path.join(d, "models.json"), encoding="utf-8"))
+            ms = j["models"]
+            ms[0]["weight"] = 5
+            ms[1]["enabled"] = True
+            ms[2]["x_bldrender"] = {"style": "baked_raw"}
+            ms[3]["name"] = "Renamed in the page"
+            ms[4]["lot"] = [2, 2]
+            ms[5]["notes"] = "a note, é"
+
+            def ints(v):
+                if isinstance(v, float) and v.is_integer():
+                    return int(v)
+                if isinstance(v, list):
+                    return [ints(x) for x in v]
+                if isinstance(v, dict):
+                    return {k: ints(x) for k, x in v.items()}
+                return v
+            rd = os.path.join(a.out, "py", "sc4", "rerun")
+            shutil.rmtree(rd, ignore_errors=True)
+            os.makedirs(rd)
+            text = json.dumps(ints(j), indent=2, ensure_ascii=False) + "\n"
+            open(os.path.join(a.out, "py", "sc4", "rerun_old.json"), "w", encoding="utf-8", newline="\n").write(text)
+            open(os.path.join(rd, "models.json"), "w", encoding="utf-8", newline="\n").write(text)
+            with open(os.path.join(a.out, "sc4conv_rerun_log.txt"), "w", encoding="utf-8") as log:
+                run([SC4CONV, a.sc4, "--out", rd], log)
         elif c == "styles":
             # every render style and option bldrender has: clean (screen sun), stock_sharp (native zoom 4), rotation,
             # no shadow, no ground, a cell size, a model wider than its lot
@@ -122,7 +161,9 @@ def main():
             json.dump({"sc3models": 1, "models": models}, open(os.path.join(d, "models.json"), "w"), indent=1)
     for c in cases:
         dst = os.path.join(a.out, "py", c)
-        shutil.rmtree(dst, ignore_errors=True)
+        for sub in ("folder", "out"):
+            shutil.rmtree(os.path.join(dst, sub), ignore_errors=True)
+        os.makedirs(dst, exist_ok=True)
         shutil.copytree(os.path.join(src, c), os.path.join(dst, "folder"))
         with open(os.path.join(dst, "log.txt"), "w", encoding="utf-8") as log:
             run([TOOL, "pack", os.path.join(dst, "folder"), "--game", a.game, "--out", os.path.join(dst, "out")], log)
