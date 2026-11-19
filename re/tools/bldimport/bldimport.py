@@ -37,6 +37,15 @@ containers as re/tools/batgrow.py, which is proven in game):
   family line  "Key: 1406,545184782,<id>,<weight>   <name>" first in every family the class grows from
                (batgrow.class_table), BuildingCount raised
 
+Airports and seaports (task airsea, 2026-11-19): `"kind": "airport"` / `"kind": "seaport"` entries grow in airport and
+seaport zones (re/analysis/PORT_PICK.md). The target is the family of one rule of SC3ZoneLayer.ini [ZoneDeveloperRules]
+instead of a lot class (PORTS below): airport = the airpark rule 0x2207D9EE (family 3), 1x1 only, stats of the first
+plain 1x1 building member (Parked Airplane 231); seaport = the dockyard rule 0xE2D3FD92 (family 27), 1x1 or 2x2, stats
+of the first member of that size with attrib flag 0x100 clear (Seaport Crane 224, Loading Bay 240). "class" is not
+used for them (the exemplar keeps the base's LandUse 12310 / 12330). The airpark's AddFamily (SIMRCI 0x10003022)
+pushes each family pair once and ignores the Key weight, so an airport entry's weight is written as that many Key
+lines of weight 1 (at most PORT_MAX_COPIES); the dockyard's (0x1002bfec) honours the weight like the RCI rules.
+
 Ids 38000-38999, kept per model file in <folder>\sc3build\ids.json so a saved city keeps finding its buildings.
 Needs the sc3mods road mod (sc3netmod) installed: the files go into mods\netmod\overlay like bat_growables.ps1's.
 Re-runnable: each run first puts back the files it wrote last time (state.json + backups), then installs again; a
@@ -71,6 +80,19 @@ BLD_TYPE, BLD_GROUP, CS_TYPE = BG.BLD_TYPE, BG.BLD_GROUP, BG.CS_TYPE
 TEXT_TYPE, TEXT_GROUP, FAM_TYPE, FAM_GROUP = BG.TEXT_TYPE, BG.TEXT_GROUP, BG.FAM_TYPE, BG.FAM_GROUP
 CELL_M = 16.0                            # metres per lot cell (classifier page convention; BUILDING_ART.md 7)
 FRAMES = 20
+# task airsea: kind -> the [ZoneDeveloperRules] rule whose families an entry joins (re/analysis/PORT_PICK.md)
+#   rule     rule CLSID in SC3ZoneLayer.ini; its families with this LandUse get the Key line
+#   sizes    lot sizes the rule can grow: airpark filler list = SizeInCellsX 1 only (SIMRCI 0x10003022); dockyard
+#            draws any size that fits its rect (0x1002c12a), stock members are 1x1 and 2x2
+#   filler   base = a member with attrib flag 0x100 set (True) / clear (False) / either (None)
+#   copies   True = the rule ignores the Key weight: write `weight` lines of weight 1 instead
+PORTS = {
+    "airport": {"rule": 0x2207D9EE, "landuse": 12310, "sizes": (1,), "filler": None, "copies": True,
+                "label": "Airport (airpark filler)"},
+    "seaport": {"rule": 0xE2D3FD92, "landuse": 12330, "sizes": (1, 2), "filler": False, "copies": False,
+                "label": "Seaport (dockyard)"},
+}
+PORT_MAX_COPIES = 20
 
 
 class ImportError_(Exception):
@@ -145,6 +167,78 @@ def lot_of(m):
     if not 1 <= lot[0] <= 4:
         return None, "lot %dx%d: growables are 1x1 to 4x4" % tuple(lot)
     return lot[0], None
+
+
+def rule_families(pak, fams):
+    """-> {rule CLSID: [family, ...]} over every [ZoneDeveloperRules] row of SC3ZoneLayer.ini (SYS.PAK), in row
+    order, each family once (task airsea)."""
+    import syspak_parse
+    names, _, _, recs = syspak_parse.parse(pak)
+    i = [k for k, n in enumerate(names) if n.lower() == "sc3zonelayer.ini"]
+    if len(i) != 1:
+        raise ImportError_("SYS.PAK has %d SC3ZoneLayer.ini members" % len(i))
+    sec, out = None, {}
+    for ln in recs[i[0]]["lines"]:
+        s = ln.strip()
+        if s.startswith("["):
+            sec = s.lower()
+            continue
+        if sec != "[zonedeveloperrules]" or "=" not in s or s.startswith(";"):
+            continue
+        left, right = s.split("=", 1)
+        m = re.match(r"\s*\d+\s*,\s*0x([0-9a-f]+)\s*$", left, re.I)
+        if not m:
+            continue
+        lst = out.setdefault(int(m.group(1), 16), [])
+        for mm in re.finditer(r"0x81f53d09\s*,\s*0x01f58d3d\s*,\s*(\d+)", right, re.I):
+            if int(mm.group(1)) not in lst:
+                lst.append(int(mm.group(1)))
+    return out
+
+
+def port_table(game):
+    """-> {kind: {"families", "bases" {size: (id, file)}, "landuse", "copies", "label"}} for PORTS (task airsea).
+    Families: the rule's families whose LandUse is the kind's. Base per size: the first member, in family order, of
+    type 0x207EDC0E with a plain 0x6300 frame table, a name key, prop 0x65 == the LandUse, a square footprint of that
+    size and the kind's filler flag (prop 0xCA & 0x100), as batgrow.class_table picks lot-class bases."""
+    fams = BG.family_records(game.read(BUILDFAM))
+    rules = rule_families(game.read("Apps/Sys/SYS.PAK"), fams)
+    bld = BG.stock_buildings(game)
+    out = {}
+    for kind, pt in PORTS.items():
+        fl = [f for f in rules.get(pt["rule"], []) if f in fams and BG.family_landuse(fams[f]) == pt["landuse"]]
+        if not fl:
+            raise ImportError_("%s: rule 0x%08X has no family with LandUse %d" % (kind, pt["rule"], pt["landuse"]))
+        bases = {}
+        for f in fl:
+            for m in BG.KEY_RE.finditer(fams[f]):
+                if int(m.group(1)) != BLD_GROUP or int(m.group(2)) != BLD_TYPE:
+                    continue
+                bid = int(m.group(3))
+                if bid not in bld:
+                    continue
+                p = bld[bid][1]
+                fp, cs, fl_ = BG.tkb1_get(p, 0x66), BG.tkb1_get(p, 0x67), BG.tkb1_get(p, 0xCA)
+                if not fp or fp[0] != fp[2] or fp[0] not in pt["sizes"] or fp[0] in bases:
+                    continue
+                flag = bool(fl_ and fl_[0] & 0x100)
+                if not cs or cs[0] != CS_TYPE or (pt["filler"] is not None and flag != pt["filler"]):
+                    continue
+                if BG.tkb1_get(p, 0x65) != (pt["landuse"],) or BG.tkb1_get(p, 0x6D) is None:
+                    continue
+                bases[fp[0]] = (bid, bld[bid][0])
+        miss = [n for n in pt["sizes"] if n not in bases]
+        if miss:
+            raise ImportError_("%s: no stock base building for lot %s in families %s" % (
+                kind, ", ".join("%dx%d" % (n, n) for n in miss), fl))
+        out[kind] = {"families": fl, "bases": dict(sorted(bases.items())), "landuse": pt["landuse"],
+                     "copies": pt["copies"], "label": pt["label"]}
+    return out
+
+
+def target_of(e):
+    """Key of an entry's target in plan()'s table: the lot class (growable) or the kind (airport / seaport)."""
+    return e["kind"] if e["kind"] in PORTS else e["class"]
 
 
 def opts(m):
@@ -286,6 +380,7 @@ def plan(folder, game, log=print):
     models = read_models(folder)
     ids = ids_for(folder, models)
     table = BG.class_table(game) if game else None
+    ports = port_table(game) if game else None
     out, rep = [], []
     for m in models:
         f = m.get("file", "?")
@@ -304,24 +399,32 @@ def plan(folder, game, log=print):
                 n = bl
         cls = m.get("class")
         w = m.get("weight", 1)
+        kind = m.get("kind", "growable")
+        port = PORTS.get(kind) if isinstance(kind, str) else None
         if not m.get("enabled", True):
             why = "enabled is false"
-        elif m.get("kind", "growable") != "growable":
-            why = "kind %r: only growable buildings this round" % m.get("kind")
+        elif kind != "growable" and port is None:
+            why = "kind %r: only growable, airport and seaport buildings" % (kind,)
         elif not os.path.isfile(os.path.join(folder, f)):
             why = "file not in the folder"
         elif not (f.lower().endswith(".obj") or is_bld(f)):
             why = "only .obj models and .bld files"
-        elif cls is None and is_bld(f):
+        elif cls is None and is_bld(f) and port is None:
             why = "no class: its category (%s) is not a house, shop or factory, set one in models.json" % (
                 (m.get("x_bld") or {}).get("category"))
         elif lot_err:
             why = lot_err
         elif not isinstance(w, int) or not 1 <= w <= 1000:
             why = "weight %r is not a whole number from 1 to 1000" % (w,)
-        elif table is not None and cls not in table:
+        elif port is not None and port["copies"] and w > PORT_MAX_COPIES:
+            why = ("weight %d: an %s's weight is the number of copies in the airpark's list (the rule ignores Key "
+                   "weights), at most %d" % (w, kind, PORT_MAX_COPIES))
+        elif port is not None and n not in port["sizes"]:
+            why = "%s lot %dx%d: the %s grows %s" % (kind, n, n, port["label"].lower(), " and ".join(
+                "%dx%d" % (s, s) for s in port["sizes"]))
+        elif port is None and table is not None and cls not in table:
             why = "class %r is not a growable class (%s)" % (cls, ", ".join(map(str, sorted(table))))
-        elif table is not None and n not in table[cls]["bases"]:
+        elif port is None and table is not None and n not in table[cls]["bases"]:
             why = "class %d has no %dx%d lot (it has %s)" % (cls, n, n, ", ".join(
                 "%dx%d" % (s, s) for s in table[cls]["bases"]))
         else:
@@ -332,7 +435,13 @@ def plan(folder, game, log=print):
         if why:
             rep.append("skip  [%s] %s: %s" % (nid, f, why))
             continue
-        out.append({"id": nid, "file": f, "name": name, "lot": n, "class": cls, "weight": w, "model": m})
+        if port is not None:
+            cls = port["landuse"]                       # the base's LandUse; models.json "class" is not used
+        out.append({"id": nid, "file": f, "name": name, "lot": n, "class": cls, "weight": w, "model": m,
+                    "kind": kind if port is not None else "growable"})
+    if table is not None:
+        table = dict(table)
+        table.update(ports)
     return out, rep, table
 
 
@@ -439,10 +548,11 @@ def build_files(folder, game, src, log=print, force_render=False):
     bld = BG.stock_buildings(game)
     for e in entries:
         nid, n, lu = e["id"], e["lot"], e["class"]
+        tg = table[target_of(e)]
         if nid in bld:
             raise ImportError_("id %d already has a stock building exemplar" % nid)
         frames, info = render_one(folder, e["model"], n, force=force_render, log=log, game=game)
-        base, bfile = table[lu]["bases"][n]
+        base, bfile = tg["bases"][n]
         ex = BG.base_exemplar(game, base, bfile)
         tab, tmpl = stock_table_and_template(game, ex)
         nm = e["name"].encode("cp1252")
@@ -461,11 +571,18 @@ def build_files(folder, game, src, log=print, force_render=False):
             pix.append((GROUP, (nid << 16) | k, 0, p0))
             pix.append((GROUP, (nid << 16) | k, 1, anchor_payload(L, T, w, h)))
         names.append((TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
-        for f in table[lu]["families"]:
-            lines.setdefault(f, []).append(b"Key: 1406,545184782,%d,%d   %s\r\n" % (nid, e["weight"], nm))
-        rep.append("grow  [%d] %s: \"%s\", class %d (%s), %dx%d, weight %d, stats of stock %d, families %s, %s%s" % (
-            nid, e["file"], e["name"], lu, BG.CLASS_LABEL[lu], n, n, e["weight"], base,
-            ",".join(map(str, table[lu]["families"])), describe(info),
+        copies = tg.get("copies", False)
+        for f in tg["families"]:
+            if copies:                       # airpark: weight ignored by the rule, one line per copy (PORTS)
+                lines.setdefault(f, []).extend([b"Key: 1406,545184782,%d,1   %s\r\n" % (nid, nm)] * e["weight"])
+            else:
+                lines.setdefault(f, []).append(b"Key: 1406,545184782,%d,%d   %s\r\n" % (nid, e["weight"], nm))
+        what = ("%s, %dx%d, %d %s" % (tg["label"], n, n, e["weight"], "copy" if e["weight"] == 1 else "copies")
+                if copies else "%s, %dx%d, weight %d" % (
+                    tg["label"] if e["kind"] in PORTS else "class %d (%s)" % (lu, BG.CLASS_LABEL[lu]), n, n, e["weight"]))
+        rep.append("grow  [%d] %s: \"%s\", %s, stats of stock %d, families %s, %s%s" % (
+            nid, e["file"], e["name"], what, base,
+            ",".join(map(str, tg["families"])), describe(info),
             ", %d magenta px nudged" % nudged if nudged else ""))
     files = {}
     keep = set(e["id"] for e in entries)
@@ -625,9 +742,10 @@ def cmd_list(a):
     for r in rep:
         print(r)
     for e in entries:
-        base = table[e["class"]]["bases"][e["lot"]][0]
-        print("ok    [%d] %s: class %d %dx%d weight %d (stats of stock %d)" % (e["id"], e["file"], e["class"],
-                                                                         e["lot"], e["lot"], e["weight"], base))
+        base = table[target_of(e)]["bases"][e["lot"]][0]
+        kd = "class %d" % e["class"] if e["kind"] == "growable" else "%s (LandUse %d)" % (e["kind"], e["class"])
+        print("ok    [%d] %s: %s %dx%d weight %d (stats of stock %d)" % (e["id"], e["file"], kd,
+                                                                    e["lot"], e["lot"], e["weight"], base))
     return 0
 
 
@@ -697,7 +815,7 @@ def cmd_preview(a):
     rows = []
     for e in entries:
         fr, _ = render_one(folder, e["model"], e["lot"], game=game)
-        base = table[e["class"]]["bases"][e["lot"]][0]
+        base = table[target_of(e)]["bases"][e["lot"]][0]
         st = stock_building_frames(game, base)
         sz = min(z, 3)
         sc = 2 if z == 4 else 1
@@ -798,10 +916,11 @@ def cmd_check(a):
             nr, _ = BG.records(rd(OVL + "Apps/Res/Text/%s/%s" % (lang, NAMES)))
             if (TEXT_GROUP, nid, TEXT_TYPE) not in nr:
                 errs.append("no name in %s" % lang)
-        for f in table[e["class"]]["families"]:
-            m = re.search(rb"Key:\s*1406,545184782,%d,(\d+)" % nid, fams[f])
-            if not m or int(m.group(1)) != e["weight"]:
-                errs.append("family %d line" % f)
+        tg = table[target_of(e)]
+        for f in tg["families"]:
+            ws = [int(mm.group(1)) for mm in re.finditer(rb"Key:\s*1406,545184782,%d,(\d+)" % nid, fams[f])]
+            if ws != ([1] * e["weight"] if tg.get("copies") else [e["weight"]]):
+                errs.append("family %d line(s) %r" % (f, ws))
             mc = re.search(rb"BuildingCount:\s*(\d+)", fams[f])
             keys = [mm for mm in BG.KEY_RE.finditer(fams[f])]
             if not mc or int(mc.group(1)) > len(keys):

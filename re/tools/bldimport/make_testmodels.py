@@ -8,6 +8,15 @@ Writes, in OBJ metres with Y up and the front facing +Z (bldrender.py axes):
   house_tex.obj/.mtl      1x1 brick house, textured (house_tex_wall.png, house_tex_front.png, house_tex_roof.png)
   block_2x2.obj/.mtl      2x2 three-storey block with a flat roof, rooftop box and two trees
   models.json             the classifier page's format (sc3models 1), classes 3300 / 3300 / 3900
+
+    py -3.12 re/tools/bldimport/make_testmodels.py --ports <out folder>      (task airsea, 2026-11-19)
+
+Writes the airport / seaport test models instead (bldimport kinds airport / seaport):
+  fuel_depot.obj/.mtl     1x1 airport: two white tanks with red bands on a concrete pad, a blue pump house
+  container_stack.obj     1x1 seaport: stacked shipping containers (red, blue, yellow, green) on concrete
+  warehouse_2x2.obj       2x2 seaport: a teal shed with a white roof stripe, a yellow gantry and containers
+  models.json             kinds airport / seaport / seaport, plus two entries bldimport must refuse (airport_2x2.obj,
+                          fuel_depot_25.obj: an airport 2x2 and an airport with weight 25)
 """
 import json
 import math
@@ -237,7 +246,123 @@ def block_2x2(folder):
     o.write(folder)
 
 
+def cylinder(o, x, z, r, y0, y1, sides=12, mat_side=None, mat_top=None):
+    """Upright prism with `sides` faces (counter-clockwise from outside) and a flat top."""
+    pts = [(x + r * math.cos(2 * math.pi * k / sides), z + r * math.sin(2 * math.pi * k / sides)) for k in range(sides)]
+    if mat_side:
+        o.cur = mat_side
+    for k in range(sides):
+        (ax, az), (bx, bz) = pts[k], pts[(k + 1) % sides]
+        o.quad([(bx, y0, bz), (ax, y0, az), (ax, y1, az), (bx, y1, bz)])
+    if mat_top:
+        o.cur = mat_top
+    for k in range(sides):
+        (ax, az), (bx, bz) = pts[k], pts[(k + 1) % sides]
+        o.tri([(bx, y1, bz), (ax, y1, az), (x, y1, z)])
+
+
+def container(o, x, z, y, along_x, mat):
+    """One 12 x 2.4 x 2.6 m shipping container, its long side along X or Z, bottom at y."""
+    o.cur = mat
+    hx, hz = (6.0, 1.2) if along_x else (1.2, 6.0)
+    o.box(x - hx, y, z - hz, x + hx, y + 2.6, z + hz, mats={"ny": None})
+
+
+def pad(o, half_x, half_z, kd=(0.58, 0.58, 0.56)):
+    o.mat("pad", kd)
+    o.box(-half_x, 0, -half_z, half_x, 0.08, half_z, mats={"ny": None})
+
+
+def fuel_depot(folder, name="fuel_depot"):
+    o = Obj(name)
+    pad(o, 7.6, 7.6)
+    o.mat("tank", (0.92, 0.92, 0.90))
+    o.mat("band", (0.78, 0.14, 0.12))
+    for x, z in ((-3.4, -2.6), (3.0, -2.8)):
+        cylinder(o, x, z, 2.7, 0.08, 3.0, mat_side="tank", mat_top="tank")
+        cylinder(o, x, z, 2.72, 3.0, 3.8, mat_side="band", mat_top="band")
+        cylinder(o, x, z, 2.7, 3.8, 6.2, mat_side="tank", mat_top="tank")
+    o.mat("pump", (0.18, 0.36, 0.70))
+    o.box(-2.0, 0.08, 2.6, 2.6, 3.0, 6.2, mats={"ny": None})
+    o.mat("pumproof", (0.86, 0.86, 0.84))
+    o.box(-2.3, 3.0, 2.3, 2.9, 3.3, 6.5, mats={"ny": None})
+    o.mat("pipe", (0.45, 0.45, 0.47))
+    o.box(-3.6, 1.0, -0.2, 3.2, 1.5, 0.3, mats={"ny": None})
+    o.write(folder)
+
+
+def container_stack(folder):
+    o = Obj("container_stack")
+    pad(o, 7.8, 7.8)
+    for name, kd in (("red", (0.74, 0.16, 0.12)), ("blue", (0.14, 0.30, 0.66)), ("yellow", (0.88, 0.70, 0.12)),
+                     ("green", (0.16, 0.52, 0.28))):
+        o.mat(name, kd)
+    container(o, 0.0, -4.4, 0.08, True, "red")
+    container(o, 0.0, -1.6, 0.08, True, "blue")
+    container(o, 0.0, 1.2, 0.08, True, "yellow")
+    container(o, 0.0, -3.0, 2.68, True, "green")
+    container(o, 0.0, -0.2, 2.68, True, "red")
+    container(o, 0.0, -1.6, 5.28, True, "blue")
+    o.write(folder)
+
+
+def warehouse_2x2(folder, name="warehouse_2x2"):
+    o = Obj(name)
+    pad(o, 15.6, 15.6)
+    o.mat("shed", (0.16, 0.50, 0.52))
+    o.box(-13.0, 0.08, -12.0, 13.0, 8.0, 2.0, mats={"ny": None, "py": None})
+    o.mat("roof", (0.62, 0.64, 0.66))
+    o.mats.setdefault("gable2", {"kd": (0.16, 0.50, 0.52), "tex": None})
+    gable_roof(o, -13.0, 13.0, -12.0, 2.0, 8.0, 10.6, 0.4, "roof", "gable2")
+    o.mat("stripe", (0.95, 0.95, 0.93))
+    o.box(-13.2, 6.6, 2.0, 13.2, 7.4, 2.12, mats={"ny": None, "nz": None})
+    o.mat("doors", (0.30, 0.32, 0.34))
+    for x in (-9.0, -2.0, 5.0):
+        o.box(x, 0.08, 2.0, x + 4.0, 5.2, 2.1, mats={"ny": None, "nz": None})
+    o.mat("gantry", (0.92, 0.72, 0.10))
+    for x in (-11.0, 11.0):
+        o.box(x - 0.5, 0.08, 6.0, x + 0.5, 12.0, 7.0, mats={"ny": None})
+        o.box(x - 0.5, 0.08, 13.0, x + 0.5, 12.0, 14.0, mats={"ny": None})
+    o.box(-11.5, 12.0, 6.0, 11.5, 13.2, 14.0, mats={"ny": None})
+    for name, kd in (("red", (0.74, 0.16, 0.12)), ("blue", (0.14, 0.30, 0.66)), ("green", (0.16, 0.52, 0.28))):
+        o.mat(name, kd)
+    container(o, -6.0, 8.4, 0.08, True, "red")
+    container(o, 6.4, 8.4, 0.08, True, "blue")
+    container(o, -6.0, 11.4, 0.08, True, "green")
+    container(o, 6.4, 11.4, 0.08, True, "red")
+    container(o, 0.2, 9.9, 2.68, True, "blue")
+    o.write(folder)
+
+
+def ports(out):
+    """Task airsea: the airport / seaport test models + their models.json."""
+    os.makedirs(out, exist_ok=True)
+    fuel_depot(out)
+    container_stack(out)
+    warehouse_2x2(out)
+    warehouse_2x2(out, "airport_2x2")
+    fuel_depot(out, "fuel_depot_25")
+    common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True}
+    models = {"sc3models": 1, "generator": "make_testmodels.py --ports", "models": [
+        dict(common, file="fuel_depot.obj", name="Test fuel depot", kind="airport", lot=[1, 1], weight=5,
+             height_m=6.2, notes="airport 1x1: 5 copies in the airpark filler list (stock has 5 buildings there)"),
+        dict(common, file="container_stack.obj", name="Test container stack", kind="seaport", lot=[1, 1],
+             weight=10, height_m=7.9, notes="seaport 1x1, stats of Seaport Crane 224"),
+        dict(common, file="warehouse_2x2.obj", name="Test harbour warehouse", kind="seaport", lot=[2, 2],
+             weight=10, height_m=13.2, notes="seaport 2x2, stats of Seaport Loading Bay 240"),
+        dict(common, file="airport_2x2.obj", name="Refused: airport 2x2", kind="airport", lot=[2, 2], weight=1,
+             height_m=13.2, notes="the airpark grows only 1x1 fillers: bldimport skips this entry"),
+        dict(common, file="fuel_depot_25.obj", name="Refused: airport weight 25", kind="airport", lot=[1, 1],
+             weight=25, height_m=6.2, notes="more copies than PORT_MAX_COPIES: skipped")]}
+    with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
+        json.dump(models, fh, indent=2)
+    print("wrote port test models to", out)
+    return 0
+
+
 def main(argv):
+    if len(argv) == 2 and argv[0] == "--ports":
+        return ports(argv[1])
     if len(argv) != 1:
         print(__doc__)
         return 2

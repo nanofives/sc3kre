@@ -8,6 +8,8 @@
 #
 #   test-slot bash re/tools/bldimport/webtest/run_all.sh <work dir> <pristine game tree> <stage\kits> [<SC4 .zip> <the same SC4 download unpacked> [<folder with more SC4 zips>]]
 #
+# airsea (2026-11-19g): golden case ports (kinds airport / seaport: make_testmodels.py --ports + a .bld as a seaport) in
+# golden_setup / golden.mjs, and the page installing it (pagetest.mjs ports).
 # sc4pass2 (2026-11-19f): the 6th argument (stage\st_packs\sc4: Global Office Center, DiegoDL, I-M zips) adds the
 # tower and the lot-only packs: sc4_packs_setup.py + sc4_packs.mjs, and the page on a lot-only zip.
 #
@@ -27,16 +29,16 @@ here="$(cd "$(dirname "$0")" && pwd)"
 work="$1"; game="$2"; kits="$3"; sc4zip="${4:-}"; sc4dir="${5:-}"; sc4packs="${6:-}"
 py="${PY:-$HOME/bin/py -3.12}"
 packs="${SC3PACK_PACKS:-$here/../../../../stage/st_packs}"
-steps=18; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
+steps=19; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
 [ -n "${BLD1999:-}" ] && steps=$((steps + 5))
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
 step() { n=$((n + 1)); local name="$1"; shift; if "$@"; then echo "[$n/$steps] $name PASS"; else echo "[$n/$steps] $name FAIL"; bad=$((bad + 1)); fi; }
-step "golden_setup (bldimport.py pack, 4 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
-step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles --frames
+step "golden_setup (bldimport.py pack, 5 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
+step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles,ports --frames
 step "install_golden.mjs (install, re-install, restore)" node "$here/install_golden.mjs" --golden "$work" --game "$game" --case kenney
 step "zip_golden.mjs (.zip route)" node "$here/zip_golden.mjs" --golden "$work" --game "$game" --case kenney
-for c in kenney bld styles; do
+for c in kenney bld styles ports; do
   step "pagetest.mjs $c (the page in headless Chrome)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case "$c"
 done
 step "bld_js_check.mjs (.bld reader, game's Buildings)" bash -c "$py '$here/../bldfile.py' js-expect --out '$work/bldexp.json' '$game/Buildings' >/dev/null && node '$here/../bld_js_check.mjs' '$work/bldexp.json' '$game'/Buildings/*.bld"

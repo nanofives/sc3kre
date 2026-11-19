@@ -12,6 +12,8 @@ Writes into <dir>:
   py\<case>\log.txt      the tool's report
 golden.mjs runs bldweb.js over src\<case> against the same game and compares every byte.
 
+Case ports (task airsea, 2026-11-19): make_testmodels.py --ports plus a .bld file, kinds airport / seaport.
+
 Case sc4 (task sc4web, needs --sc4 <SC4 plugin folder>): src\sc4\ is sc4conv.py's output for that folder (the
 models folder the Python route installs from), packed like the others. Also py\sc4\rerun_old.json (that models.json
 after edits as the page saves them: JSON.stringify layout, whole floats as ints) and py\sc4\rerun\ (sc4conv.py run
@@ -61,7 +63,7 @@ def main():
     ap.add_argument("--game", required=True)
     ap.add_argument("--kits", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--cases", default="testmodels,bld,kenney,styles")
+    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports")
     ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
     ap.add_argument("--bld1999", help="folder of 1999 Building Architect .bld files for case bld1999 (sc3compat-a)")
     ap.add_argument("--bldside", help="folder of .bld files + the bld_frames.ixf render_bld.ps1 wrote, for case bldside")
@@ -74,6 +76,15 @@ def main():
         os.makedirs(d)
         if c == "testmodels":
             subprocess.run([sys.executable, MAKE, d], check=True, capture_output=True)
+        elif c == "ports":
+            # task airsea: kinds airport / seaport (make_testmodels.py --ports: fuel depot 1x1 airport x5 copies,
+            # container stack 1x1 + warehouse 2x2 seaport, two refused entries) + a .bld file as a 2x2 seaport
+            subprocess.run([sys.executable, MAKE, "--ports", d], check=True, capture_output=True)
+            j = json.load(open(os.path.join(d, "models.json"), encoding="utf-8"))
+            shutil.copy2(os.path.join(a.game, "Buildings", "North Shore Cannery.bld"), d)
+            j["models"].append({"file": "North Shore Cannery.bld", "name": "Cannery dock", "kind": "seaport",
+                                "weight": 3, "enabled": True, "x_bld": {"art": "preview"}})
+            json.dump(j, open(os.path.join(d, "models.json"), "w"), indent=1)
         elif c == "bld":
             models = []
             for f, extra in BLD:
