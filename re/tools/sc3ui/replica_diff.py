@@ -13,6 +13,12 @@ Edges: every 1 px line of the group grooves, plates and title bar is found in bo
 position compared, px. Text: per label, the ink box (left, top, right, bottom) in both, px.
 Writes side_by_side.png, diff_dE.png (heat map, 0..10), text_overlay.png (red = game ink, blue = ours, purple = both),
 replica.png, report.json.
+
+sc3ui3 (round 2026-11-19b) adds ELEMENTS: the pieces the owner named (play, stop, close X, the three sliders, the
+dropdown arrow, the volume steps, the dropdown text). Per element: share of pixels identical to the game (exact RGB),
+mean and max CIEDE2000, and for text the ink IoU against the game's ink. Zoomed side-by-sides (game | ours | dE heat,
+x8 nearest) go to <out>/elements/. --query appends a query string to the page URL (?gamefont=1&game=... renders the
+replica with the game's own fonts through sc3font.js, a local test hook).
 """
 import argparse, json, os, pathlib, subprocess, tempfile
 import numpy as np
@@ -62,6 +68,34 @@ TEXT = [  # (name, box, game ink colour)
 ]
 LINES = ['7b8aff', 'fff3ff', 'adb6ff']
 # radio / check marks and the combo, scroll and strip button art: drawn, not part of a face colour
+# (name, kind, x0, y0, x1, y1): the owner's 2026-11-19 list, dialog coordinates measured off R3 (verify/sc3ui3)
+ELEMENTS = [
+    ('close X', 'bitmap', 449, 9, 472, 30),
+    ('play', 'bitmap', 414, 313, 438, 338),
+    ('stop', 'bitmap', 438, 313, 462, 338),
+    ('slider 1', 'bitmap', 378, 67, 464, 87),
+    ('slider 2', 'bitmap', 378, 91, 464, 111),
+    ('slider 3', 'bitmap', 378, 115, 464, 135),
+    ('dropdown arrow', 'bitmap', 178, 316, 194, 332),
+    ('dropdown box', 'bitmap', 18, 314, 177, 334),
+    ('volume steps', 'bitmap', 386, 50, 454, 60),
+    ('checkbox on', 'bitmap', 222, 70, 235, 83),
+    ('checkbox off', 'bitmap', 222, 142, 235, 155),
+    ('list checkbox', 'bitmap', 223, 182, 236, 195),
+    ('radio on', 'bitmap', 17, 89, 29, 101),
+    ('radio off', 'bitmap', 17, 107, 29, 119),
+    ('scroll up', 'bitmap', 453, 178, 469, 194),
+    ('scroll thumb', 'bitmap', 453, 194, 469, 210),
+    ('scroll track', 'bitmap', 453, 210, 469, 292),
+    ('scroll down', 'bitmap', 453, 292, 469, 308),
+    ('OK button', 'bitmap', 432, 434, 474, 466),
+    ('dropdown text', 'text', 19, 315, 176, 333),
+    ('title text', 'text', 5, 5, 240, 34),
+    ('label text', 'text', 8, 44, 140, 64),
+    ('radio label', 'text', 30, 86, 140, 104),
+    ('list row', 'text', 238, 180, 350, 198),
+]
+TEXT_COL = {'dropdown text': '#31347b', 'title text': '#dedfff', 'label text': '#7b7db5', 'radio label': '#31347b', 'list row': '#31347b'}
 MARKS = [(16, 86, 32, 296), (219, 66, 237, 160), (221, 180, 238, 306), (16, 362, 33, 398), (176, 312, 196, 336),
          (452, 178, 470, 308), (440, 312, 468, 337), (378, 66, 466, 140)]
 
@@ -110,11 +144,11 @@ def de2000(l1, l2):
     return np.sqrt((dLp / Sl) ** 2 + (dCp / Sc) ** 2 + (dHp / Sh) ** 2 + Rt * (dCp / Sc) * (dHp / Sh))
 
 
-def render(html, png):
+def render(html, png, query=''):
     prof = tempfile.mkdtemp(prefix='rep')
-    subprocess.run([CHROME, '--headless=new', '--hide-scrollbars', '--force-device-scale-factor=1', '--user-data-dir=' + prof,
+    subprocess.run([CHROME, '--headless=new', '--force-device-scale-factor=1', '--user-data-dir=' + prof,
                     '--allow-file-access-from-files', '--blink-settings=preferredColorScheme=1', '--virtual-time-budget=20000', '--window-size=%d,%d' % (W, H),
-                    '--screenshot=' + str(png), pathlib.Path(html).resolve().as_uri()], capture_output=True, timeout=180)
+                    '--screenshot=' + str(png), pathlib.Path(html).resolve().as_uri() + query], capture_output=True, timeout=180)
     return np.asarray(Image.open(png).convert('RGB'), float)[:H, :W]
 
 
@@ -190,15 +224,46 @@ def match_lines(ref, rep):
     return res
 
 
+def element_report(ref, rep, dE, folder):
+    folder.mkdir(parents=True, exist_ok=True)
+    res = []
+    for name, kind, x0, y0, x1, y1 in ELEMENTS:
+        g, o, d = ref[y0:y1, x0:x1], rep[y0:y1, x0:x1], dE[y0:y1, x0:x1]
+        e = dict(name=name, kind=kind, box=[x0, y0, x1, y1], dE_mean=round(float(d.mean()), 2), dE_max=round(float(d.max()), 2),
+                 identical_pct=round(100.0 * float((np.abs(g - o).max(2) == 0).mean()), 1))
+        if kind == 'text':
+            col = TEXT_COL[name]
+            mg, mo = text_mask(ref, (x0, y0, x1, y1), col), text_mask(rep, (x0, y0, x1, y1), col)
+            best = (0.0, 0, 0)                     # the same ink, ignoring placement: best IoU over shifts of up to 3 px
+            for dy in range(-3, 4):
+                for dx in range(-3, 4):
+                    sh = np.roll(np.roll(mo, dy, 0), dx, 1)
+                    v = float((mg & sh).sum()) / max(float((mg | sh).sum()), 1.0)
+                    if v > best[0]: best = (v, -dx, -dy)
+            e.update(ink_iou=round(float((mg & mo).sum()) / max(float((mg | mo).sum()), 1.0), 3),
+                     ink_iou_aligned=round(best[0], 3), offset=[best[1], best[2]],
+                     ink_px_game=int(mg.sum()), ink_px_ours=int(mo.sum()))
+        res.append(e)
+        z = 8 if (x1 - x0) <= 100 else 4
+        heat = np.clip(d / 10, 0, 1)
+        hm = np.stack([255 * heat, 255 * (1 - np.abs(heat - .5) * 2) * .6, 255 * (1 - heat) * .35], -1)
+        gap = np.full((y1 - y0, 2, 3), 255.0)
+        strip = np.concatenate([g, gap, o, gap, hm], 1).astype(np.uint8)
+        im = Image.fromarray(strip)
+        im.resize((im.width * z, im.height * z), Image.NEAREST).save(folder / (name.replace(' ', '_') + '.png'))
+    return res
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--ref', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--html', default=str(HERE / 'replica_prefs.html'))
+    ap.add_argument('--query', default='', help='appended to the page URL, e.g. ?gamefont=1&game=file:///...')
     a = ap.parse_args()
     out = pathlib.Path(a.out).resolve(); out.mkdir(parents=True, exist_ok=True)
     ref = np.asarray(Image.open(a.ref).convert('RGB'), float)[:H, :W]
-    rep = render(a.html, out / 'replica.png')
+    rep = render(a.html, out / 'replica.png', a.query)
     L1, L2 = srgb_to_lab(ref), srgb_to_lab(rep)
     dE = de2000(L1, L2)
     # text pixels (either image) are not part of the colour regions
@@ -253,9 +318,10 @@ def main():
                               ink_mass_ratio=round(ink_mass(rep, box, col) / max(ink_mass(ref, box, col), 1e-9), 3)))
         else:
             texts.append(dict(name=name, game=br, ours=bp))
+    elements = element_report(ref, rep, dE, out / 'elements')
     edges = match_lines(lines(ref), lines(rep))
     found = [e for e in edges if e['d_pos'] is not None]
-    rep_j = dict(regions=regions, text=texts, edges=edges,
+    rep_j = dict(regions=regions, text=texts, edges=edges, elements=elements,
                  summary=dict(
                      frame_panels_dE_mean_max=max(r['dE_mean'] for r in regions if r['kind'] == 'flat' or r['name'] == 'frame clouds, all'),
                      flat_dE_px_max=max(r['dE_px'] for r in regions if r['kind'] == 'flat'),
@@ -287,6 +353,13 @@ def main():
         if e['d_pos'] is None or abs(e['d_pos']) > 1 or abs(e['d_start']) > 1 or abs(e['d_end']) > 1:
             print('   off: %s %s at %d span %s -> %s' % (e['colour'], e['orient'], e['at'], e['span'],
                   'not found' if e['d_pos'] is None else 'pos %+d start %+d end %+d' % (e['d_pos'], e['d_start'], e['d_end'])))
+    print('elements (the owner list):')
+    for e in elements:
+        if e['kind'] == 'bitmap':
+            print('  %-16s identical px %6.1f%%   dE mean %5.2f  max %5.2f' % (e['name'], e['identical_pct'], e['dE_mean'], e['dE_max']))
+        else:
+            print('  %-16s ink IoU %.3f (aligned %.3f, ours at game %+d,%+d)   ink px game %d ours %d' % (
+                e['name'], e['ink_iou'], e['ink_iou_aligned'], e['offset'][0], e['offset'][1], e['ink_px_game'], e['ink_px_ours']))
     print('summary:', json.dumps(s))
 
 

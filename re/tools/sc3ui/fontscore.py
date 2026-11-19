@@ -59,6 +59,9 @@ ELEMENTS = {
                [x / 2 for x in range(36, 53)]),
     'name':   ('MAIN10.FBF', "Camiones O'Plenty Industrial Media Muy bajo", SANS, [600, 700, 800],
                [x / 2 for x in range(22, 33)]),
+    # sc3ui3 (round 2026-11-19b): the dropdown's own strings (R3 "Resolucion de pantalla" and its open list)
+    'combo':  ('SYSTEM9.FBF', '800x600 NVIDIA GeForce RTX 640x480 1024x768 1152x864 1280x1024', SANS, [400, 500, 600, 700],
+               [x / 2 for x in range(18, 29)]),
 }
 ROW_H = 40
 PAD = 8

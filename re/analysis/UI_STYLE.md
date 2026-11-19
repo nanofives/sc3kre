@@ -1,4 +1,4 @@
-# SC3U UI style, measured (sc3ui round 2026-11-18f, precision pass sc3ui2 round 2026-11-18g)
+# SC3U UI style, measured (sc3ui round 2026-11-18f, precision pass sc3ui2 round 2026-11-18g, game bitmaps + fonts sc3ui3 round 2026-11-19b)
 
 Owner, 2026-11-18: every page we publish (gallery, building guide, importer, future pages) uses the UI elements of the
 base game. This file is the measured palette behind `docs/assets/sc3ui.css`. Every value below was read off a pixel of a
@@ -237,6 +237,103 @@ the stylesheet. Rendered in headless Chrome at 480x472 and compared pixel for pi
 | label ink mass, ours / game | MAIN9 labels 0.91..0.98, title 1.14, combo 1.50 (SYSTEM9 is a 1 px regular face) | same weight |
 | close box, OK button (game bitmaps, drawn in CSS here) | 3.03, 2.00 | |
 
+## Game bitmaps (sc3ui3, round 2026-11-19b)
+
+Owner, 2026-11-19: "the play and stop buttons should bring their texture, slider texture is different, X button is also
+different, dropdown arrow is wrong". His call: these pieces are the game's own bitmaps, published in
+`docs/assets/sc3ui/` (risk accepted, memory `project-sc3kre-publish-policy`). Nothing else from the game is published.
+
+Found by decoding every UI record of `Apps\Res\UI\Shared\*.IXF` (710 images, type `0x62b9da24`) and matching each
+against a native 800x600 grab of Preferencias (`verify/sc3ui3/g3_prefs.png`, identical to R3: 0 pixels differ).
+Written by `re/tools/sc3ui/uiart.py --game <install> --out docs/assets/sc3ui` (byte-stable PNGs, `--check` compares).
+565 is expanded by bit replication (`r<<3|r>>2`, `g<<2|g>>4`), the colours the game's screen shows (`#7b92ff`).
+
+| piece | file | record (group:instance) | size | where in R3 (dialog px) | match against the grab |
+|---|---|---|---|---|---|
+| close X | `close.png` | SYS.IXF `82b9b75b:453ba1f4` | 92x23, 4 frames of 23x23 | rows 2..22 of a frame at (449, 9) | 432 of 483 px identical, the other 51 (drop shadow) within 4/255 |
+| play | `play.png` | SYS.IXF `82b9b75b:82fab6d2` | 96x25, 4 frames of 24x25 | (414, 313) | 0 px differ |
+| stop | `stop.png` | SYS.IXF `82b9b75b:22fab6de` | 96x25, 4 frames of 24x25 | (438, 313) | 0 px differ |
+| dropdown arrow | `combo_arrow.png` (normal), `_disabled`, `_pressed`, `_hover` | SYS.IXF `82b9b75b:62b99d31` | 64x16, 4 frames of 16x16, one file each | (178, 316), 1 px right of the box | 0 px differ |
+| slider track | `slider_track.png` | SYS.IXF `82b9b75b:c2b99e09` columns 0..59 | 60x20 | left cap at (378, 67), track to 443 | 0 px differ |
+| slider knob | `slider_knob.png` | the same record, columns 60..79 | 20x20 | (444, 67), (444, 91), (444, 115) at 100% | 0 px differ |
+| volume steps | `volume.png` | `22DEC92D_OtherCtrls.ixf` `22dec92d:00000001` | 68x10 | (386, 50) | 0 px differ |
+| check box | `checkbox.png` | SYS.IXF `82b9b75b:c2d6e93a` | 104x13, 8 frames of 13x13 | (222, 70) "Musica" on, (222, 142) off, (223, 182) list | 0 px differ |
+| radio button | `radio.png` (RGBA: the magenta key is transparent) | SYS.IXF `82b9b75b:0000000a` | 96x12, 8 frames of 12x12 | (17, 89) on, (17, 107) off | 0 px differ outside the key |
+| OK button | `ok.png` | SYS.IXF `82b9b75b:a2defd9a` | 168x32, 4 frames of 42x32 | (432, 434) | 0 px differ |
+| scroll bar | `scroll_up.png`, `_up_pressed`, `scroll_thumb.png`, `scroll_track.png`, `scroll_down.png`, `_down_pressed`, and the horizontal `scroll_left`, `_right`, `_hthumb`, `_htrack` (+ pressed) | SYS.IXF `82b9b75b:e2b99e01` | 192x16, 12 frames of 16x16, one file each | up (453, 178), thumb (453, 194), track 210..291, down (453, 292) | 0 px differ |
+
+**Frame order** of a 4-frame button strip, observed in the running game with posted input (`verify/sc3ui3/states.py`,
+`disabled.py`, every frame 0 px different from the grab): **0 disabled** (Musica unticked greys play and stop),
+**1 normal**, **2 pressed** (mouse down), **3 hover**. The dropdown arrow keeps frame 1 under the mouse (no hover
+change in the game) and shows frame 2 while pressed. The CodeView enum `cIGZWinBtn::tImageIdx` names 10 image slots
+(`kUpOnNormal` .. `kDownOffHilite`, `cvdump_sc3u.txt` type 0x2f96). How ImageSetup maps a 4-frame strip onto them was
+not read `[UNCERTAIN]`: the order above is the observed one.
+
+**Check box and radio frames** (second owner list, 2026-11-19, observed the same way, 0 px differ each): 0 on, 1 off,
+2 on + hover, 3 off + hover, 4 on + pressed, 5 off + pressed, 6 on + disabled (the music list's ticks with Musica
+unticked), 7 off + disabled (by the pairing, not seen in Preferencias). The radio's 6 and 7 are by the same layout
+`[UNCERTAIN]`: no disabled radio was found. **Scroll bar frames:** 0/1 left arrow normal/pressed, 2 horizontal thumb,
+3 horizontal track, 4/5 right arrow, 6/7 up arrow, 8 vertical thumb, 9 vertical track (16 identical rows, tiled),
+10/11 down arrow. The arrows show no hover change, and a held arrow scrolls the list (posted press). **OK:** 1 normal,
+2 pressed, 3 hover observed, 0 disabled by the 4-frame order.
+
+The slider is one bitmap: a left cap (column 0), 58 identical track columns, a right cap (column 59), then the knob.
+The game draws the cap at the control's left, the track across, the knob at the value. The volume steps are one
+bitmap too. The bitmaps carry no key colour: their background is the blue panel they sit on.
+
+How sc3ui.css uses them: every `input[type=checkbox]` and `input[type=radio]` on every page is the game's strip
+(`:checked`, `:hover`, `:active`, `:disabled` pick the frame, same 13 / 12 px footprint as before). Every scrolling box
+gets the game's scroll bar through `::-webkit-scrollbar` (one arrow at each end, pressed frame while held, track tiled,
+thumb exact at 16 px and with both ends kept when longer). Chrome draws a thumb at least 17 px long, one row more than
+the game's 16. Browsers without `::-webkit-scrollbar` get `scrollbar-color` in the game's colours. An element with its
+own `scrollbar-width` (the gallery and guide's thin tab strip) keeps the browser's bar. `button.ui-ok` is the OK button.
+`button.ui-close`, `button.ui-play`, `button.ui-stop`, `button.ui-ok` show one frame of the strip
+(`:disabled` 0, normal 1, `:active` 2, `:hover` 3). `select` draws its groove with background layers so the arrow sits
+outside the box, as in the game. `input[type=range]` paints the track with `border-image` (1 px caps, middle stretched)
+and the knob as the thumb. `.ui-volume` is the steps. `image-rendering: pixelated`: exact at `--ui-scale` 1, at 1.25
+every fourth game pixel is drawn twice. The importer carries them inline as data: URIs (`sync_css.py`).
+
+Replica (`replica_diff.py`, ELEMENTS), share of pixels identical to the game, main -> sc3ui3: close X 1.9% -> 89.4%,
+play 10.2% -> 100%, stop 10.0% -> 100%, sliders 60.2% -> 100%, dropdown arrow 0.4% -> 100%, volume steps 46.0% -> 100%.
+Second list: check box 49.7% / 65.7% / 8.9% (on / off / list) -> 100%, radio 33.3% / 43.1% -> 100%, scroll up 10.2% ->
+100%, thumb 4.7% -> 100%, track 93.8% -> 98.9% (Chrome's 17 px thumb covers one track row), down 2.0% -> 100%,
+OK 26.4% -> 100%.
+
+## Dropdown text (sc3ui3)
+
+The dropdown draws SYSTEM9 (`ctrlmgr_setup` slot 0 / 0xb, fontmap IoU 1.000), navy `#31347b`, ink from 3 px inside the
+box. In the old replica the arrow sat inside the box and cut the text ("RTX" lost). Now it sits outside.
+Free face for that role, scored on the dropdown's own strings (`fontscore.py --el combo`, 2,112 configurations):
+Istok Web stays the best free family. 13.0 px with -1.06 px spacing scores 0.693, the current 11.5 px with -0.34 px
+0.673. The gain comes from the digit-heavy strings and costs 1 px of spacing per letter, so `--ui-type-row` keeps
+11.5 px (the budget rows chose it). With the game folder chosen, the importer draws it with SYSTEM9 itself (below).
+
+## Game fonts at run time (importer only, sc3ui3)
+
+Owner call: the game's font, but never published. `re/tools/bldimport/sc3font.js` reads the FBF files of the player's
+own game folder (`Apps\Res\Text\<lang>\`, all 7 language folders hold byte-identical fonts, file name case varies)
+when the importer is given that folder, builds TrueType fonts in memory and switches the `--ui-type-*` tokens to them.
+Without a game folder the page keeps the free fonts. Nothing is stored.
+
+- One font pixel = 64 units at 1024 per em, so 16 px draws one font pixel per CSS px. Ink pixels become rectangles,
+  partial coverage (TITLE9, TITLE12, SERIF17) a centred full-height bar whose width is the coverage in 1/64 steps.
+  Baseline = the row under 'H' (MAIN9 12, MAIN10 13, SYSTEM9 11, TITLE9 15, TITLE12 19, SERIF17 23 px from the cell top).
+- Chrome on Windows draws ordinary web fonts with DirectWrite, which spreads every pixel into its neighbours (measured:
+  ink 0.882, 0.098 into each neighbour, also with a gasp table that asks for no anti-aliasing). So every glyph is also a
+  COLR v1 glyph painted in the text colour (palette index 0xFFFF): Chrome then draws it through its own FreeType
+  rasteriser, whose coverage of a pixel-aligned shape is exact, and CSS `color` still applies.
+- Squares of area c do not draw coverage c on that path (a curve with gaps: 0.36, then 0.56, then 0.78). Bars do,
+  linearly (width k/64 -> coverage k/64). `calibrate()` measures this in a canvas at run time and picks the width per
+  level, so a browser with another curve is corrected too.
+- The font pixel snaps to whole device pixels (`--ui-gpx`): at `--ui-scale` 1.25 on a 100% screen the text is the
+  game's own size, at 200% two device pixels per font pixel. Crisp also needs the text origin on a whole pixel.
+
+`webtest/sc3font_check.py` (a step of `run_all.sh`): 12 of 12. MAIN9, MAIN10, SYSTEM9: 0 pixels differ from fbf.py's
+rendering of the same strings (max coverage error 0.000). TITLE9, TITLE12, SERIF17: coverage within 0.012 on every
+pixel. Navy text: every ink pixel exactly `#31347b`. The replica with the game fonts
+(`replica_prefs.html?gamefont=1&game=<install URL>`): title, labels, radio labels, list rows and dropdown text carry the
+game's ink pixel for pixel (aligned IoU 1.000, ink ratio 1.00), placed within 1 px by the stylesheet's line flow.
+
 ## Dark variant
 
 The game has no dark theme. The dark tokens reuse the game's own darker colours: page `#10142e` and panels `#1c2152`
@@ -249,6 +346,8 @@ The game has no dark theme. The dark tokens reuse the game's own darker colours:
 1. Link `docs/assets/sc3ui.css` with a relative path, or inline it between the `sc3ui.css begin/end` markers when the
    page must work outside `docs/` (the importer: `re/tools/bldimport/sync_css.py`).
 2. Build with the components (`ui-window`, `ui-titlebar`, `ui-panel`, `ui-group`, `ui-btn`, `ui-plate`, `ui-chip`,
-   `ui-infobar`, `ui-ticker`, `ui-field`, `ui-progress`, `ui-log`, `ui-table`, `ui-card`, `ui-lightbox`), and only the
-   tokens for colours. No game bitmaps, icons or extracted UI art: everything is CSS.
+   `ui-infobar`, `ui-ticker`, `ui-field`, `ui-progress`, `ui-log`, `ui-table`, `ui-card`, `ui-lightbox`, `ui-close`,
+   `ui-play`, `ui-stop`, `ui-volume`), and only the tokens for colours. The only game bitmaps are the ones in
+   `docs/assets/sc3ui/` (Game bitmaps above). No other game icons or UI art, and never a game font file or a font made
+   from one: the importer builds the player's own at run time.
 3. Check phone width (390 px): 16 px gutters, no sideways scroll.
