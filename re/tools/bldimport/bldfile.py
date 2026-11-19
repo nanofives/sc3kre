@@ -112,15 +112,21 @@ def preview_image(p):
     return Image.fromarray(rgba, "RGBA")
 
 
+MODEL_VERSIONS = (7, 8)   # 8 = SC3U Building Architect, 7 = the 1999 SC3 Building Architect (BLD_FORMAT.md 6)
+
+
 def parse_model(p):
-    """0xE3F87B0C header, layout from the writer SIMBABLD 0x1200a849 (field names = object offsets there)."""
+    """0xE3F87B0C header, layout from the writer SIMBABLD 0x1200a849 (field names = object offsets there).
+    Version 7 (1999 BA) has the same byte layout; Baapp's reader FUN_00413e1a takes both and differs only in
+    meaning: v7 height is stored minus 1 (the reader adds 1), and the u32 after each texture name is a per-name
+    value it keeps (FUN_0041a852) where v8 has the hash it discards (BLD_FORMAT.md 6)."""
     ver, f84, n, lot, sep1 = struct.unpack_from("<5B", p, 0)
     height, = struct.unpack_from("<H", p, 5)
     f68, = struct.unpack_from("<I", p, 9)
     four, thirty2 = struct.unpack_from("<II", p, 0x11)
     nn, = struct.unpack_from("<I", p, 0x1D)
-    if ver != 8 or sep1 != 0xEA or nn != n * n * 4:
-        raise BldError("model record header is not version 8 (got %d) with an n*n*4 column table" % ver)
+    if ver not in MODEL_VERSIONS or sep1 != 0xEA or nn != n * n * 4:
+        raise BldError("model record header is not version 7 or 8 (got %d) with an n*n*4 column table" % ver)
     cols = struct.unpack_from("<%dI" % (n * n), p, 0x21)
     o = 0x21 + nn
     if struct.unpack_from("<I", p, o)[0] != SEP:
@@ -145,6 +151,14 @@ def parse_model(p):
             "columns": cols, "cells_raw": len(cells), "textures": names}
 
 
+def derived_ident(b):
+    """A 1999 .bld has no id (its info record ends after the architect). Baapp gives such a file a fresh random id
+    at every load (FUN_004063c8 -> FUN_00409142 when the id is 0), so the tools use a stable stand-in: CRC-32 of
+    the whole file (bldweb.js computes the same)."""
+    import zlib
+    return zlib.crc32(b) & 0xFFFFFFFF
+
+
 def read_bld(path):
     """-> dict with name, architect, lot, category, ident, preview (PIL RGBA), model header, custom texture count."""
     with open(path, "rb") as fh:
@@ -161,18 +175,24 @@ def read_bld(path):
     lot = info[0]
     name, o = _pstr8(info, 1)
     arch, o = _pstr8(info, o)
-    if o + 8 > len(info):
-        raise BldError("info record too short")
-    sl, = struct.unpack_from("<I", info, o)
-    owner = info[o + 4:o + 4 + sl]
-    ident, = struct.unpack_from("<I", info, o + 4 + sl)
+    if o == len(info):
+        # 1999 BA: the record ends after the architect, no owner string and no id (BLD_FORMAT.md 6)
+        sl, ident, ident_from = None, derived_ident(b), "crc32"
+    else:
+        if o + 8 > len(info):
+            raise BldError("info record too short")
+        sl, = struct.unpack_from("<I", info, o)
+        if o + 8 + sl != len(info):
+            raise BldError("info record: %d bytes after the owner string, 4 expected" % (len(info) - o - 4 - sl))
+        ident, = struct.unpack_from("<I", info, o + 4 + sl)
+        ident_from = "file"
     cat = rec(I_CATEGORY, T_CATEGORY, False)
     s78 = rec(I_STR78, T_STR78, False)
     model = parse_model(rec(I_MODEL, T_MODEL))
     tex = sorted(i for (g, i, t) in r if t == T_TEX)
     out = {
         "file": os.path.basename(path), "path": path, "lot": lot, "name": name.decode("cp1252", "replace"),
-        "architect": arch.decode("cp1252", "replace"), "owner_len": sl, "ident": ident,
+        "architect": arch.decode("cp1252", "replace"), "owner_len": sl, "ident": ident, "ident_from": ident_from,
         "category": struct.unpack_from("<I", cat, 0)[0] if cat and len(cat) >= 4 else None,
         "str78": _pstr8(s78, 0)[0].decode("cp1252", "replace") if s78 else "",
         "b9": struct.unpack_from("<I", r[(GROUP, I_B9, T_B9)], 0)[0] if (GROUP, I_B9, T_B9) in r else None,
@@ -272,6 +292,10 @@ def bat_match(game, bld):
     for b in bats:
         if b["inst"] == bld["ident"] and b["size"] == bld["lot"]:
             return b
+    if bld.get("ident_from") == "crc32":
+        # a 1999 .bld (no id in the file): a same-named BAT.DAT entry is another file's render (the 1999 Hotel Splash
+        # is not the SC3U one: 58 against 115 texture names), so only its own render (keyed by the stand-in id) counts
+        return None
     nm = bld["name"].encode("cp1252", "replace")
     for b in bats:
         if b["name"] == nm and b["size"] == bld["lot"]:
@@ -296,18 +320,90 @@ def bat_frames(b):
     return out
 
 
-def frames(bld, game=None, art="auto", style=None):
-    """-> (frames, source) with source 'bat' or 'preview'. art: auto (bat when BAT.DAT has it), bat, preview.
-    style: bldrender style for preview art (BAT.DAT frames are the game's own and are used as they are)."""
+# =================================================================== the side IXF (task sc3compat-a)
+# render_bld.ps1 (the player's route: BaappW.exe + bawinonly.dll batch mode, no Python) writes the Building
+# Architect's own render of a folder of .bld files to <folder>\bld_frames.ixf: BAT.DAT format, one random group
+# per building and new instances (FUN_004534bb, FUN_00404d52), never merged into the game's BAT.DAT.
+SIDE_NAME = "bld_frames.ixf"
+_SIDE_CACHE = {}
+
+
+def side_match(data, blds):
+    """Buildings of a BA-rendered IXF (any group) -> [(bld, building dict or None)] in the order of `blds`.
+    By the .bld id first (an IXF re-keyed by `render`), then by the name the renderer copied from the .bld's info
+    record (FUN_004044a9 -> 0x1200be1d writes it into the override record) and the lot, each building used once and
+    in the IXF's own order, so two .bld files of the same name and lot pair up in render order."""
+    import batgrow as BG
+    blt = [b for b in ixf_buildings(data) if not b["problem"]]
+    used, out = set(), []
+    for bld in blds:
+        hit = None
+        for k, b in enumerate(blt):
+            if k not in used and b["inst"] == bld["ident"] and b["size"] == bld["lot"] and b["group"] == BG.BAT_GROUP:
+                hit = k
+                break
+        out.append([bld, hit])
+    for row in out:
+        if row[1] is not None:
+            used.add(row[1])
+    for row in out:
+        if row[1] is not None:
+            continue
+        nm = row[0]["name"].encode("cp1252", "replace")
+        for k, b in enumerate(blt):
+            if k not in used and b["name"] == nm and b["size"] == row[0]["lot"]:
+                row[1] = k
+                used.add(k)
+                break
+    return [(bld, blt[k] if k is not None else None) for bld, k in out]
+
+
+def side_buildings(folder):
+    """-> (path, data) of <folder>/bld_frames.ixf, or None. Cached by size and mtime."""
+    path = os.path.join(folder, SIDE_NAME)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = (os.path.abspath(path), st.st_size, st.st_mtime_ns)
+    if key not in _SIDE_CACHE:
+        with open(path, "rb") as fh:
+            _SIDE_CACHE.clear()
+            _SIDE_CACHE[key] = fh.read()
+    return path, _SIDE_CACHE[key]
+
+
+def side_frames(bld):
+    """The building's frames from the side IXF beside its .bld file, or None."""
+    sb = side_buildings(os.path.dirname(os.path.abspath(bld["path"])))
+    if sb is None:
+        return None
+    m = side_match(sb[1], [bld])[0][1]
+    return bat_frames(m) if m is not None else None
+
+
+def frames_from(bld, game=None, art="auto", style=None):
+    """-> (frames, source, where): source 'bat' or 'preview', where 'bld_frames.ixf', 'BAT.DAT' or 'the .bld'.
+    art: auto (bat when it exists), bat, preview. bat art comes from the side IXF beside the .bld (bld_frames.ixf, the
+    player's own BA render) first, then from the game's BAT.DAT. style: bldrender style for preview art (BA frames
+    are used as they are)."""
     if art not in ("auto", "bat", "preview"):
         raise BldError("art %r: use auto, bat or preview" % art)
-    if art != "preview" and game is not None:
-        b = bat_match(game, bld)
+    if art != "preview":
+        f = side_frames(bld) if bld.get("path") else None
+        if f is not None:
+            return f, "bat", SIDE_NAME
+        b = bat_match(game, bld) if game is not None else None
         if b is not None:
-            return bat_frames(b), "bat"
+            return bat_frames(b), "bat", "BAT.DAT"
         if art == "bat":
-            raise BldError("%s: BAT.DAT does not hold this building" % bld["file"])
-    return preview_frames(bld, style), "preview"
+            raise BldError("%s: neither %s beside it nor BAT.DAT holds this building" % (bld["file"], SIDE_NAME))
+    return preview_frames(bld, style), "preview", "the .bld"
+
+
+def frames(bld, game=None, art="auto", style=None):
+    """-> (frames, source) with source 'bat' or 'preview' (frames_from without the where)."""
+    return frames_from(bld, game, art, style)[:2]
 
 
 def thumbnail(bld, size=160):
@@ -325,7 +421,7 @@ PART_KIND = {6: "paint", 7: "detail", 16: "prop"}       # last u32 of record 0xE
 
 def custom_textures(path):
     """Records 0xE3F87B0D (one per custom texture) and their embedded images 0xE3F87B10.
-    Layout (the 84 records of the 17 shipped files): u8 10, 8 x u32 (two rects), u32 hash (= the hash beside the name
+    Layout (the 84 records of the 17 shipped files; the 1999 records start with u8 7 and end after the key): u8 10, 8 x u32 (two rects), u32 hash (= the hash beside the name
     in the model's texture list), u32, 4 x f32 (w, h, 1/w, 1/h), u32 n, n bytes name, then the image record's key
     u32 type 0xE3F87B10, u32 group, u32 instance, and u32 kind (6 paint, 7 detail, 16 prop)."""
     with open(path, "rb") as fh:
@@ -337,7 +433,14 @@ def custom_textures(path):
         h, = struct.unpack_from("<I", pl, 33)
         n, = struct.unpack_from("<I", pl, 57)
         name = pl[61:61 + n].decode("cp1252", "replace")
-        it, ig, ii, kind = struct.unpack_from("<4I", pl, 61 + n)
+        if pl[0] == 7:
+            # 1999 BA (BLD_FORMAT.md 6): same layout up to the image key, no trailing kind u32. Byte 36 (the top byte
+            # of the u32 at 33) holds 6 or 7 in all 14 records of the 19 samples, the codes v8 stores as kind
+            # [UNCERTAIN: read as kind from the values only, the v7 texture reader is not traced]
+            it, ig, ii = struct.unpack_from("<3I", pl, 61 + n)
+            kind = pl[36]
+        else:
+            it, ig, ii, kind = struct.unpack_from("<4I", pl, 61 + n)
         img = r.get((ig, ii, it))
         w = hh = None
         if img is not None:
@@ -413,8 +516,12 @@ def ixf_buildings(data):
 
     _idx, order = BG.records(data)
     out, keep = [], BG.BAT_GROUP
+    groups = []
+    for g, i, t in order:                   # groups in the order of their first override record (render order)
+        if t == BG.OVR_TYPE and g not in groups:
+            groups.append(g)
     try:
-        for g in sorted(set(g for g, i, t in order if t == BG.OVR_TYPE)):
+        for g in groups:
             BG.BAT_GROUP = g
             for b in BG.bat_buildings(_G()):
                 b["group"] = g
@@ -617,9 +724,10 @@ def cmd_check(a):
 
 
 def cmd_js_expect(a):
-    """Expected values for bld_js_check.mjs (the classifier page's reader): name, lot, category, id, class, and the
-    sha256 of the preview as RGBA bytes expanded as the page does (x * 255 / 31 or 63 stored into a
-    Uint8ClampedArray, which rounds half to even like np.round)."""
+    """Expected values for bld_js_check.mjs (the classifier page's reader and bldweb.js readBld): name, lot, category,
+    id, class, model fields, and the sha256 of the preview as RGBA bytes expanded as the page does (x * 255 / 31 or 63
+    stored into a Uint8ClampedArray, which rounds half to even like np.round) and as bldweb.js / preview_image do
+    (floor)."""
     import hashlib
     import json
     import numpy as np
@@ -634,8 +742,12 @@ def cmd_js_expect(a):
                          np.round((v.astype(np.int64) & 31) * 255 / 31),
                          np.where(v == KEY565, 0, 255)], -1).astype(np.uint8)
         out[b["file"]] = {"name": b["name"], "architect": b["architect"], "lot": b["lot"], "category": b["category"],
-                          "ident": b["ident"], "class": suggest_class(b),
-                          "preview_sha": hashlib.sha256(rgba.tobytes()).hexdigest()}
+                          "ident": b["ident"], "ident_from": b["ident_from"], "version": b["model"]["version"],
+                          "height": b["model"]["height"], "grid": b["model"]["grid"],
+                          "textures": len(b["model"]["textures"]), "custom": b["custom_textures"],
+                          "class": suggest_class(b),
+                          "preview_sha": hashlib.sha256(rgba.tobytes()).hexdigest(),
+                          "preview_sha_floor": hashlib.sha256(np.asarray(b["preview"]).tobytes()).hexdigest()}
     with open(a.out, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(out, fh, indent=1)
     print("wrote %s (%d files)" % (a.out, len(out)))

@@ -721,8 +721,17 @@ function parseBld(buf) {
   const lot = u8[o++];
   const nl = u8[o++], name = dec.decode(u8.subarray(o, o + nl)); o += nl;
   const al = u8[o++], architect = dec.decode(u8.subarray(o, o + al)); o += al;
-  const sl = dv.getUint32(o, true); o += 4 + sl;
-  const ident = dv.getUint32(o, true);
+  let ident;
+  if (o === info[0] + info[1]) {
+    // 1999 Building Architect (model version 7): the info record ends after the architect, no id. Stand-in id = CRC-32
+    // of the whole file, as bldfile.derived_ident / bldweb.js readBld (BLD_FORMAT.md 6)
+    let c = 0xFFFFFFFF;
+    for (let k = 0; k < u8.length; k++) { c ^= u8[k]; for (let j = 0; j < 8; j++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; }
+    ident = (c ^ 0xFFFFFFFF) >>> 0;
+  } else {
+    const sl = dv.getUint32(o, true); o += 4 + sl;
+    ident = dv.getUint32(o, true);
+  }
   const cr = get(0xA44D71AB, 0x644D7179), category = cr && cr[1] >= 4 ? dv.getUint32(cr[0], true) : null;
   const pr = get(0xE3F8D655, 0xE3F87B0E); if (!pr) throw new Error('no preview record 0xE3F87B0E');
   const w = dv.getUint16(pr[0] + 2, true), h = dv.getUint16(pr[0] + 4, true);
@@ -869,7 +878,37 @@ async function makeBldRecord(rec, file, entry) {
   return rec;
 }
 
+// sc3compat-a: the player's own Building Architect render (render_bld.ps1 -> bld_frames.ixf beside the .bld files):
+// the four real views, matched to each .bld as the importer does (bldweb.js sideMatch), shown as the thumbnail
+async function sideArt(all, recs) {
+  const f = all.find(x => x.name.toLowerCase() === 'bld_frames.ixf');
+  const blds = recs.filter(r => r.bld);
+  if (!f || !blds.length) return 0;
+  let n = 0;
+  try {
+    const d = new Uint8Array(await f.arrayBuffer());
+    for (const [b, m] of BW.sideMatch(d, blds.map(r => r.bld))) {
+      const r = blds.find(x => x.bld === b);
+      if (m) { r.side = BW.batFrames(m); n++; }
+    }
+  } catch (e) { console.warn('bld_frames.ixf could not be read', e); }
+  return n;
+}
+function sideThumb(fr) {
+  const c = document.createElement('canvas'); c.width = 240; c.height = 180;
+  const g = c.getContext('2d'); g.fillStyle = cssVar('--canvas'); g.fillRect(0, 0, 240, 180);
+  const ims = [0, 1, 2, 3].map(r => fr.get('2,' + r)[0]);
+  const s = Math.min(1, 116 / Math.max(...ims.map(im => im.w)), 86 / Math.max(...ims.map(im => im.h)));
+  ims.forEach((im, r) => {
+    const t = document.createElement('canvas'); t.width = im.w; t.height = im.h;
+    t.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(im.d), im.w, im.h), 0, 0);
+    const w = im.w * s, h = im.h * s, cx = (r % 2) * 120 + 60, by = (r >> 1) * 90 + 88;
+    g.drawImage(t, cx - w / 2, by - h, w, h);
+  });
+  return c.toDataURL('image/png');
+}
 function thumbnail(rec) {
+  if (rec.side) return sideThumb(rec.side);
   if (rec.bld) return bldThumb(rec.bld);
   if (!rec.wrap) return '';
   const saved = { s: rec.wrap.scale.clone(), r: rec.wrap.rotation.y };
@@ -1010,13 +1049,15 @@ async function openFiles(files, jsonFile) {
   }
   if (!recs) { recs = []; for (const f of models) recs.push(await makeRecord(f, null)); }
   S.recs = recs; S.sel.clear(); S.focus = null; S.lastClick = null; S.dirty = !S.hadJson;
+  const nSide = await sideArt(files.all, recs);
   for (const r of recs) r.thumb = thumbnail(r);
   renderGrid();
   if (recs[0]) select([recs[0]]);
   $('btnSave').disabled = !recs.length;
   refreshGameButtons();
   const nf = recs.filter(r => r.fresh).length;
-  setStatus(`${recs.length} models from ${S.folderName || 'folder'}` + (S.hadJson ? `, models.json read (${recs.length - nf} entries, ${nf} new, ${S.orphans.length} for missing files)` : ', no models.json yet: suggestions shown, save to create it'));
+  setStatus(`${recs.length} models from ${S.folderName || 'folder'}` + (S.hadJson ? `, models.json read (${recs.length - nf} entries, ${nf} new, ${S.orphans.length} for missing files)` : ', no models.json yet: suggestions shown, save to create it') +
+    (nSide ? `. ${nSide} .bld buildings have their four real views from bld_frames.ixf (render_bld.ps1): Install uses them` : ''));
 }
 // ---------------------------------------------------------------- SC4 downloads (task sc4web)
 // sc4web.js converts the SC4 files on this PC (nothing is uploaded) into what sc4conv.py writes: OBJ + MTL + PNG +
@@ -1143,9 +1184,15 @@ $('packDir').onchange = ev => { const files = [...ev.target.files]; ev.target.va
 $('btnPackClose').onclick = () => { $('packBox').hidden = true; P3.ents = null; };
 $('btnPackBld').onclick = async () => {           // the pack's .bld files as a models folder (read only: Install uses the .zip route)
   const all = P3.ents.filter(e => e.data && !e.error && /\.bld$/i.test(e.path)).map(e => new File([e.data], e.path.split('/').pop()));
+  // sc3compat-a: a pack folder the player ran render_bld.ps1 on holds bld_frames.ixf beside its .bld files: keep it
+  // (the first one in a folder with .bld files), so the grid and Install use the real views
+  const bldDirs = new Set(P3.ents.filter(e => /\.bld$/i.test(e.path)).map(e => e.path.slice(0, e.path.lastIndexOf('/') + 1)));
+  const side = P3.ents.find(e => e.data && !e.error && /(^|\/)bld_frames\.ixf$/i.test(e.path) && bldDirs.has(e.path.slice(0, e.path.lastIndexOf('/') + 1)));
+  const models = all.slice();
+  if (side) all.push(new File([side.data], 'bld_frames.ixf'));
   S.sc4 = null; $('sc4Note').hidden = true;
   S.dirHandle = null; S.folderName = P3.name; S.allFiles = all;
-  await openFiles({ all, models: all.slice() }, null);
+  await openFiles({ all, models }, null);
 };
 async function pickFolder() {
   if (window.showDirectoryPicker) {
@@ -1337,7 +1384,8 @@ function refreshMeasure() {
   const cell = rules.cell_m || 16;
   if (recs.length === 1) {
     const r = recs[0], m = measure(r);
-    if (r.bld && !r.err) { $('measure').textContent = `${r.file}: Building Architect building "${r.bld.name}" by ${r.bld.architect || '?'}, ${r.bld.lot}x${r.bld.lot} lot. The picture is its own preview (one view).`; return; }
+    if (r.bld && !r.err) { $('measure').textContent = `${r.file}: Building Architect building "${r.bld.name}" by ${r.bld.architect || '?'}, ${r.bld.lot}x${r.bld.lot} lot. The picture is its own preview (one view)` +
+      (r.side ? '. Install uses its four real views from bld_frames.ixf (the thumbnail).' : '.'); return; }
     $('measure').textContent = r.err ? 'Could not load: ' + r.err : `${r.file}: footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m (${(m.fx / cell).toFixed(2)} x ${(m.fz / cell).toFixed(2)} cells), height ${m.h.toFixed(1)} m.`;
   } else $('measure').textContent = `${recs.length} models selected. Edit a field to change it on all of them. Untouched fields stay as they are.`;
 }
@@ -1609,7 +1657,7 @@ async function roundTrip() {
   res.savedText = saved;
   return res;
 }
-window.bc = { S, openPack, PK, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW, openSc4, modelsFolder };
+window.bc = { S, openPack, PK, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW, openSc4, modelsFolder, openFiles };
 
 // ---------------------------------------------------------------- start
 buildForm(); showRules(); sizeView(); applySceneColours(); refreshPanel(); loop();

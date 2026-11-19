@@ -70,12 +70,24 @@
       done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4, empty: true });
       return;
     }
+    if (man.action === 'open' && !man.sc4) {   // sc3compat-a: a models folder opened in the grid as Open folder does
+      const files = [];
+      for (const rel of man.models.files) {
+        if (rel.includes('/')) continue;
+        const r = await fetch(man.models.base + encodeURIComponent(rel)); if (!r.ok) throw new Error('fetch ' + rel);
+        files.push(new File([await r.blob()], rel));
+      }
+      window.bc.S.dirHandle = null; window.bc.S.folderName = 'test folder'; window.bc.S.allFiles = files;
+      await window.bc.openFiles({ all: files, models: files.filter(f => /\.(obj|bld|gltf|glb|fbx)$/i.test(f.name)) },
+        files.find(f => f.name.toLowerCase() === 'models.json') || null);
+    }
     if (man.action === 'open') {           // task sc4web: open only (pictures of the grid and the preview)
       const S = window.bc.S, pick = S.recs.find(r => r.meta.enabled) || S.recs[0];
       document.getElementById('grid').querySelector('.card[data-file="' + pick.file + '"]').click();
       await new Promise(r => setTimeout(r, +(qs.get('wait') || 3000)));
       const meshes = []; if (pick.obj) pick.obj.traverse(n => { if (n.isMesh) meshes.push([n.name, n.visible, [].concat(n.material).map(m => m.type + (m.map ? ' map ' + (m.map.image ? m.map.image.width + 'x' + m.map.image.height : 'no image') : ' no map')).join('|')]); });
-      done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4, focus: pick.file, err: pick.err, meshes, thumb: (pick.thumb || '').length });
+      done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4, focus: pick.file, err: pick.err, meshes, thumb: (pick.thumb || '').length,
+        side: S.recs.filter(r => r.side).length, recs: S.recs.length, status: document.getElementById('status').textContent });
       return;
     }
     if ((man.action || 'install') === 'remove') rep = ['restored ' + await B.restore(B.handleFS(game), () => {}) + ' file(s)'];

@@ -182,3 +182,55 @@ How the renderer resolves a texture name (Trash & Burn, runs X / Y / W, verify/b
 3. otherwise the face is drawn flat and untextured. The render does not fail.
 The hash follows content, not the name: Kankakee's `bourbo~3.tga` (an 8.3 name) carries 0x55CDCCEE like
 `bourbon 03.tga`. Hash function: [UNCERTAIN], not a CRC32 of the name, the file or its pixels.
+
+## 6. The 1999 .bld (SC3 Building Architect, before Unlimited; task sc3compat-a, 2026-11-19e)
+
+Evidence: the 19 files of the 1999 Building Architect patch (`stage/st_packs/maxis_batpatch_1999/`, local only), Baapp.exe's
+loader (`FUN_004063c8`) and readers (`FUN_00413e1a` model, `FUN_00415a07` info), and the BA's own render of all 19.
+Readers: `bldfile.read_bld` / `custom_textures` and `bldweb.js` readBld (36 of 36 samples identical, `bld_js_check.mjs
+--reader bldweb`).
+
+Same container, group and record keys as section 1. What differs:
+
+| record | SC3U (version 8) | 1999 (version 7) |
+|---|---|---|
+| `0xE3F87B0C` model, byte 0 | 8 | 7. Same byte layout (section 2) in all 19. |
+| model u16 at 0x05 | stored as is (`this_00[0x18] = local_24`) | Baapp stores it plus 1 (`this_00[0x18] = local_24 + 1`, `FUN_0040ac79(N, local_24 + 1)`) [CONFIRMED @ 0x413e1a, v7 branch] |
+| u32 after each texture name | the hash: read into `local_1c` and not used by the loader | kept per name: `FUN_0041a852(map, i, value)` writes it to the texture slot's first dword. Values 1 to 3,233, and on the empty first name a negative one (0xFFFFFEDD = -291 in 1 International Center, 0xFFFFFFFF = -1 in 4 files) [UNCERTAIN meaning] |
+| after the texture loop | | `FUN_0040f398(model)`: walks every column and rewrites cells whose type bits `& 0x3c000000 == 0x20000000` [UNCERTAIN purpose; mechanically a v7-only cell fix-up] |
+| `0xE3F87B0F` info | lot, name, architect, u32 len + owner string, u32 id | lot, name, architect. **The record ends there**: no owner string, no id |
+| `0xB9EC8F72`, `0x99F88B9E` | present | absent. `FUN_00415a07` defaults: +0x4c from a service (`FUN_0044f8df` vt+0x20), +0x48..+0x4b = 1, 0, 0, 0 |
+| `0xE3F87B0D` part record | byte 0 = 10, ends with u32 kind (6 / 7 / 16) | byte 0 = 7, ends after the image key (85 bytes for a 12-char name against 89). Byte 36 (top byte of the u32 at 33) is 6 or 7 in all 14 records [UNCERTAIN: read as kind from the values only] |
+| `0xE3F87B10` part image | format `0x0EF1`, 4 bytes per pixel | format `0x0AF1`, 4 bytes per pixel (all 14) |
+
+The id: `FUN_00415a07` reads the owner string and the id from a key of type `0xDA6DC9A9`; missing, they become "" and 0, and
+`FUN_004063c8` then sets the building's `+0x1a8` from `FUN_00409142` (a service's vt+0x1c: a new id at every load)
+[CONFIRMED @ 0x4063c8]. So a 1999 file has no stable id. The tools use **CRC-32 of the whole file** as a stand-in
+(`bldfile.derived_ident`, `ident_from = "crc32"`), and never match such a file to a BAT.DAT entry by name: the 1999 Hotel
+Splash (58 texture names) is not the SC3U one (115).
+
+Categories seen in the 19: `0x208` (8), `0x209` (5), `0x20A` (2), `0x217` (2: Castle, Tutorial House), `0x210` (Knight's
+Hall), `0x211` (Meglor Library). Every texture name resolves (stock `Apps\Res\BA` or embedded), none missing.
+
+### The SC3U Building Architect renders them
+
+All 19 through the batch renderer in one call (`bldfile.py render`, 72 s; the player route 43 s), 0 display-mode changes,
+16 frames each. Their previews are less reliable than SC3U ones: in 8 of 19 the stored 200x200 preview shows the building
+from another camera rotation (best silhouette match against the render: slot 1 in 4, slot 3 in 3, slot 2 in 1, mask IoU
+0.97 to 0.99), with other colours (RMS 58 to 82). In the other 11 it is slot 0 (IoU 0.955 to 0.994, RMS 7 to 31). Why the
+1999 BA saved other rotations: [UNCERTAIN] (the 1999 BA binary is not in the project). So preview-made art (section 3)
+shows the wrong side for those 8; the BA render is the right art for 1999 files.
+
+## 7. The batch renderer without Python or Frida (bawinonly.dll batch mode, sc3compat-a)
+
+`re/harness/src/bawinonly.c`, `re/tools/bldbat/player/`. With `BAWIN_BATCH=<folder or list>` in BaappW.exe's environment:
+after the GZGraphicD patch (section 5 guards, unchanged), the DLL points Baapp.exe's import slot of PeekMessageA
+(`0x4802b0`; the only caller is the main loop `FUN_0045f6de`) at its own function. On the main thread, once a visible
+`Gonzo` window has been up 4 s, it makes the call `ba_render.py` makes through Frida (section 5) and terminates the process
+with an exit code (0 = written). Output `<folder>\bld_frames.ixf` (raw renderer output: a random group per building, new
+instances), report `bld_frames.txt`. The old output is deleted first, because `FUN_004044a9` renames an existing output
+file into `Res\BA\RenderedBuildingsBackup.IXF` of the game (local_3c, `0x4044a9`) [CONFIRMED @ 0x4044a9].
+
+Render order inside the file: grouped by lot size (`FUN_004044a9` sorts the loaded buildings into five lists,
+`local_80[lot]`), list order within a lot. Readers match a building to its .bld by the name the renderer copies from the
+info record and the lot (`bldfile.side_match`, `bldweb.js` sideMatch), in file order for equal names.

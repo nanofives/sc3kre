@@ -208,6 +208,9 @@ def render_key(folder, m, n, game=None):
     if is_bld(m["file"]):
         if game is not None and bld_art(m) != "preview" and game.exists(BG.BAT_REL):
             h.update(game.read(BG.BAT_REL))
+        side = os.path.join(os.path.dirname(os.path.join(folder, m["file"])), BF.SIDE_NAME)
+        if bld_art(m) != "preview" and os.path.isfile(side):        # sc3compat-a: the player's BA render beside it
+            _sha_file(side, h)
         h.update(json.dumps([n, bld_art(m), game is not None, bld_style(m)]).encode())
     else:
         h.update(json.dumps([n, m.get("scale", 1.0), m.get("rotate_deg", 0), opts(m)], sort_keys=True).encode())
@@ -237,8 +240,8 @@ def render_one(folder, m, n, force=False, log=print, game=None):
             return fr, meta["info"]
     if is_bld(m["file"]):
         b = BF.read_bld(os.path.join(folder, m["file"]))
-        fr, src = BF.frames(b, game, bld_art(m), style=bld_style(m))
-        info = {"bld": True, "art": src, "style": bld_style(m) or "ba", "lot": b["lot"], "architect": b["architect"], "ident": "%08X" % b["ident"],
+        fr, src, where = BF.frames_from(b, game, bld_art(m), style=bld_style(m))
+        info = {"bld": True, "art": src, "from": where, "style": bld_style(m) or "ba", "lot": b["lot"], "architect": b["architect"], "ident": "%08X" % b["ident"],
                 "grid": b["model"]["grid"], "height": b["model"]["height"]}
         return _cache_frames(d, fr, key, info, n, m), info
     o = opts(m)
@@ -409,8 +412,8 @@ def buildfam_lines(bf, lines):
 
 def describe(info):
     if info.get("bld"):
-        return "%s art from the .bld (id %s, by %s)%s" % (
-            info["art"], info["ident"], info["architect"],
+        return "%s art from %s (id %s, by %s)%s" % (
+            info["art"], info.get("from", "the .bld"), info["ident"], info["architect"],
             ", style %s" % info.get("style", "ba") if info["art"] == "preview" else "")
     return "%d tris, %.1f x %.1f x %.1f m, style %s" % (info["triangles"], info["size_m"][0], info["size_m"][2],
                                                        info["size_m"][1], info.get("style", "?"))

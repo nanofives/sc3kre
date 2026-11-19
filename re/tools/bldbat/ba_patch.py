@@ -89,22 +89,14 @@ def add_import(b):
 
 
 def build_dll(src, out_dir):
-    vswhere = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-    root = subprocess.check_output([vswhere, "-latest", "-products", "*", "-requires",
-                                    "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property",
-                                    "installationPath"], text=True).strip()
-    vcvars = os.path.join(root, r"VC\Auxiliary\Build\vcvars32.bat")
+    """re/scripts/build_mod.ps1 -Mod bawinonly (same cl flags, plus the VERSIONINFO resource every shipped DLL carries,
+    AVVERSION) into a temp folder, then copied (delete first: never write through a hard link)."""
     obj = tempfile.mkdtemp(prefix="bawin_")
-    bat = os.path.join(obj, "b.bat")
-    out = os.path.join(obj, "bawinonly.dll")
-    with open(bat, "w") as fh:
-        fh.write('set CL=\r\ncall "%s" >nul\r\ncd /d "%s"\r\n' % (vcvars, obj))
-        fh.write('cl /nologo /W3 /O2 /MT /GS- /D_CRT_SECURE_NO_WARNINGS /DWIN32 /D_WIN32_WINNT=0x0501 /LD "%s" '
-                 '/Fe"%s" /link /SUBSYSTEM:WINDOWS kernel32.lib user32.lib\r\nif errorlevel 1 exit /b 1\r\n'
-                 % (os.path.join(src, "bawinonly.c"), out))
-    r = subprocess.run(["cmd.exe", "/c", bat])
+    script = os.path.join(REPO, "re", "scripts", "build_mod.ps1")
+    r = subprocess.run(["pwsh", "-NoProfile", "-File", script, "-Mod", "bawinonly", "-Src", src, "-Out", obj])
     if r.returncode:
         raise SystemExit("build failed")
+    out = os.path.join(obj, "bawinonly.dll")
     dst = os.path.join(out_dir, "bawinonly.dll")
     if os.path.exists(dst):
         os.remove(dst)

@@ -1660,10 +1660,14 @@ function BLDWEB_LIB() {
   }
   async function batBuildings(game) {
     if (game._bats) return game._bats;
-    const d = await game.read(BAT_REL);
-    const { idx, order } = records(d), out = [];
+    game._bats = batParse(records(await game.read(BAT_REL)), BAT_GROUP);
+    return game._bats;
+  }
+  // batgrow.bat_buildings over one group of an IXF's records (BAT.DAT: group 0xBA1DBF1E)
+  function batParse(rec, group) {
+    const { idx, order } = rec, out = [];
     for (const [g, i, t] of order) {
-      if (t !== OVR_TYPE || g !== BAT_GROUP) continue;
+      if (t !== OVR_TYPE || g !== group) continue;
       const p = idx.get(keyOf(g, i, t));
       const b = { inst: i, size: p[0], problem: null };
       if (p.length < 17) { b.name = new Uint8Array(0); b.problem = 'override record too short'; out.push(b); continue; }
@@ -1683,8 +1687,32 @@ function BLDWEB_LIB() {
       }
       out.push(b);
     }
-    game._bats = out;
     return out;
+  }
+  // bldfile.ixf_buildings: every group of a BA-rendered IXF, groups in the order of their first override record
+  function ixfBuildings(d) {
+    const rec = records(d), groups = [];
+    for (const [g, , t] of rec.order) if (t === OVR_TYPE && !groups.includes(g)) groups.push(g);
+    const out = [];
+    for (const g of groups) for (const b of batParse(rec, g)) { b.group = g; out.push(b); }
+    return out;
+  }
+  // bldfile.side_match: by the .bld id first (an IXF re-keyed by bldfile.py render), then by name and lot in the
+  // IXF's order, each building once. -> [[bld, building or null], ...]
+  function sideMatch(d, blds) {
+    const blt = ixfBuildings(d).filter(b => !b.problem), used = new Set();
+    const out = blds.map(bld => {
+      const k = blt.findIndex((b, j) => !used.has(j) && b.inst === bld.ident && b.size === bld.lot && b.group === BAT_GROUP);
+      return [bld, k < 0 ? null : k];
+    });
+    for (const r of out) if (r[1] !== null) used.add(r[1]);
+    for (const r of out) {
+      if (r[1] !== null) continue;
+      const nm = cp1252Encode(r[0].name, true);
+      const k = blt.findIndex((b, j) => !used.has(j) && bytesEq(b.name, nm) && b.size === r[0].lot);
+      if (k >= 0) { r[1] = k; used.add(k); }
+    }
+    return out.map(([bld, k]) => [bld, k === null ? null : blt[k]]);
   }
   // stock_table_and_template: the base's 0x6300 table and one of its pixel records, from the game's own files.
   // Lazy: an IXF index is at the head of the file, so only the head and the one payload are read.
@@ -1749,10 +1777,11 @@ function BLDWEB_LIB() {
     }
     throw new BldError('IXF index has no terminator');
   }
+  // model version 8 = SC3U Building Architect, 7 = the 1999 SC3 Building Architect (same byte layout, BLD_FORMAT.md 6)
   function parseModel(p) {
     const ver = p[0], n = p[2], lot = p[3], sep = p[4], height = rdU16(p, 5);
     const nn = rdU32(p, 0x1D);
-    if (ver !== 8 || sep !== 0xEA || nn !== n * n * 4) throw new BldError('model record header is not version 8');
+    if ((ver !== 7 && ver !== 8) || sep !== 0xEA || nn !== n * n * 4) throw new BldError('model record header is not version 7 or 8 (got ' + ver + ')');
     let o = 0x21 + nn;
     if (rdU32(p, o) !== 0xEAEAEAEA) throw new BldError('model record: no separator after the column table');
     const blob = rdU32(p, o + 4);
@@ -1762,7 +1791,7 @@ function BLDWEB_LIB() {
     const cnt = rdU32(p, o + 4); o += 8;
     for (let k = 0; k < cnt; k++) { const ln = rdU32(p, o); o += 8 + ln; }
     if (rdU32(p, o) !== 0xEAEAEAEA || o + 4 !== p.length) throw new BldError('model record: texture list does not end the record');
-    return { grid: n, lot, height };
+    return { version: ver, grid: n, lot, height, textures: cnt };
   }
   function readBld(buf, file) {
     const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
@@ -1772,8 +1801,14 @@ function BLDWEB_LIB() {
     const lot = info[0];
     let o = 1; const nl = info[o]; const nameRaw = info.subarray(o + 1, o + 1 + nl); o += 1 + nl;
     const al = info[o]; const arch = info.subarray(o + 1, o + 1 + al); o += 1 + al;
-    if (o + 8 > info.length) throw new BldError('info record too short');
-    const sl = rdU32(info, o); const ident = rdU32(info, o + 4 + sl);
+    let ident, identFrom;
+    if (o === info.length) { ident = (crc32(b) ^ 0xFFFFFFFF) >>> 0; identFrom = 'crc32'; }   // 1999 .bld: no id (bldfile.derived_ident)
+    else {
+      if (o + 8 > info.length) throw new BldError('info record too short');
+      const sl = rdU32(info, o);
+      if (o + 8 + sl !== info.length) throw new BldError('info record: ' + (info.length - o - 4 - sl) + ' bytes after the owner string, 4 expected');
+      ident = rdU32(info, o + 4 + sl); identFrom = 'file';
+    }
     const cat = rec(I_CATEGORY, T_CATEGORY, false);
     const model = parseModel(rec(I_MODEL, T_MODEL));
     const pv = rec(I_PREVIEW, T_PREVIEW);
@@ -1786,7 +1821,7 @@ function BLDWEB_LIB() {
       prev.d[4 * k] = Math.floor(((v >> 11) & 31) * 255 / 31); prev.d[4 * k + 1] = Math.floor(((v >> 5) & 63) * 255 / 63);
       prev.d[4 * k + 2] = Math.floor((v & 31) * 255 / 31); prev.d[4 * k + 3] = v === 0xF81F ? 0 : 255;
     }
-    const out = { file, lot, name: cp1252Decode(nameRaw), nameRaw, architect: cp1252Decode(arch), ident,
+    const out = { file, lot, name: cp1252Decode(nameRaw), nameRaw, architect: cp1252Decode(arch), ident, ident_from: identFrom,
       category: cat && cat.length >= 4 ? rdU32(cat, 0) : null, model, preview: prev,
       custom_textures: [...r.keys()].filter(k => +k.split(':')[2] === T_TEX).length };
     if (!(1 <= lot && lot <= 4)) throw new BldError('lot size ' + lot + ' (growables are 1x1 to 4x4)');
@@ -1833,6 +1868,7 @@ function BLDWEB_LIB() {
     if (!(await game.exists(BAT_REL))) return null;
     const bats = (await batBuildings(game)).filter(b => !b.problem);
     for (const b of bats) if (b.inst === bld.ident && b.size === bld.lot) return b;
+    if (bld.ident_from === 'crc32') return null;   // 1999 .bld: a same-named entry is another file's render (bldfile.bat_match)
     const nm = cp1252Encode(bld.name, true);
     for (const b of bats) if (bytesEq(b.name, nm) && b.size === bld.lot) return b;
     return null;
@@ -1848,14 +1884,23 @@ function BLDWEB_LIB() {
     for (let r = 0; r < ROTS; r++) { const [im, [L, T]] = out.get('3,' + r); out.set('4,' + r, [imgNearest2x(im), [L * 2, T * 2]]); }
     return out;
   }
-  async function bldFrames(bld, game, art, style) {
+  // side: the bytes of bld_frames.ixf beside the .bld (render_bld.ps1, the player's own BA render) or null
+  const SIDE_NAME = 'bld_frames.ixf';
+  async function bldFrames(bld, game, art, style, side) {
     if (!['auto', 'bat', 'preview'].includes(art)) throw new BldError('art ' + JSON.stringify(art) + ': use auto, bat or preview');
-    if (art !== 'preview' && game) {
-      const b = await batMatch(game, bld);
-      if (b) return [batFrames(b), 'bat'];
-      if (art === 'bat') throw new BldError(bld.file + ': BAT.DAT does not hold this building');
+    if (art !== 'preview') {
+      if (side) { const m = sideMatch(side, [bld])[0][1]; if (m) return [batFrames(m), 'bat', SIDE_NAME]; }
+      const b = game ? await batMatch(game, bld) : null;
+      if (b) return [batFrames(b), 'bat', 'BAT.DAT'];
+      if (art === 'bat') throw new BldError(bld.file + ': neither ' + SIDE_NAME + ' beside it nor BAT.DAT holds this building');
     }
-    return [previewFrames(bld, style), 'preview'];
+    return [previewFrames(bld, style), 'preview', 'the .bld'];
+  }
+  async function sideOf(folder, file) {
+    const rel = joinRel(dirOf(String(file)), SIDE_NAME);
+    folder._side = folder._side || new Map();
+    if (!folder._side.has(rel)) folder._side.set(rel, rel === null ? null : await folder.get(rel));
+    return folder._side.get(rel);
   }
 
   // ================================================================================================ bldimport
@@ -1962,8 +2007,8 @@ function BLDWEB_LIB() {
     opt = opt || {};
     if (isBld(m.file)) {
       const b = readBld(await folder.get(m.file), m.file);
-      const [fr_, src] = await bldFrames(b, game, bldArt(m), bldStyle(m));
-      return { frames: fr_, info: { bld: true, art: src, style: bldStyle(m) || 'ba', lot: b.lot, architect: b.architect, ident: hex8(b.ident), grid: b.model.grid, height: b.model.height } };
+      const [fr_, src, where] = await bldFrames(b, game, bldArt(m), bldStyle(m), await sideOf(folder, m.file));
+      return { frames: fr_, info: { bld: true, art: src, from: where, style: bldStyle(m) || 'ba', lot: b.lot, architect: b.architect, ident: hex8(b.ident), grid: b.model.grid, height: b.model.height } };
     }
     const o = optsOf(m, opt.envStyle);
     const job = { file: m.file, n, cell_m: o.cell_m, scale: Number('scale' in m ? m.scale : 1.0), rotate_deg: Number('rotate_deg' in m ? m.rotate_deg : 0),
@@ -2012,7 +2057,7 @@ function BLDWEB_LIB() {
     return neu.length ? ixfReplace(bf, neu) : bf;
   }
   function describe(info) {
-    if (info.bld) return info.art + ' art from the .bld (id ' + info.ident + ', by ' + info.architect + ')' + (info.art === 'preview' ? ', style ' + (info.style || 'ba') : '');
+    if (info.bld) return info.art + ' art from ' + (info.from || 'the .bld') + ' (id ' + info.ident + ', by ' + info.architect + ')' + (info.art === 'preview' ? ', style ' + (info.style || 'ba') : '');
     return info.triangles + ' tris, ' + info.size_m[0].toFixed(1) + ' x ' + info.size_m[2].toFixed(1) + ' x ' + info.size_m[1].toFixed(1) + ' m, style ' + (info.style || '?');
   }
   async function buildFiles(folder, game, src, opt) {
@@ -2333,7 +2378,7 @@ function BLDWEB_LIB() {
     BldError, version: '2026-11-18d',
     // pieces (exported for the tests)
     fma, sha256, pyJson, pyJsonStr, cp1252Encode, rint, decodePNG, slotMesh, powf, encodePNG, decodeImage, pilMedianCut, paletteCut, pilResize, qfsCompress, qfsDecompress,
-    loadObj, place, renderModel, joinRel, dirOf, renderFrame, grassNorm, readBld, previewFrames, batFrames, recordFromImage, spanToImage,
+    loadObj, place, renderModel, joinRel, dirOf, renderFrame, grassNorm, readBld, previewFrames, batFrames, sideMatch, ixfBuildings, bldFrames, recordFromImage, spanToImage,
     records, slots, classTable, stockBuildings, styleOf, STYLES,
     // the tool
     readModels, idsFor, plan, renderOne, renderJob, buildFiles, sources, applyFiles, install, restore, describe,
