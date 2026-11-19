@@ -6,19 +6,34 @@ carries its own copy of the shared stylesheet between the `sc3ui.css begin` / `s
 
     py -3.12 re/tools/bldimport/sync_css.py            # rewrite the copy in classifier.html
     py -3.12 re/tools/bldimport/sync_css.py --check    # exit 1 when the copy differs from docs/assets/sc3ui.css
-    py -3.12 re/tools/bldimport/sync_css.py --publish  # also copy classifier.html + bldweb.js + sc4web.js to docs/buildings/importer/
+    py -3.12 re/tools/bldimport/sync_css.py --publish  # also copy classifier.html + bldweb.js + sc4web.js + sc3font.js to docs/buildings/importer/
+
+sc3ui3 (round 2026-11-19b): sc3ui.css draws a few game bitmaps from docs/assets/sc3ui/ (url("sc3ui/<name>.png")). The
+importer opens away from docs/, so its copy carries them inline: every such url() becomes a data: URI here.
 """
-import os, re, shutil, sys
+import base64, os, re, shutil, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
 CSS = os.path.join(ROOT, 'docs', 'assets', 'sc3ui.css')
+ART = os.path.join(ROOT, 'docs', 'assets', 'sc3ui')
 PAGE = os.path.join(HERE, 'classifier.html')
 BEGIN, END = '/* ==== sc3ui.css begin (copy of docs/assets/sc3ui.css, re/tools/bldimport/sync_css.py) ==== */', '/* ==== sc3ui.css end ==== */'
+# published next to index.html. sc4web.js: task sc4web (SC4 downloads in the page). sc3font.js: sc3ui3 (the game's
+# fonts, built at run time from the player's own game folder)
+PUBLISHED = ('bldweb.js', 'sc4web.js', 'sc3font.js')
+
+
+def inline_art(css):
+    """url("sc3ui/x.png") -> url("data:image/png;base64,...") read from docs/assets/sc3ui/x.png"""
+    def one(m):
+        with open(os.path.join(ART, m.group(1)), 'rb') as fh:
+            return 'url("data:image/png;base64,%s")' % base64.b64encode(fh.read()).decode('ascii')
+    return re.sub(r'url\("sc3ui/([A-Za-z0-9_]+\.png)"\)', one, css)
 
 
 def main():
-    css = open(CSS, encoding='utf-8').read().strip('\n')
+    css = inline_art(open(CSS, encoding='utf-8').read().strip('\n'))
     page = open(PAGE, encoding='utf-8', newline='').read()
     m = re.search(re.escape(BEGIN) + r'\n(.*?)\n' + re.escape(END), page, re.S)
     if not m:
@@ -38,9 +53,9 @@ def main():
         dst = os.path.join(ROOT, 'docs', 'buildings', 'importer')
         os.makedirs(dst, exist_ok=True)
         shutil.copyfile(PAGE, os.path.join(dst, 'index.html'))
-        for js in ("bldweb.js", "sc4web.js"):   # sc4web.js: task sc4web (SC4 downloads in the page)
+        for js in PUBLISHED:
             shutil.copyfile(os.path.join(HERE, js), os.path.join(dst, js))
-        print("copied classifier.html + bldweb.js + sc4web.js to", dst)
+        print('copied classifier.html + ' + ' + '.join(PUBLISHED) + ' to', dst)
 
 
 if __name__ == '__main__':

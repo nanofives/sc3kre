@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sc3font test</title>
+<!-- sc3ui3 (round 2026-11-19b): standalone test of sc3font.js. Local only: it reads the game's FBF fonts from the
+     install named in ?game=<file URL of the folder that holds Apps> (test hook) and draws known strings with them.
+     re/tools/bldimport/webtest/sc3font_check.py screenshots it and compares every string with re/tools/sc3ui/fbf.py's
+     own rendering of the same string, pixel for pixel. Without ?game the page shows the free fonts (the fallback). -->
+<link rel="stylesheet" href="../../../docs/assets/sc3ui.css">
+<style>
+:root { --ui-scale: 1; }
+html, body { margin: 0; background: #fff; color: #000; }
+/* plain page text, no layer tricks: what the importer's own text gets */
+#samples { position: absolute; left: 0; top: 0; width: 900px; height: 520px; }
+#samples div { position: absolute; left: 10px; white-space: pre; color: #000; }
+#tokens { position: absolute; left: 0; top: 540px; padding: 4px 10px; }
+#result { position: absolute; left: 0; top: 640px; font: 12px monospace; white-space: pre-wrap; }
+</style>
+<script src="sc3font.js"></script>
+</head>
+<body>
+<div id="samples"></div>
+<div id="tokens">
+  <span id="t_ui" style="font: var(--ui-type-ui)">Efectos sonido</span>
+  <span id="t_row" style="font: var(--ui-type-row)">800x600 NVIDIA</span>
+  <span id="t_title" style="font: var(--ui-type-title)">Preferencias</span>
+</div>
+<pre id="result">pending</pre>
+<script>
+// one row per (font, string), 36 px apart; each row's line box is exactly the font's line, so the glyph cells start
+// at the row's top like the game's (sc3font_check.py reads the same table back from #result)
+const SAMPLES = [
+  ['MAIN9', 'Efectos sonido Tráfico visible 3 Aumentos'],
+  ['MAIN9', 'Pob: 794,278 2/9/2067 Música áéíóúñ¿¡'],
+  ['MAIN10', "Camiones O'Plenty Industrial"],
+  ['SYSTEM9', '800x600 NVIDIA GeForce RTX 1280x1024'],
+  ['SYSTEM9', 'Ordenanzas Tratos con vecinos Préstamos'],
+  ['TITLE9', 'Sustituir Gastos Ingresos Aceptar'],
+  ['TITLE12', 'Preferencias Indagar Presupuesto'],
+  ['SERIF17', 'Nueva Ciudad Cargar Ciudad'],
+  ['MAIN9', 'Navy on lavender like the game', '#31347b'],
+];
+(async () => {
+  const q = new URLSearchParams(location.search), out = { samples: [], ok: false };
+  const game = q.get('game');
+  if (!game) { document.getElementById('result').textContent = JSON.stringify({ fallback: true, family: getComputedStyle(document.getElementById('t_ui')).fontFamily }); return; }
+  const info = await SC3Font.useGame(game, { mode: q.get('mode') || 'snap' });
+  if (!info) { document.getElementById('result').textContent = JSON.stringify({ error: 'no fonts' }); return; }
+  out.lang = info.lang;
+  const cal = await SC3Font.calibrate(); out.calibration = cal.got ? cal.got.map(v => +v.toFixed(3)) : cal.why;
+  out.fonts = Object.fromEntries(Object.entries(info.fonts).map(([k, f]) => [k, { line: f.line, base: f.base, glyphs: f.glyphs, status: f.face.status }]));
+  const box = document.getElementById('samples');
+  SAMPLES.forEach(([nm, text, col], i) => {
+    const f = info.fonts[nm]; if (!f) return;
+    const d = document.createElement('div');
+    d.style.top = (10 + i * 36) + 'px';
+    d.style.font = `400 16px/${f.line}px "${f.family}"`;
+    if (col) d.style.color = col;
+    d.textContent = text; box.appendChild(d);
+    out.samples.push({ font: nm, text, x: 10, y: 10 + i * 36, color: col || '#000000' });
+  });
+  await document.fonts.ready;
+  out.tokens = Object.fromEntries(['t_ui', 't_row', 't_title'].map(id => [id, getComputedStyle(document.getElementById(id)).fontFamily]));
+  out.gpx = getComputedStyle(document.documentElement).getPropertyValue('--ui-gpx').trim();
+  out.ok = true;
+  document.getElementById('result').textContent = JSON.stringify(out);
+})();
+</script>
+</body>
+</html>

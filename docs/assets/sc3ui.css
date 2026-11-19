@@ -2,7 +2,11 @@
    Round 2026-11-18f picked the colours. Round 2026-11-18g (sc3ui2) measured the rest at the game's native size
    (800x600, no UI scale): fonts scored glyph by glyph against the game's own bitmap fonts, the cloud texture
    matched by its statistics, every spacing counted in pixels. See re/analysis/UI_STYLE.md.
-   CSS only: no game bitmaps, icons, fonts or extracted art. The cloud tile is our own SVG noise.
+   Round 2026-11-19b (sc3ui3): the close X, play / stop, the dropdown arrow, the slider and the volume steps are the
+   game's own bitmaps (owner call, docs/assets/sc3ui/, re/tools/sc3ui/uiart.py), scaled nearest-neighbour by
+   --ui-scale (image-rendering: pixelated: exact at 1, at 1.25 every fourth game pixel is drawn twice). Everything else
+   is CSS. No game fonts: the cloud tile is our own SVG noise and the fonts are free faces (the importer can load the
+   player's own game fonts at run time, sc3font.js).
    One knob: --ui-scale. 1 = the game's own pixels. Pages use 1.25 (UI_STYLE.md, "Scale"). */
 @import url("https://fonts.googleapis.com/css2?family=Istok+Web:ital,wght@0,400;0,700;1,400&family=Comic+Relief:wght@400;700&display=swap");
 
@@ -136,36 +140,57 @@ input[type=text], input[type=number], input[type=search], input[type=url], selec
   min-height: calc(20 * var(--u)); padding: 0 calc(3 * var(--u)) calc(1 * var(--u)); border-radius: 0;
   border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); max-width: 100%; }
 textarea { font: var(--ui-type-prose); }
-select { padding-right: calc(19 * var(--u)); appearance: none; -webkit-appearance: none; cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, var(--ui-text) 50%), linear-gradient(135deg, var(--ui-text) 50%, transparent 50%),
-    linear-gradient(var(--ui-blue), var(--ui-blue));
-  background-position: right calc(8 * var(--u)) top 50%, right calc(4 * var(--u)) top 50%, right 0 top 0;
-  background-size: calc(4 * var(--u)) calc(4 * var(--u)), calc(4 * var(--u)) calc(4 * var(--u)), calc(16 * var(--u)) 100%;
-  background-repeat: no-repeat; }
+/* dropdown (R3 "Resolucion de pantalla", sc3ui3): a 20 px grooved white box, then 1 px of the face, then the game's
+   16x16 arrow button (SYS.IXF 62b99d31) centred beside it, OUTSIDE the box. The groove is drawn with background
+   layers so the arrow can sit outside it. Text SYSTEM9, navy, 3 px in. */
+select { appearance: none; -webkit-appearance: none; cursor: pointer; border: 0; image-rendering: pixelated; vertical-align: top;
+  min-height: calc(20 * var(--u)); padding: 0 calc(20 * var(--u)) calc(1 * var(--u)) calc(3 * var(--u));
+  --ui-arrow: url("sc3ui/combo_arrow.png");
+  background: var(--ui-arrow) right 0 top 50% / calc(16 * var(--u)) calc(16 * var(--u)) no-repeat,
+    linear-gradient(var(--ui-field), var(--ui-field)) 1px 1px / calc(100% - 17 * var(--u) - 2px) calc(100% - 2px) no-repeat,
+    linear-gradient(var(--ui-groove-hi), var(--ui-groove-hi)) 1px 1px / calc(100% - 17 * var(--u) - 1px) calc(100% - 1px) no-repeat,
+    linear-gradient(var(--ui-blue-line), var(--ui-blue-line)) 0 0 / calc(100% - 17 * var(--u) - 1px) calc(100% - 1px) no-repeat; }
+select:hover { --ui-arrow: url("sc3ui/combo_arrow_hover.png"); }
+select:active { --ui-arrow: url("sc3ui/combo_arrow_pressed.png"); }
+select:disabled { --ui-arrow: url("sc3ui/combo_arrow_disabled.png"); cursor: default; }
+select[multiple], select[size]:not([size="1"]) { padding-right: calc(3 * var(--u)); background: var(--ui-field);
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: calc(2 * var(--u)) solid var(--ui-select); outline-offset: 0; }
-/* check box: 13 px footprint (S3 x=222..234): outer ring, 1 px navy border, 9 px white face, navy tick.
-   radio: 12 px footprint (S3 x=18..29): the same rings round an 8 px white face, 4 px navy dot. */
-input[type=checkbox], input[type=radio] { appearance: none; -webkit-appearance: none; flex: none; cursor: pointer;
-  width: calc(11 * var(--u)); height: calc(11 * var(--u)); margin: calc(1 * var(--u)) calc(4 * var(--u)) calc(1 * var(--u)) calc(1 * var(--u));
-  vertical-align: calc(-1 * var(--u)); background: var(--ui-field);
-  border: calc(1 * var(--u)) solid; border-color: var(--ui-text) var(--ui-mark-lo) var(--ui-mark-lo) var(--ui-text);
-  box-shadow: calc(-1 * var(--u)) calc(-1 * var(--u)) 0 0 var(--ui-mark-ring), calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-mark-lo2);
-  display: inline-grid; place-content: center; }
-input[type=radio] { width: calc(10 * var(--u)); height: calc(10 * var(--u)); border-radius: 50%; margin-right: calc(3 * var(--u)); }
-input[type=checkbox]::before { content: ""; width: calc(9 * var(--u)); height: calc(9 * var(--u)); transform: scale(0);
-  clip-path: polygon(2% 46%, 26% 40%, 40% 64%, 80% 2%, 100% 16%, 46% 98%, 30% 98%); background: var(--ui-text); }
-input[type=radio]::before { content: ""; width: calc(4 * var(--u)); height: calc(4 * var(--u)); border-radius: 50%; transform: scale(0); background: var(--ui-text); }
-input[type=checkbox]:checked::before, input[type=radio]:checked::before { transform: scale(1); }
-input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .5; cursor: default; }
+/* check box and radio (R3, sc3ui3): the game's own 8-frame strips, SYS.IXF c2d6e93a (13x13) and 0000000a (12x12,
+   its magenta key is transparent). Frames observed in the game: 0 on, 1 off, 2/3 the same under the mouse, 4/5 pressed,
+   6/7 disabled. Same footprint as before (13 and 12 px, label 3 and 2 px after), so layouts do not move. The margins
+   put the box 2 px under an 18 px row's top, where the game draws it (a centred 13 px box would land half a pixel lower). */
+input[type=checkbox], input[type=radio] { appearance: none; -webkit-appearance: none; flex: none; cursor: pointer; --ui-f: 1;
+  width: calc(13 * var(--u)); height: calc(13 * var(--u)); margin: calc(-1 * var(--u)) calc(3 * var(--u)) 0 0; padding: 0; border: 0; border-radius: 0;
+  vertical-align: calc(-2 * var(--u)); image-rendering: pixelated;
+  background: url("sc3ui/checkbox.png") calc(var(--ui-f) * -13 * var(--u)) 0 / calc(104 * var(--u)) calc(13 * var(--u)) no-repeat; }
+input[type=radio] { width: calc(12 * var(--u)); height: calc(12 * var(--u)); margin-right: calc(2 * var(--u)); margin-bottom: calc(1 * var(--u));
+  background: url("sc3ui/radio.png") calc(var(--ui-f) * -12 * var(--u)) 0 / calc(96 * var(--u)) calc(12 * var(--u)) no-repeat; }
+input[type=checkbox]:checked, input[type=radio]:checked { --ui-f: 0; }
+input[type=checkbox]:hover, input[type=radio]:hover { --ui-f: 3; }
+input[type=checkbox]:checked:hover, input[type=radio]:checked:hover { --ui-f: 2; }
+input[type=checkbox]:active, input[type=radio]:active { --ui-f: 5; }
+input[type=checkbox]:checked:active, input[type=radio]:checked:active { --ui-f: 4; }
+input[type=checkbox]:disabled, input[type=radio]:disabled { --ui-f: 7; cursor: default; }
+input[type=checkbox]:checked:disabled, input[type=radio]:checked:disabled { --ui-f: 6; }
 input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: calc(2 * var(--u)) dotted var(--ui-select); outline-offset: calc(2 * var(--u)); }
-/* slider (S3 sound panel): 3 px track, 2 rows black over 1 white, round light knob */
-input[type=range] { appearance: none; -webkit-appearance: none; background: transparent; height: calc(22 * var(--u)); margin: 0; cursor: pointer; }
-input[type=range]::-webkit-slider-runnable-track { height: calc(3 * var(--u)); background: linear-gradient(#080c18 66%, #ffffff 66%); }
-input[type=range]::-moz-range-track { height: calc(3 * var(--u)); background: linear-gradient(#080c18 66%, #ffffff 66%); }
-input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: calc(20 * var(--u)); height: calc(20 * var(--u)); margin-top: calc(-8.5 * var(--u));
-  border-radius: 50%; border: calc(1 * var(--u)) solid #292829; background: radial-gradient(circle at 45% 40%, #f0f3ff 0 45%, #b5bac6 75%, #5a5d63); }
-input[type=range]::-moz-range-thumb { width: calc(18 * var(--u)); height: calc(18 * var(--u)); border-radius: 50%; border: calc(1 * var(--u)) solid #292829;
-  background: radial-gradient(circle at 45% 40%, #f0f3ff 0 45%, #b5bac6 75%, #5a5d63); }
+/* slider (R3 sound panel, sc3ui3): the game's own 80x20 bitmap SYS.IXF c2b99e09, cut in two. The track (columns
+   0..59: a left cap, 58 identical columns, a right cap, on the panel blue) stretches to the input's width, the knob
+   (columns 60..79) slides over it. Both carry the panel blue round them, as in the game, where sliders sit on blue.
+   The caps are painted with border-image-width over a 0 border, so the knob travels the input's full width like the game's. */
+input[type=range] { appearance: none; -webkit-appearance: none; background: transparent; height: calc(20 * var(--u)); margin: 0; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: calc(20 * var(--u)); image-rendering: pixelated;
+  border: 0 solid; border-image: url("sc3ui/slider_track.png") 0 1 fill / 0 calc(1 * var(--u)) stretch; }
+input[type=range]::-moz-range-track { height: calc(20 * var(--u)); image-rendering: pixelated;
+  border: 0 solid; border-image: url("sc3ui/slider_track.png") 0 1 fill / 0 calc(1 * var(--u)) stretch; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: calc(20 * var(--u)); height: calc(20 * var(--u)); margin: 0;
+  border: 0; border-radius: 0; image-rendering: pixelated; background: url("sc3ui/slider_knob.png") 0 0 / 100% 100% no-repeat; }
+input[type=range]::-moz-range-thumb { width: calc(20 * var(--u)); height: calc(20 * var(--u)); border: 0; border-radius: 0;
+  image-rendering: pixelated; background: url("sc3ui/slider_knob.png") 0 0 / 100% 100% no-repeat; }
+input[type=range]:disabled { cursor: default; opacity: .6; }
+/* volume steps (R3 sound panel): one 68x10 bitmap, 22DEC92D_OtherCtrls.ixf 22dec92d:1 */
+.ui-volume { display: inline-block; width: calc(68 * var(--u)); height: calc(10 * var(--u)); image-rendering: pixelated;
+  background: url("sc3ui/volume.png") 0 0 / 100% 100% no-repeat; }
 /* one option per line: 18 px rows like the radio lists of S3 */
 .ui-opt { display: flex; align-items: center; min-height: calc(18 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); color: var(--ui-text); }
 
@@ -192,13 +217,30 @@ summary:hover { color: var(--ui-text); }
   background: var(--ui-blue); border: 1px solid var(--ui-lav-500); color: var(--ui-title-text);
   font: var(--ui-type-title); letter-spacing: var(--ui-ls-title); }
 .ui-titlebar h1, .ui-titlebar h2, .ui-titlebar h3 { color: inherit; font: inherit; letter-spacing: inherit; margin: 0; }
-/* close box (S3 x=451..467, y=9..24): 17x16, the pill outline and drop shadow, an inner 1 px navy square with a 2 px X */
-.ui-close { position: relative; align-self: flex-start; width: calc(17 * var(--u)); height: calc(16 * var(--u)); min-height: 0; padding: 0;
-  border-radius: calc(2 * var(--u)); margin: calc(3 * var(--u)) calc(4 * var(--u)) 0 auto; color: transparent; font-size: 0; }
-.ui-close::after { content: ""; position: absolute; inset: 0; border: calc(1 * var(--u)) solid var(--ui-text);
-  background: linear-gradient(45deg, transparent calc(50% - 1.1 * var(--u)), var(--ui-text) calc(50% - 1.1 * var(--u)) calc(50% + 1.1 * var(--u)), transparent calc(50% + 1.1 * var(--u))),
-    linear-gradient(-45deg, transparent calc(50% - 1.1 * var(--u)), var(--ui-text) calc(50% - 1.1 * var(--u)) calc(50% + 1.1 * var(--u)), transparent calc(50% + 1.1 * var(--u)));
-  background-size: calc(9 * var(--u)) calc(8 * var(--u)); background-position: center; background-repeat: no-repeat; }
+/* bitmap buttons (sc3ui3): the game's own 4-frame strips, one frame shown. Frame order observed in the game with
+   posted input: 0 disabled, 1 normal, 2 pressed, 3 hover (UI_STYLE.md "Game bitmaps"). The frames carry their own
+   shadow and the panel blue round it, so the button box is exactly one frame.
+   close X (R3 title bar): SYS.IXF 453ba1f4, 23x23 frames, the game shows rows 2..22 at (449, 9).
+   play / stop (R3 "Escuchar eleccion"): SYS.IXF 82fab6d2 / 22fab6de, 24x25 frames. */
+button.ui-close, button.ui-play, button.ui-stop, button.ui-ok { --ui-f: 1; padding: 0; min-height: 0; border: 0; border-radius: 0; box-shadow: none;
+  transform: none; color: transparent; font-size: 0; image-rendering: pixelated; flex: none;
+  background: var(--ui-bmp) calc(var(--ui-f) * var(--ui-fw) * -1 * var(--u)) calc(var(--ui-fy, 0) * -1 * var(--u))
+    / calc(4 * var(--ui-fw) * var(--u)) calc(var(--ui-fh) * var(--u)) no-repeat; }
+button.ui-close:hover:not(:disabled), button.ui-play:hover:not(:disabled), button.ui-stop:hover:not(:disabled), button.ui-ok:hover:not(:disabled) { --ui-f: 3; background: var(--ui-bmp) calc(var(--ui-f) * var(--ui-fw) * -1 * var(--u)) calc(var(--ui-fy, 0) * -1 * var(--u))
+    / calc(4 * var(--ui-fw) * var(--u)) calc(var(--ui-fh) * var(--u)) no-repeat; }
+button.ui-close:active:not(:disabled), button.ui-play:active:not(:disabled), button.ui-stop:active:not(:disabled), button.ui-ok:active:not(:disabled),
+button.ui-play[aria-pressed="true"], button.ui-stop[aria-pressed="true"] { --ui-f: 2; transform: none; box-shadow: none;
+  background: var(--ui-bmp) calc(var(--ui-f) * var(--ui-fw) * -1 * var(--u)) calc(var(--ui-fy, 0) * -1 * var(--u))
+    / calc(4 * var(--ui-fw) * var(--u)) calc(var(--ui-fh) * var(--u)) no-repeat; }
+button.ui-close:disabled, button.ui-play:disabled, button.ui-stop:disabled, button.ui-ok:disabled { --ui-f: 0; opacity: 1; box-shadow: none;
+  background: var(--ui-bmp) calc(var(--ui-f) * var(--ui-fw) * -1 * var(--u)) calc(var(--ui-fy, 0) * -1 * var(--u))
+    / calc(4 * var(--ui-fw) * var(--u)) calc(var(--ui-fh) * var(--u)) no-repeat; }
+button.ui-close { --ui-bmp: url("sc3ui/close.png"); --ui-fw: 23; --ui-fh: 23; --ui-fy: 2;
+  width: calc(23 * var(--u)); height: calc(21 * var(--u)); align-self: flex-start; margin: calc(3 * var(--u)) 0 0 auto; }
+button.ui-play { --ui-bmp: url("sc3ui/play.png"); --ui-fw: 24; --ui-fh: 25; width: calc(24 * var(--u)); height: calc(25 * var(--u)); margin: 0; }
+button.ui-stop { --ui-bmp: url("sc3ui/stop.png"); --ui-fw: 24; --ui-fh: 25; width: calc(24 * var(--u)); height: calc(25 * var(--u)); margin: 0; }
+/* OK (R3 bottom right): SYS.IXF a2defd9a, 4 frames of 42x32 with the blue plate round the pill */
+button.ui-ok { --ui-bmp: url("sc3ui/ok.png"); --ui-fw: 42; --ui-fh: 32; width: calc(42 * var(--u)); height: calc(32 * var(--u)); margin: 0; }
 /* panel = a group box face without the heading (kept for the pages' text blocks) */
 .ui-panel { background-color: var(--ui-face); border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line);
   padding: calc(5 * var(--u)) calc(7 * var(--u)) calc(7 * var(--u)); }
@@ -217,9 +259,35 @@ summary:hover { color: var(--ui-text); }
 .ui-groups > .ui-group { margin: 0; }
 /* list (S3 "Musicas posibles"): grooved, face, 18 px rows; selection solid blue, white text */
 .ui-list { background: var(--ui-face); border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line);
-  padding: calc(3 * var(--u)) calc(6 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
+  padding: calc(3 * var(--u)) calc(6 * var(--u)) calc(3 * var(--u)) calc(4 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
 .ui-list > * { min-height: calc(18 * var(--u)); display: flex; align-items: center; }
 .ui-list > .is-sel { background: var(--ui-select); color: var(--ui-select-text); }
+/* a list row's check box sits at the row's top, 4 px before its text (R3 "Updown Town", sc3ui3) */
+.ui-list > * > input[type=checkbox], .ui-list > * > input[type=radio] { align-self: flex-start; margin-top: 0; margin-right: calc(4 * var(--u)); }
+/* scroll bars (R3 "Musicas posibles", sc3ui3): the game's own 16x16 frames, SYS.IXF e2b99e01, on every scrolling box of
+   every page. One arrow at each end (pressed frame while held, no hover change in the game), the track tiled, the thumb
+   exact at the game's 16 px and, when longer, its two ends kept with the face stretched between them. Browsers without ::-webkit-scrollbar get the game's colours instead. */
+::-webkit-scrollbar { width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: var(--ui-blue); }
+::-webkit-scrollbar-track:vertical { image-rendering: pixelated; background: url("sc3ui/scroll_track.png") 0 0 / calc(16 * var(--u)) calc(16 * var(--u)) repeat-y; }
+::-webkit-scrollbar-track:horizontal { image-rendering: pixelated; background: url("sc3ui/scroll_htrack.png") 0 0 / calc(16 * var(--u)) calc(16 * var(--u)) repeat-x; }
+::-webkit-scrollbar-thumb:vertical { image-rendering: pixelated;
+  background: url("sc3ui/scroll_thumb.png") 0 0 / 100% calc(16 * var(--u)) no-repeat, url("sc3ui/scroll_thumb.png") 0 100% / 100% calc(16 * var(--u)) no-repeat,
+    url("sc3ui/scroll_thumb.png") 0 0 / 100% 100% no-repeat; }
+::-webkit-scrollbar-thumb:horizontal { image-rendering: pixelated; min-width: calc(16 * var(--u));
+  background: url("sc3ui/scroll_hthumb.png") 0 0 / calc(16 * var(--u)) 100% no-repeat, url("sc3ui/scroll_hthumb.png") 100% 0 / calc(16 * var(--u)) 100% no-repeat,
+    url("sc3ui/scroll_hthumb.png") 0 0 / 100% 100% no-repeat; }
+::-webkit-scrollbar-button { display: none; width: calc(16 * var(--u)); height: calc(16 * var(--u)); image-rendering: pixelated;
+  background-size: 100% 100%; background-repeat: no-repeat; }
+::-webkit-scrollbar-button:vertical:start:decrement { display: block; background-image: url("sc3ui/scroll_up.png"); }
+::-webkit-scrollbar-button:vertical:start:decrement:active { background-image: url("sc3ui/scroll_up_pressed.png"); }
+::-webkit-scrollbar-button:vertical:end:increment { display: block; background-image: url("sc3ui/scroll_down.png"); }
+::-webkit-scrollbar-button:vertical:end:increment:active { background-image: url("sc3ui/scroll_down_pressed.png"); }
+::-webkit-scrollbar-button:horizontal:start:decrement { display: block; background-image: url("sc3ui/scroll_left.png"); }
+::-webkit-scrollbar-button:horizontal:start:decrement:active { background-image: url("sc3ui/scroll_left_pressed.png"); }
+::-webkit-scrollbar-button:horizontal:end:increment { display: block; background-image: url("sc3ui/scroll_right.png"); }
+::-webkit-scrollbar-button:horizontal:end:increment:active { background-image: url("sc3ui/scroll_right_pressed.png"); }
+::-webkit-scrollbar-corner { background: var(--ui-blue); }
+@supports not selector(::-webkit-scrollbar) { * { scrollbar-color: var(--ui-lav-150) var(--ui-blue); } }
 
 /* blue strip with dark text (S3 "Escuchar eleccion", 28 px, text 6 px in) and a page title bar inside a page */
 .ui-strip { display: flex; align-items: center; gap: calc(6 * var(--u)); min-height: calc(28 * var(--u));

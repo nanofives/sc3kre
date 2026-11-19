@@ -7,26 +7,41 @@
 <!-- sc3ui2 (round 2026-11-18g): the game's Preferencias dialog rebuilt with docs/assets/sc3ui.css at --ui-scale 1,
      to be diffed against a native 800x600 grab (re/tools/sc3ui/replica_diff.py). The dialog's own layout (where each
      group box sits) is placed by hand from the measured rectangles; everything inside a box (bevels, fonts, row
-     pitch, padding, control sizes) comes from sc3ui.css. No game art. -->
+     pitch, padding, control sizes) comes from sc3ui.css.
+     sc3ui3 (round 2026-11-19b): the close X, play / stop, the dropdown arrow, the sliders and the volume steps are the
+     game's bitmaps from docs/assets/sc3ui/ (owner call). ?gamefont=1 loads the game's own FBF fonts at run time with
+     re/tools/bldimport/sc3font.js from the folder in ?game=<file URL of the install> (test hook, local only). -->
 <link rel="stylesheet" href="../../../docs/assets/sc3ui.css">
+<script src="../bldimport/sc3font.js"></script>
+<script>
+// test hook (local only): ?gamefont=1&game=<file URL of the install> draws the replica's text with the game's own fonts
+(function () {
+  const q = new URLSearchParams(location.search);
+  if (q.get('gamefont') === '1' && q.get('game')) SC3Font.useGame(q.get('game')).then(i => { document.documentElement.dataset.fontReady = i ? 'game' : 'free'; });
+})();
+</script>
 <style>
 :root { --ui-scale: 1; }
 html, body { margin: 0; background: #000; }
 #dlg { position: relative; width: 480px; height: 472px; }
 #dlg > .ui-group, #dlg > .ui-plate, #dlg > .ui-strip, #dlg > .ui-list, #dlg > .sbtn, #dlg > .abs { position: absolute; margin: 0; }
 .ind { padding-left: 4px; }
+/* sc3ui3: the stylesheet's line flow puts the combo 1 px under the game's (heading line box 18 px, the game's 17) */
+.ind > select { margin-top: -1px; }
 .rows24 > .ui-opt { min-height: 24px; }
 .tight { padding-top: 0; }
 .tight .ui-opt { min-height: 17px; }
 .ui-plate.panel { padding: 0; display: block; }
-.vol { position: absolute; left: 22px; top: 6px; display: flex; gap: 1px; align-items: flex-end; }
-.vol i { display: block; width: 7px; background: #dee3ff; }
-.ui-plate.panel input[type=range] { position: absolute; left: 6px; width: 86px; }
-.scroll { position: absolute; left: 452px; top: 177px; width: 16px; height: 130px; background: var(--ui-blue); }
-.scroll::before { content: ""; position: absolute; left: 7px; top: 32px; bottom: 16px; width: 1px; background: #080c18; box-shadow: 1px 0 0 #fff; }
+.ui-plate.panel .ui-volume { position: absolute; left: 13px; top: 3px; }
+.ui-plate.panel input[type=range] { position: absolute; left: 5px; width: 86px; }
+/* the list's scroll bar: a real scrolling box drawn by sc3ui.css's ::-webkit-scrollbar rules. Chrome draws the thumb at least 17 px long (the game: 16). 797 px of content in
+   130 px gives a 16 px thumb at the top, as in the game (track 98 px x 130 / 797) */
+/* 10 px of (transparent) content to its left: Chrome draws no thumb in a box whose content is 0 px wide */
+.scroller { position: absolute; left: 442px; top: 177px; width: 26px; height: 130px; overflow-y: scroll; }
+.scroller > div { height: 797px; }
 .sbtn { position: absolute; width: 14px; height: 14px; min-height: 0; padding: 0; border-radius: 2px; margin: 0; font-size: 7px; letter-spacing: 0; }
-.ok { position: absolute; left: 431px; top: 433px; width: 42px; height: 33px; background: var(--ui-blue); }
-.ok button { position: absolute; left: 4px; top: 3px; width: 32px; height: 24px; padding: 0; border-radius: 12px; margin: 0; font: 700 16px/1 var(--ui-font); }
+#dlg > .ui-play, #dlg > .ui-stop { position: absolute; top: 312px; }
+#dlg > .ui-ok { position: absolute; left: 431px; top: 433px; }
 </style>
 </head>
 <body>
@@ -54,7 +69,7 @@ html, body { margin: 0; background: #000; }
       <label class="ui-opt"><input type="radio" name="o">Desactivados</label>
     </div>
     <span class="ui-label">Resoluci&oacute;n de pantalla</span>
-    <div class="ind"><select style="width:159px"><option>800x600 NVIDIA GeForce RTX</option></select></div>
+    <div class="ind"><select style="width:176px"><option>800x600 NVIDIA GeForce RTX</option></select></div>
   </div>
 
   <div class="ui-group" style="left:211px;top:41px;width:262px;height:300px">
@@ -68,8 +83,8 @@ html, body { margin: 0; background: #000; }
     <span class="ui-label" style="margin-top:0">M&uacute;sicas posibles</span>
   </div>
   <div class="ui-plate panel" style="left:371px;top:45px;width:96px;height:110px">
-    <div class="vol"><i style="height:2px"></i><i style="height:3px"></i><i style="height:4px"></i><i style="height:5px"></i><i style="height:6px"></i><i style="height:7px"></i><i style="height:8px"></i></div>
-    <input type="range" value="100" style="top:17px"><input type="range" value="100" style="top:41px"><input type="range" value="100" style="top:65px">
+    <span class="ui-volume"></span>
+    <input type="range" value="100" style="top:20px"><input type="range" value="100" style="top:44px"><input type="range" value="100" style="top:68px">
   </div>
   <div class="ui-list" style="left:217px;top:177px;width:234px;height:130px">
     <label><input type="checkbox" checked>Updown Town</label>
@@ -80,9 +95,9 @@ html, body { margin: 0; background: #000; }
     <label><input type="checkbox" checked>Magic City</label>
     <label><input type="checkbox" checked>Illumination</label>
   </div>
-  <div class="scroll"><button class="sbtn" style="left:1px;top:1px">&#x25B2;</button><button class="sbtn" style="left:1px;top:115px">&#x25BC;</button></div>
+  <div class="scroller"><div></div></div>
   <div class="ui-strip" style="left:217px;top:309px;width:250px;height:28px">Eschuchar elecci&oacute;n</div>
-  <button class="sbtn" style="left:415px;top:315px">&#x25B6;</button><button class="sbtn" style="left:440px;top:315px">&#x25A0;</button>
+  <button class="ui-play" style="left:413px" aria-label="Escuchar">&#x25B6;</button><button class="ui-stop" style="left:437px" aria-label="Parar">&#x25A0;</button>
 
   <div class="ui-group tight" style="left:5px;top:345px;width:468px;height:76px">
     <span class="ui-label">Opciones generales:</span>
@@ -91,7 +106,7 @@ html, body { margin: 0; background: #000; }
       <label class="ui-opt"><input type="checkbox" checked>Ir a los desastres autom&aacute;tico</label>
     </div>
   </div>
-  <div class="ok"><button aria-label="Aceptar">&#x2713;</button></div>
+  <button class="ui-ok" aria-label="Aceptar">&#x2713;</button>
 </div>
 </body>
 </html>
