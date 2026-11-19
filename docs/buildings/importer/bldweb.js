@@ -1572,6 +1572,12 @@ function BLDWEB_LIB() {
   };
   const PORT_MAX_COPIES = 20;
   const portOf = kind => (typeof kind === 'string' && Object.prototype.hasOwnProperty.call(PORTS, kind)) ? PORTS[kind] : null;
+  // task plop: bldimport.LANDMARK (a landmark joins the stock landmark dialog: every exemplar whose type IsA 18000) and
+  // the plugin it is written to (Apps/PlugIn/bldimport: .pin + .dat, the Maxis landmark packs' layout, sc3plugin.py)
+  const LANDMARK = { landuse: 18000, types: [18000, 18999], sizes: [1, 2, 3, 4], label: 'Landmark' };
+  const LM_GROUP = 0xB1D10002, LM_CS_GROUP = 0xB1D10003, LM_TEXT_GROUP = 0xB1D10004, LM_DESC_GROUP = 0xB1D10005;
+  const PLUGIN_NAME = 'bldimport', PLUGIN_DIR = 'Apps/PlugIn/' + PLUGIN_NAME + '/';
+  const LM_PIN = PLUGIN_DIR + PLUGIN_NAME + '.pin', LM_DAT = PLUGIN_DIR + PLUGIN_NAME + '.dat';
   const reAll = (re, s) => { const out = []; re.lastIndex = 0; let m; while ((m = re.exec(s))) { out.push(m); if (m[0] === '') re.lastIndex++; } return out; };
   const KEY_RE = /Key:\s*(\d+),(\d+),(\d+),(\d+)/g;     // on latin1 strings of the payload bytes
   const familyLanduse = s => { const m = /LandUse:\s*(\d+)/.exec(s); return m ? parseInt(m[1], 10) : null; };
@@ -1678,7 +1684,39 @@ function BLDWEB_LIB() {
     game._ports = out;
     return out;
   }
-  const targetOf = e => (portOf(e.kind) ? e.kind : e.class);   // bldimport.target_of
+  const targetOf = e => ((portOf(e.kind) || e.kind === 'landmark') ? e.kind : e.class);   // bldimport.target_of
+  async function landmarkTable(game) {   // bldimport.landmark_table
+    if (game._landmarks) return game._landmarks;
+    const bld = await stockBuildings(game);
+    const [lo, hi] = LANDMARK.types, bases = new Map();
+    for (const bid of [...bld.keys()].sort((a, b) => a - b)) {
+      const [f, p] = bld.get(bid);
+      const lu = tkb1Get(p, 0x65), fp = tkb1Get(p, 0x66), cs = tkb1Get(p, 0x67);
+      if (!(lu && lu.length) || !(lo <= lu[0] && lu[0] <= hi) || !(fp && fp.length) || fp[0] !== fp[2] || !LANDMARK.sizes.includes(fp[0])) continue;
+      if (bases.has(fp[0]) || !(cs && cs.length) || cs[0] !== CS_TYPE || tkb1Get(p, 0x6D) === null) continue;
+      bases.set(fp[0], [bid, f]);
+    }
+    const miss = LANDMARK.sizes.filter(n => !bases.has(n));
+    if (miss.length) throw new BldError('landmark: no stock base landmark for lot ' + miss.map(n => n + 'x' + n).join(', '));
+    const out = new Map([['landmark', { families: [], bases: new Map([...bases].sort((a, b) => a[0] - b[0])), landuse: LANDMARK.landuse, copies: false, label: LANDMARK.label }]]);
+    game._landmarks = out;
+    return out;
+  }
+  function tkb1SetU32(buf, prop, v) {    // bldimport.tkb1_set_u32
+    const b = new Uint8Array(buf);
+    for (const [p, t, n, off] of tkb1Props(buf)) {
+      if (p !== prop) continue;
+      if (t !== 3 || n !== 1) throw new BldError('prop 0x' + prop.toString(16) + ' is not one number');
+      wrU32(b, off, v); return b;
+    }
+    throw new BldError('prop 0x' + prop.toString(16) + ' not present');
+  }
+  function pluginPin(keys) {             // bldimport.plugin_pin; keys: [[id, name bytes]]
+    let t = '[Admin]\r\nEnabled=ON\r\n\r\n[DBSegments]\r\n0x00000001=0x80C381D7;%PluginDirectory%' + PLUGIN_NAME + '\\' + PLUGIN_NAME +
+      '.dat\r\n\r\n[SpriteSegments]\r\n' + PLUGIN_NAME + '=addon-enabled\r\n\r\n[OccupantKeys]\r\n';
+    for (const [nid, nm] of keys) t += '0x' + hex8(BLD_TYPE) + ',0x' + hex8(LM_GROUP) + ',0x' + hex8(nid) + '=' + nid + ' ' + latin1(nm) + '\r\n';
+    return ascii(t);
+  }
   async function classTable(game) {
     if (game._table) return game._table;
     const fams = familyRecords(await game.read(BUILDFAM));
@@ -2045,25 +2083,34 @@ function BLDWEB_LIB() {
       }
       let cls = 'class' in m ? m.class : null;
       const w = 'weight' in m ? m.weight : 1;
-      const kind = 'kind' in m ? m.kind : 'growable', port = portOf(kind);
+      const kind = 'kind' in m ? m.kind : 'growable', port = portOf(kind), lm = kind === 'landmark';
       if (!pyTrue('enabled' in m ? m.enabled : true)) why = 'enabled is false';
-      else if (kind !== 'growable' && port === null) why = 'kind ' + JSON.stringify(kind) + ': only growable, airport and seaport buildings';
+      else if (kind !== 'growable' && port === null && !lm) why = 'kind ' + JSON.stringify(kind) + ': only growable, airport, seaport and landmark buildings';
       else if (!exists) why = 'file not in the folder';
       else if (!(String(f).toLowerCase().endsWith('.obj') || isBld(f))) why = 'only .obj models and .bld files';
-      else if (cls === null && isBld(f) && port === null) why = 'no class: its category (' + ((m.x_bld || {}).category) + ') is not a house, shop or factory, set one in models.json';
+      else if (cls === null && isBld(f) && port === null && !lm) why = 'no class: its category (' + ((m.x_bld || {}).category) + ') is not a house, shop or factory, set one in models.json';
       else if (lotErr) why = lotErr;
       else if (!Number.isInteger(w) || !(1 <= w && w <= 1000)) why = 'weight ' + JSON.stringify(w) + ' is not a whole number from 1 to 1000';
       else if (port !== null && port.copies && w > PORT_MAX_COPIES) why = 'weight ' + w + ': an ' + kind + "'s weight is the number of copies in the airpark's list (the rule ignores Key weights), at most " + PORT_MAX_COPIES;
+      else if (lm && !LANDMARK.sizes.includes(n)) why = 'landmark lot ' + n + 'x' + n + ': landmarks are ' + LANDMARK.sizes.map(s_ => s_ + 'x' + s_).join(', ');
       else if (port !== null && !port.sizes.includes(n)) why = kind + ' lot ' + n + 'x' + n + ': the ' + port.label.toLowerCase() + ' grows ' + port.sizes.map(s_ => s_ + 'x' + s_).join(' and ');
-      else if (port === null && table && !(Number.isInteger(cls) && table.has(cls))) why = 'class ' + JSON.stringify(cls) + ' is not a growable class (' + [...table.keys()].join(', ') + ')';
-      else if (port === null && table && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
+      else if (port === null && !lm && table && !(Number.isInteger(cls) && table.has(cls))) why = 'class ' + JSON.stringify(cls) + ' is not a growable class (' + [...table.keys()].join(', ') + ')';
+      else if (port === null && !lm && table && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
       else if (cp1252Encode(name) === null) why = 'name ' + JSON.stringify(name) + " has characters the game's text files cannot hold (cp1252)";
+      let desc = null;
+      if (!why && lm) {
+        desc = 'description' in m ? m.description : null;
+        desc = (typeof desc === 'string' && pyStrip(desc)) ? pyStrip(desc) : name;
+        if (cp1252Encode(desc) === null) why = 'description ' + JSON.stringify(desc) + " has characters the game's text files cannot hold (cp1252)";
+      }
       if (why) { rep.push('skip  [' + nid + '] ' + f + ': ' + why); continue; }
       if (port !== null) cls = port.landuse;          // the base's LandUse; models.json "class" is not used
-      out.push({ id: nid, file: f, name, lot: n, class: cls, weight: w, model: m, kind: port !== null ? kind : 'growable' });
+      if (lm) cls = LANDMARK.landuse;
+      out.push({ id: nid, file: f, name, lot: n, class: cls, weight: w, model: m, kind: (port !== null || lm) ? kind : 'growable' });
+      if (lm) out[out.length - 1].desc = desc;
     }
     let tg = table;
-    if (table) { tg = new Map(table); for (const [k, v] of ports) tg.set(k, v); }
+    if (table) { tg = new Map(table); for (const [k, v] of ports) tg.set(k, v); for (const [k, v] of await landmarkTable(game)) tg.set(k, v); }
     return [out, rep, tg];
   }
 
@@ -2129,12 +2176,17 @@ function BLDWEB_LIB() {
     opt = opt || {};
     const log = opt.log || (() => {});
     const cur = async rel => (src.has(rel) ? src.get(rel) : (await game.exists(rel) ? await game.read(rel) : null));
-    for (const rel of [OVL + OCC_KOREA, OVL + CS_KOREA]) if ((await cur(rel)) === null) throw new BldError(rel + ' not found: the road mod (sc3netmod, mods\\netmod) must be installed');
-    const langs = [];
-    for (const n of await game.listdir(OVL + 'Apps/Res/Text')) { const c = await cur(OVL + 'Apps/Res/Text/' + n + '/' + NAMES); if (c && c.length) langs.push(n); }
-    if (!langs.length) throw new BldError('no mods\\netmod\\overlay\\Apps\\Res\\Text\\<language>\\' + NAMES + ' found');
     const [entries, rep, table] = await plan(folder, game);
+    // the overlay (road mod) only for growables / ports, or to put back what an earlier run wrote there (task plop)
+    const needOvl = entries.some(e => e.kind !== 'landmark') || [...src.keys()].some(r => r.startsWith(OVL));
+    const langs = [];
+    if (needOvl) {
+      for (const rel of [OVL + OCC_KOREA, OVL + CS_KOREA]) if ((await cur(rel)) === null) throw new BldError(rel + ' not found: the road mod (sc3netmod, mods\\netmod) must be installed');
+      for (const n of await game.listdir(OVL + 'Apps/Res/Text')) { const c = await cur(OVL + 'Apps/Res/Text/' + n + '/' + NAMES); if (c && c.length) langs.push(n); }
+      if (!langs.length) throw new BldError('no mods\\netmod\\overlay\\Apps\\Res\\Text\\<language>\\' + NAMES + ' found');
+    }
     const occ = [], cs = [], pix = [], names = [], lines = new Map();
+    const lmRecs = [], lmKeys = [];
     const bld = await stockBuildings(game);
     let k0 = 0;
     for (const e of entries) {
@@ -2147,20 +2199,41 @@ function BLDWEB_LIB() {
       let ex = await baseExemplar(game, base, bfile);
       const [tab, tmpl] = await stockTableAndTemplate(game, ex);
       const nm = cp1252Encode(e.name);
-      ex = tkb1SetKey(ex, 0x67, [CS_TYPE, GROUP, nid]);
-      ex = tkb1SetKey(ex, 0x6D, [TEXT_TYPE, TEXT_GROUP, nid]);
+      const lm = e.kind === 'landmark';
+      ex = tkb1SetKey(ex, 0x67, [CS_TYPE, lm ? LM_CS_GROUP : GROUP, nid]);
+      ex = tkb1SetKey(ex, 0x6D, [TEXT_TYPE, lm ? LM_TEXT_GROUP : TEXT_GROUP, nid]);
       ex = tkb1SetText(ex, 0x64, nm);
+      if (lm) {
+        ex = tkb1SetU32(ex, 0x65, LANDMARK.landuse);
+        ex = tkb1SetKey(ex, 0x7C, [TEXT_TYPE, LM_DESC_GROUP, nid]);
+      }
       tkb1Props(ex);
-      occ.push([BLD_GROUP, nid, BLD_TYPE, ex]);
-      cs.push([GROUP, nid, CS_TYPE, frameTable(tab, nid)]);
+      if (lm) {
+        lmRecs.push([LM_GROUP, nid, BLD_TYPE, ex]);
+        lmRecs.push([LM_TEXT_GROUP, nid, TEXT_TYPE, u8cat([packU32s(nm.length), nm])]);
+        const dsc = cp1252Encode(e.desc);
+        lmRecs.push([LM_DESC_GROUP, nid, TEXT_TYPE, u8cat([packU32s(dsc.length), dsc])]);
+        lmRecs.push([LM_CS_GROUP, nid, CS_TYPE, frameTable(tab, nid)]);
+        lmKeys.push([nid, nm]);
+      } else {
+        occ.push([BLD_GROUP, nid, BLD_TYPE, ex]);
+        cs.push([GROUP, nid, CS_TYPE, frameTable(tab, nid)]);
+      }
+      const epix = lm ? lmRecs : pix;
       let nudged = 0;
       for (let k = 0; k < FRAMES; k++) {
         const z = Math.floor((k % 20) / 4), r = k % 4;
         const [im, [L, T]] = frames.get(z + ',' + r);
         const [p0, [w, h], nd] = recordFromImage(tmpl, im);
         nudged += nd;
-        pix.push([GROUP, (nid * 65536 + k) >>> 0, 0, p0]);
-        pix.push([GROUP, (nid * 65536 + k) >>> 0, 1, anchorPayload(L, T, w, h)]);
+        epix.push([GROUP, (nid * 65536 + k) >>> 0, 0, p0]);
+        epix.push([GROUP, (nid * 65536 + k) >>> 0, 1, anchorPayload(L, T, w, h)]);
+      }
+      if (lm) {
+        rep.push('plop  [' + nid + '] ' + e.file + ': "' + e.name + '", ' + tg.label + ', ' + n + 'x' + n + ', stats of stock ' + base +
+          ', in ' + LM_PIN + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
+        if (opt.onFrames) opt.onFrames(e, frames, info);
+        continue;
       }
       names.push([TEXT_GROUP, nid, TEXT_TYPE, u8cat([packU32s(nm.length), nm])]);
       const copies = !!tg.copies;
@@ -2177,7 +2250,11 @@ function BLDWEB_LIB() {
     }
     const files = new Map();
     const keep = entries.map(e => e.id);
-    if (entries.length || src.size) {
+    if (lmRecs.length) {
+      files.set(LM_PIN, pluginPin(lmKeys));
+      files.set(LM_DAT, newContainer(lmRecs));
+    }
+    if (needOvl && (entries.length || src.size)) {
       files.set(OVL + OCC_KOREA, occ.length ? upsert(await cur(OVL + OCC_KOREA), occ) : await cur(OVL + OCC_KOREA));
       files.set(OVL + CS_KOREA, cs.length ? upsert(await cur(OVL + CS_KOREA), cs) : await cur(OVL + CS_KOREA));
       if (pix.length) files.set(OVL + PIX_DAT, newContainer(pix));
@@ -2449,6 +2526,7 @@ function BLDWEB_LIB() {
     fma, sha256, pyJson, pyJsonStr, cp1252Encode, rint, decodePNG, slotMesh, powf, encodePNG, decodeImage, pilMedianCut, paletteCut, pilResize, qfsCompress, qfsDecompress,
     loadObj, place, renderModel, joinRel, dirOf, renderFrame, grassNorm, readBld, previewFrames, batFrames, sideMatch, ixfBuildings, bldFrames, recordFromImage, spanToImage,
     records, slots, classTable, portTable, ruleFamilies, stockBuildings, styleOf, STYLES, PORTS, PORT_MAX_COPIES,
+    landmarkTable, LANDMARK, LM_PIN, LM_DAT, PLUGIN_DIR, newContainer,
     // the tool
     readModels, idsFor, plan, renderOne, renderJob, buildFiles, sources, applyFiles, install, restore, describe,
     handleFS, filesFS, listFS, zipOf, makeWorkerRenderer, suggestClass, CLASS_LABEL, DEFAULT_CLASS, OVL, STATE_DIR, PIX_DAT, BUILD_DIR, GROUP,
