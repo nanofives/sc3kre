@@ -2,19 +2,20 @@
  * verify/civmod/RESULTS.md). #included by sc3resize.c before PLACEHINTS (the cost label shows the civic look).
  * Owner 2026-11-19: civic buildings "cycle looks" on the existing button, new rewards "yes, build it".
  *
- * Data: written by re/tools/bldimport/bldimport.py into the game's own plugin folder
- * (<PlugIn root>\PlugIn\bldimport\, the root is [Directories] PlugIn= of Apps\SC3U.ini, else Apps\, SC3U.exe
- * cGZFileSystem::PlugInDirectory 0x00482532). The game's plugin scan reads only *.pin and the sprite folder's *.DAT, so
- * these two files are inert for the game itself:
- *   bldimport_civic.ini    [Variants] <base instance>=<variant>,<variant>,...   base = the instance of the stock exemplar
- *                          the civic command builds ({0x207EDC0E, 0x57E, base}, CIVIC_REWARD.md 1); a variant is an
- *                          instance in group 0xB1D10002 (bldimport's plugin group) or "<group>:<instance>"
+ * Data: written by re/tools/bldimport/bldimport.py into the game's own plugin folders under <PlugIn root>\PlugIn\
+ * (the root is [Directories] PlugIn= of Apps\SC3U.ini, else Apps\, SC3U.exe cGZFileSystem::PlugInDirectory
+ * 0x00482532). The game's plugin scan reads only *.pin and the sprite folder's *.DAT, so these files are inert for the
+ * game itself:
+ *   bldimport\bldimport_civic.ini  [Variants] <base instance>=<variant>,<variant>,...   base = the instance of the stock
+ *                          exemplar the civic command builds ({0x207EDC0E, 0x57E, base}, CIVIC_REWARD.md 1); a variant
+ *                          is an instance in group 0xB1D10002 (bldimport's plugin group) or "<group>:<instance>"
  *                          [Names] <variant instance>=<name shown in the cost label>
- *   bldimport_rewards.ini  [REWARD_BUILDINGS] <type>=<name> ;<population>;<year>;0;0   the stock row format
- *   bldimport_types.ini    [AgentTypes] <type>=<name>:<text key>, [AgentTypeHierarchy] <type>=<parent>, the CitySim.ini
- *                          format: the reward types' declarations, kept apart from the rows (see "declare" below)
- *                          (Advisor-CityPlanner.ini, parser SIMADV FUN_100089e7). bldimport gives each reward its own
- *                          type id = its id, block RW_TYPE_LO..RW_TYPE_HI (ids.json, 38000..38999).
+ *   bldimport_rewards\bldimport_rewards.ini  [REWARD_BUILDINGS] <type>=<name> ;<population>;<year>;0;0, the stock row
+ *                          format (Advisor-CityPlanner.ini, parser SIMADV FUN_100089e7). bldimport gives each reward its
+ *                          own type id = its id, block RW_TYPE_LO..RW_TYPE_HI (ids.json, 38000..38999). Rewards are a
+ *                          plugin of their own so sc3mods_patch -Restore can take them out of PlugIn.
+ *   bldimport_rewards\bldimport_types.ini  the reward types in CitySim.ini format: declared by the LOADER (sc3mods.c
+ *                          "REWARD TYPES"), not here (owner call 2026-11-19 "Loader declares").
  *
  * CIVVAR [CONFIRMED @ SIMGEOM 0x1000a896, disassembly + game]: the 17 plain civic commands of SIMGEOM's command factory
  * meet at one tool constructor call, 0x1000b1a3 call 0x10009443 (thiscall, ecx = the new tool, args &key, 0, 0), the
@@ -46,12 +47,10 @@
  *    sc3_agenttype_tree_init 0x10002eb1) is built from the GZ registry categories "sc3agenttype" / "sc3typehierarchy",
  *    which cSC3App::LoadRegistry (SC3U 0x0040b761) fills from CitySim.ini with EnumEntries at 0x0040bc80
  *    (RegisterAgentTypeCallback 0x0040cb70) and 0x0040bccb (RegisterAgentRelationCallback 0x0040cc08). Both calls' rel32
- *    go to at_enum_*, which run the stock EnumEntries (0x00486f55) and then pass our file's [AgentTypes] /
- *    [AgentTypeHierarchy] rows to the same stock callback, as exe cRZString (char* ctor 0x00402a40, dtor 0x00402a96).
- *    Patched from DllMain (LoadRegistry runs later, in app init). A reward row whose type was not declared this way
- *    is never unlocked, so it can never be placed. The declarations live in their own file and are made whatever the
- *    NEWREWARD switch says: measured, a city holding a placed reward faulted at 0x1000b392 and the game exited on load
- *    once the declarations were gone. Without sc3resize at all (plugin kept, mods off) that city still does: open.
+ *    are hooked by sc3mods.dll (the loader), which passes bldimport_types.ini's rows to the same stock callbacks, so the
+ *    types are declared whenever the loader runs, mods on or off (a city holding a placed reward of an undeclared type
+ *    faulted at 0x1000b392 and the game exited on load, measured). Here only the guard: rw_unlock_test unlocks a type
+ *    only when sc3mods_reward_types() lists it as declared, so an undeclared reward can never be placed.
  * Switches: sc3resize.ini [buildings] civicvariants= / newrewards= (default 1), env SC3RESIZE_CIVVAR /
  * SC3RESIZE_NEWREWARD (the "Activar mods" page writes the env ones). Read once at start: the hooks are code patches. */
 #define CV_GROUP    0xB1D10002   /* bldimport's plugin exemplar group (bldimport.py LM_GROUP) */
@@ -70,11 +69,10 @@ static BYTE   *g_rw_adv;                      /* SIMADV base */
 static DWORD   g_rw_hit, g_rw_miss;           /* SIMADV+0xa832 (set unlocked), +0xa800 (the stock sub chain) */
 static DWORD   g_rw_type[RW_MAX];
 static int     g_rw_n, g_rw_logged[RW_MAX];
-static DWORD   g_at_type[RW_MAX];             /* types declared through the agent type registry (at_feed) */
-static int     g_at_n, g_at_rel;
-static DWORD   g_at_enum;                     /* SC3U 0x00486f55 cSC3CompressibleINIFile::EnumEntries */
+static DWORD   g_at_type[RW_MAX];             /* the types the loader declared (sc3mods_reward_types) */
+static int     g_at_n = -1;                   /* -1 = not asked yet */
 
-/* <PlugIn root>\PlugIn\bldimport\<leaf> */
+/* <PlugIn root>\PlugIn\<leaf>, leaf = "<plugin folder>\<file>" */
 static void cv_path(char *out, int cap, const char *leaf) {
     char exe[MAX_PATH], ini[MAX_PATH], root[MAX_PATH], *s;
     GetModuleFileNameA(NULL, exe, sizeof(exe));
@@ -83,7 +81,7 @@ static void cv_path(char *out, int cap, const char *leaf) {
     GetPrivateProfileStringA("Directories", "PlugIn", "", root, sizeof(root), ini);
     if (!root[0]) lstrcpynA(root, exe, sizeof(root));
     else if (root[lstrlenA(root) - 1] != '\\') lstrcatA(root, "\\");
-    wsprintfA(out, "%.200sPlugIn\\bldimport\\%.40s", root, leaf);
+    wsprintfA(out, "%.200sPlugIn\\%.60s", root, leaf);
     (void)cap;
 }
 
@@ -93,7 +91,7 @@ static int cv_exists(const char *p) { DWORD a = GetFileAttributesA(p); return a 
 static void cv_load(void) {
     char p[MAX_PATH], sec[8192], nm[8192], *e, *q;
     int i;
-    cv_path(p, sizeof(p), "bldimport_civic.ini");
+    cv_path(p, sizeof(p), "bldimport\\bldimport_civic.ini");
     g_cv_n = 0;
     if (!cv_exists(p)) return;
     if (!GetPrivateProfileSectionA("Variants", sec, sizeof(sec), p)) return;
@@ -205,7 +203,7 @@ static void cv_install(void) {
     for (i = 0; i < g_cv_n; i++) nv += g_cv[i].n;
     if (!g_cv_n) {
         char p[MAX_PATH];
-        cv_path(p, sizeof(p), "bldimport_civic.ini");
+        cv_path(p, sizeof(p), "bldimport\\bldimport_civic.ini");
         logf("CIVVAR> no civic variants (%s %s): not installed, the civic buttons are stock", p, cv_exists(p) ? "lists none" : "not found");
         return;
     }
@@ -230,75 +228,19 @@ static void cv_install(void) {
 }
 
 /* ------------------------------------------------------------------------------------------- NEWREWARD */
-/* the agent type declarations (see the header): our file's [AgentTypes] / [AgentTypeHierarchy] rows through the stock
-   registry callback, after CitySim.ini's. Game thread, app init. */
-typedef void (__cdecl *AT_CB)(void *key, void *value, void *ctx);
-static void at_feed(const char *sec, AT_CB cb, void *ctx) {
-    BYTE *exe = (BYTE *)GetModuleHandleA(NULL), ks[0x20], vs[0x20];
-    char p[MAX_PATH], buf[8192], *e;
-    DWORD a[1];
-    int n = 0, rel = !lstrcmpA(sec, "AgentTypeHierarchy");
-    cv_path(p, sizeof(p), "bldimport_types.ini");
-    if (!cv_exists(p) || !GetPrivateProfileSectionA(sec, buf, sizeof(buf), p)) return;
-    for (e = buf; *e; e += lstrlenA(e) + 1) {
-        char k[16], *eq = strchr(e, '=');
-        DWORD t = strtoul(e, NULL, 0);
-        int i;
-        if (*e == ';' || !eq || eq - e >= (int)sizeof(k)) continue;
-        if (t < RW_TYPE_LO || t > RW_TYPE_HI) { logf("NEWREWARD> [%s] \"%.60s\": type outside %d..%d, not declared", sec, e, RW_TYPE_LO, RW_TYPE_HI); continue; }
-        if (rel) { for (i = 0; i < g_at_n; i++) if (g_at_type[i] == t) break; if (i == g_at_n) continue; }   /* only declared types */
-        else if (g_at_n >= RW_MAX) break;
-        memcpy(k, e, eq - e); k[eq - e] = 0;
-        memset(ks, 0, sizeof(ks)); memset(vs, 0, sizeof(vs));
-        __try {
-            a[0] = (DWORD)k;      rz_thiscall_ret(ks, exe + 0x2a40, a, 1);   /* cRZString(char const *) */
-            a[0] = (DWORD)(eq + 1); rz_thiscall_ret(vs, exe + 0x2a40, a, 1);
-            cb(ks, vs, ctx);
-            rz_thiscall_ret(ks, exe + 0x2a96, NULL, 0);                     /* ~cRZString */
-            rz_thiscall_ret(vs, exe + 0x2a96, NULL, 0);
-        } __except (EXCEPTION_EXECUTE_HANDLER) { logf("NEWREWARD> fault 0x%08lX declaring [%s] %s", GetExceptionCode(), sec, e); continue; }
-        if (!rel) g_at_type[g_at_n++] = t; else g_at_rel++;
-        n++;
-        logf("NEWREWARD> declared [%s] %s (stock registry callback, after CitySim.ini)", sec, e);
-    }
-    (void)n;
-}
-static BYTE __fastcall at_enum_types(void *ini, void *edx, void *sec, AT_CB cb, void *ctx) {
-    DWORD a[3], r;
-    (void)edx;
-    a[0] = (DWORD)sec; a[1] = (DWORD)cb; a[2] = (DWORD)ctx;
-    r = rz_thiscall_ret(ini, (void *)g_at_enum, a, 3);
-    at_feed("AgentTypes", cb, ctx);
-    return (BYTE)r;
-}
-static BYTE __fastcall at_enum_hier(void *ini, void *edx, void *sec, AT_CB cb, void *ctx) {
-    DWORD a[3], r;
-    (void)edx;
-    a[0] = (DWORD)sec; a[1] = (DWORD)cb; a[2] = (DWORD)ctx;
-    r = rz_thiscall_ret(ini, (void *)g_at_enum, a, 3);
-    at_feed("AgentTypeHierarchy", cb, ctx);
-    return (BYTE)r;
-}
-/* DllMain, after the switches: CitySim.ini is read later, in app init (cSC3App::LoadRegistry) */
-static void at_install(void) {
-    BYTE *exe = (BYTE *)GetModuleHandleA(NULL), *c1 = exe + 0xbc80, *c2 = exe + 0xbccb;
-    char p[MAX_PATH];
-    DWORD old;
-    /* not gated on g_newreward: a city with a placed reward faults on load when its type is undeclared, so the types
-       are declared whenever the file exists, the switch only turns off the rows and the unlock */
-    cv_path(p, sizeof(p), "bldimport_types.ini");
-    if (!cv_exists(p)) return;   /* no reward types: CitySim.ini alone, stock */
-    if (c1[-6] != 0x68 || *(DWORD *)(c1 - 5) != (DWORD)exe + 0xcb70 || c1[0] != 0xe8 ||
-        c2[-6] != 0x68 || *(DWORD *)(c2 - 5) != (DWORD)exe + 0xcc08 || c2[0] != 0xe8 ||
-        (DWORD)(c1 + 5 + *(LONG *)(c1 + 1)) != (DWORD)exe + 0x86f55 || (DWORD)(c2 + 5 + *(LONG *)(c2 + 1)) != (DWORD)exe + 0x86f55) {
-        logf("NEWREWARD> SC3U LoadRegistry differs from shipped: reward types not declared, rewards off"); g_newreward = 0; return; }
-    if (!VirtualProtect(c1, 5, PAGE_EXECUTE_READWRITE, &old) || !VirtualProtect(c2, 5, PAGE_EXECUTE_READWRITE, &old)) {
-        logf("NEWREWARD> SC3U LoadRegistry not writable: rewards off"); g_newreward = 0; return; }
-    g_at_enum = (DWORD)exe + 0x86f55;
-    *(LONG *)(c1 + 1) = (LONG)((DWORD)at_enum_types - (DWORD)(c1 + 5));
-    *(LONG *)(c2 + 1) = (LONG)((DWORD)at_enum_hier - (DWORD)(c2 + 5));
-    FlushInstructionCache(GetCurrentProcess(), exe + 0xbc80, 0x50);
-    logf("NEWREWARD> agent type rows of %s go after CitySim.ini's (SC3U 0x0040bc80 / 0x0040bccb)", p);
+/* the reward types sc3mods.dll declared (sc3mods.c "REWARD TYPES"); asked once, at the first city load (after app init,
+   so after LoadRegistry). An older loader without the export declares none: then no reward is ever unlocked. */
+static void rw_declared(void) {
+    HMODULE m = GetModuleHandleA("sc3mods.dll");
+    int (__stdcall *f)(DWORD *, int) = m ? (int (__stdcall *)(DWORD *, int))GetProcAddress(m, "sc3mods_reward_types") : NULL;
+    int i;
+    char t[300];
+    if (g_at_n >= 0) return;
+    g_at_n = f ? f(g_at_type, RW_MAX) : 0;
+    if (g_at_n > RW_MAX) g_at_n = RW_MAX;
+    t[0] = 0;
+    for (i = 0; i < g_at_n && lstrlenA(t) < 280; i++) wsprintfA(t + lstrlenA(t), " %lu", g_at_type[i]);
+    logf("NEWREWARD> %d reward type(s) declared by the loader%s%s", g_at_n, t, f ? "" : " (sc3mods.dll has no sc3mods_reward_types)");
 }
 
 static int rw_is_ours(DWORD t) {
@@ -331,7 +273,8 @@ static void rw_rows(BYTE *adv) {
     char p[MAX_PATH];
     DWORD a[3], ok = 0;
     int i, got = 0;
-    cv_path(p, sizeof(p), "bldimport_rewards.ini");
+    cv_path(p, sizeof(p), "bldimport_rewards\\bldimport_rewards.ini");
+    rw_declared();
     if (!cv_exists(p)) { logf("NEWREWARD> %s not found: no rows added", p); return; }
     memset(ini, 0, sizeof(ini)); memset(ps, 0, sizeof(ps)); memset(sec, 0, sizeof(sec));
     __try {
@@ -371,6 +314,7 @@ static BYTE __fastcall rw_load_wrap(void *adv, void *edx) {
 static int __stdcall rw_unlock_test(DWORD type, BYTE *node) {
     int i = rw_is_ours(type), j;
     if (!i) return 0;
+    rw_declared();
     for (j = 0; j < g_at_n; j++) if (g_at_type[j] == type) break;
     if (j == g_at_n) {   /* not declared: placing it would fault SIMADV 0x1000b392 (see the header), so never unlock it */
         if (g_rw_logged[i - 1] != 2) {
@@ -417,7 +361,7 @@ static void rw_install(void) {
     DWORD old;
     int st = 0;
     if (!g_newreward) { logf("NEWREWARD> off (sc3resize.ini [buildings] newrewards=0 or SC3RESIZE_NEWREWARD=0)"); return; }
-    cv_path(p, sizeof(p), "bldimport_rewards.ini");
+    cv_path(p, sizeof(p), "bldimport_rewards\\bldimport_rewards.ini");
     g_rw_n = 0;
     if (cv_exists(p) && GetPrivateProfileSectionA("REWARD_BUILDINGS", sec, sizeof(sec), p))
         for (e = sec; *e && g_rw_n < RW_MAX; e += lstrlenA(e) + 1) {

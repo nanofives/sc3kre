@@ -74,6 +74,8 @@ footer a { color: var(--ui-info-text); }
   <li><a href="#install">Installing</a></li>
   <li><a href="#ports">Airports and seaports</a></li>
   <li><a href="#landmarks">Landmarks</a></li>
+  <li><a href="#civic">Civic buildings</a></li>
+  <li><a href="#rewards">Rewards</a></li>
   <li><a href="#bld">.bld files</a></li>
   <li><a href="#render">Real .bld views</a></li>
   <li><a href="#packs">Simtropolis packs</a></li>
@@ -92,7 +94,7 @@ footer a { color: var(--ui-info-text); }
 <figcaption>Sacramento at zoom 4, after a few game-run minutes: Red Roof Houses, Gable Houses (dark green roofs) and Brick Houses grown among the stock houses. Every building here grew on its own, none was placed by hand.</figcaption></figure>
 <h3>What it does not do</h3>
 <ul>
-  <li>Rewards and civic buildings (police stations, schools, parks). Your models can grow in residential, commercial, industrial, airport and seaport zones, or be landmarks you place yourself (<a href="#landmarks">Landmarks</a>), and nothing else for now.</li>
+  <li>New civic buttons. A civic model is a second look for a civic button the game already has (<a href="#civic">Civic buildings</a>), and a new reward joins the stock Rewards list (<a href="#rewards">Rewards</a>).</li>
   <li>Lots that are not square. A building sits on a 1x1, 2x2, 3x3 or 4x4 lot, as every stock growable does.</li>
   <li>Night lights and animation. The stock houses have none either.</li>
   <li>3D formats other than OBJ, the Building Architect's <code>.bld</code> and SimCity 4 buildings. Convert glTF, FBX or anything else to OBJ first (Blender does it).</li>
@@ -209,10 +211,12 @@ footer a { color: var(--ui-info-text); }
   <li>Select <b>Open folder</b> and pick the folder with your models. Each model shows as a card with a 3D view you can turn.</li>
   <li>Select a card (or several) and set the fields on the right:
     <ul>
-      <li><b>Kind</b>: <code>growable</code> for a building of a residential, commercial or industrial zone, <code>airport</code> or <code>seaport</code> for one that grows in those zones (<a href="#ports">Airports and seaports</a>), <code>landmark</code> for one you place from the landmark menu (<a href="#landmarks">Landmarks</a>).</li>
+      <li><b>Kind</b>: <code>growable</code> for a building of a residential, commercial or industrial zone, <code>airport</code> or <code>seaport</code> for one that grows in those zones (<a href="#ports">Airports and seaports</a>), <code>landmark</code> for one you place from the landmark menu (<a href="#landmarks">Landmarks</a>), <code>civic</code> for a second look of a civic button (<a href="#civic">Civic buildings</a>), <code>reward</code> for a new entry of the Rewards list (<a href="#rewards">Rewards</a>).</li>
       <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above). Airport, seaport and landmark buildings have no class.</li>
       <li><b>Lot</b>: 1x1 to 4x4. Airport buildings are 1x1 only, seaport buildings 1x1 or 2x2.</li>
-      <li><b>Description</b>, for a landmark only: the line under its name in the landmark menu.</li>
+      <li><b>Description</b>, for a landmark, civic look or reward: the line under its name in the landmark menu or the Rewards list.</li>
+      <li><b>Base</b>, for a civic look only: the civic button it belongs to. It also sets the lot.</li>
+      <li><b>Population</b> and <b>Year</b>, for a reward only: when it joins the Rewards list.</li>
       <li><b>Weight</b>: how often it is picked against the other members of its family. Most stock buildings have weight 1, a few have 2 or 3. The sample pack uses 2. For an airport building the weight works differently, see <a href="#ports">Airports and seaports</a>.</li>
       <li><b>Scale</b> and <b>Rotate (deg)</b>: size and turn (in 90 degree steps) before the model is set on its lot.</li>
       <li><b>Name</b>: what the query box shows.</li>
@@ -308,6 +312,54 @@ footer a { color: var(--ui-info-text); }
   <li>The bulldozer alone does nothing on an orange cell with nothing on it.</li>
 </ul>
 <p>To get the landmarks back instead, install them again with the same <code>ids.json</code> before you open the city. A city saved while they were missing has lost them for good.</p>
+</section>
+
+<section class="fam" id="civic">
+<h2>Civic buildings</h2>
+<p>A model can be a second look for one of the game's civic buttons. Set its kind to <code>civic</code> and pick the button in <b>Base</b>. Each press of that button then builds the next look: the stock building first, then your looks in the order of <code>models.json</code>, then the stock one again. The price label next to the pointer names the look, for example "Look 2 of 2: Test police look".</p>
+<p>The game treats your look as the stock building of that button. A police look is a police station, with the stock price and coverage. The picture and the name are yours.</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>Civic look</th></tr></thead>
+<tbody>
+<tr><td>Base</td><td>Police Station, Jail, Fire Station, Hospital, School, College, Library, Museum, Small Park, Big Park, Zoo, Baseball Field, Playground, Pond, Fountain, Bus Stop or Train Station</td></tr>
+<tr><td>Lot</td><td>the stock building's, set by the Base: 3x3 for the Police Station, 2x2 for the Library, 1x1 for the Small Park. Another lot is left out</td></tr>
+<tr><td>Stats from</td><td>the stock building of that button</td></tr>
+<tr><td>Class and weight</td><td>not used</td></tr>
+<tr><td>Name</td><td>what the price label and the query box show</td></tr>
+<tr><td>Description</td><td>optional. Left empty, the stock building's own text stays</td></tr>
+<tr><td>Ids</td><td>from the same range as your other buildings, 38000 to 38999</td></tr>
+</tbody></table></div>
+<p><b>Suggest for all</b> picks <code>civic</code> when the name has police, jail, prison, fire, hospital, clinic, school, college, university, library, park, zoo, baseball, ballpark, playground, pond, fountain, bus, train or railway in it, and the button that word names.</p>
+<h3>What it needs</h3>
+<p>The looks go into the landmark plugin, <code>Apps\PlugIn\bldimport</code>, with one more file, <code>bldimport_civic.ini</code>, the list of looks per button. The mods read that list: the row "Civic buildings: more looks" on the <b>Turn mods on or off</b> page switches it. With the mods off the button builds the stock building, and the looks you placed stay where they are.</p>
+<h3>Our test</h3>
+<p>A police look on 3x3 in Madison. Three presses of the Police Station button built the stock station, our look, and the stock station again. Placed, our look cost $505 and the stock station $522: the $500 police price plus clearing the lot. Next to a powered building our look drew its own coverage circle on the crime map. It stood where it was after the city was saved and loaded again.</p>
+<h3>Removing looks</h3>
+<p><b>Remove from the game</b> deletes the plugin. A city saved with a placed look loads, and the look comes back as the stock building of its button: in our test, the police look as a stock police station.</p>
+</section>
+
+<section class="fam" id="rewards">
+<h2>Rewards</h2>
+<p>A model can be a new reward. Set its kind to <code>reward</code> and give it a <b>Population</b> and a <b>Year</b>. Once the city has that many people, from that year on (0 for any year), it shows in Rewards and Opportunities next to the stock rewards. You place it once per city: once it is built, it leaves the list.</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>Reward</th></tr></thead>
+<tbody>
+<tr><td>Lot</td><td>1x1, 2x2, 3x3 or 4x4. A larger reward is left out</td></tr>
+<tr><td>Stats from</td><td>the first stock reward with the same lot: the Historic Statue for 1x1, the Mayor's House for 2x2, City Hall for 3x3 and the Stock Exchange for 4x4</td></tr>
+<tr><td>Population</td><td>a whole number up to 100,000,000. Empty: 20,000</td></tr>
+<tr><td>Year</td><td>a whole number up to 9999. 0: any year</td></tr>
+<tr><td>Name</td><td>the line in the Rewards list and what the query box shows. A name with a semicolon or an equals sign in it is left out</td></tr>
+<tr><td>Description</td><td>the second line in the Rewards list. Left empty, the name shows there again</td></tr>
+<tr><td>Ids</td><td>from the same range as your other buildings, 38000 to 38999. Each reward is also a building type of its own, with the same number</td></tr>
+</tbody></table></div>
+<h3>What it needs</h3>
+<p>Rewards get a plugin of their own, <code>Apps\PlugIn\bldimport_rewards</code>. The mods' loader, <code>sc3mods.dll</code>, tells the game about their building types every time it starts, also with every mod turned off on the <b>Turn mods on or off</b> page. The row "New rewards" there switches the list and the unlock.</p>
+<p>The stock game, without the loader, cannot open a city that holds one of your rewards. So <code>sc3mods_patch -Restore</code> (and <code>sc3mods_patch.sh --restore</code>) moves <code>Apps\PlugIn\bldimport_rewards</code> to <code>Apps\sc3mods_off\PlugIn</code>, and patching again moves it back. With the rewards moved out, a city that holds one opens with orange-brown ground on the reward's lot, as a removed landmark's lot shows.</p>
+<p>With the mods, the query box of a placed reward has <b>Move</b>, as the stock rewards have. Your landmarks have it too.</p>
+<h3>Our test</h3>
+<p>Two 2x2 rewards in Madison, a city of about 150,000 people: one at population 1,000 and one at 100,000,000. The first showed in Rewards and Opportunities, the second never did. The first was placed for $21, the price of clearing its lot, and then left the list. It stood where it was after the city was saved and loaded again, and Move took it to another spot for $32. The same city loaded with every mod turned off and without the main mod. With the rewards plugin moved out and nothing telling the game about the types, which is what the stock game sees, it loaded with an orange-brown lot where the reward stood.</p>
+<h3>Removing rewards</h3>
+<p><b>Remove from the game</b> deletes both plugins. A city saved with a placed reward then loads with an orange-brown lot where it stood.</p>
 </section>
 
 <section class="fam" id="bld">

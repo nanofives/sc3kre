@@ -8,13 +8,13 @@
 #
 # Usage (from the game's Apps folder, or give the folder):
 #   sh sc3mods_patch.sh              patch Apps/SC3U.exe (keeps Apps/SC3U.exe.orig, the same backup the .ps1 keeps)
-#   sh sc3mods_patch.sh --restore    put the stock SC3U.exe back from the backup
+#   sh sc3mods_patch.sh --restore    put the stock SC3U.exe back from the backup (and move PlugIn/bldimport_rewards out)
 #   sh sc3mods_patch.sh --apps DIR   the folder that holds SC3U.exe
 #
 # Accepted exes: stock 2.0.0.3, stock 2.0.949 (GOG / Steam), a signed copy of either (signature cut off), or an exe this
 # script or the .ps1 already patched. Anything else is refused and nothing is changed.
 #
-# Tools used: sh, dd, od, wc, cp, mv, rm, cut, tr, grep, printf, and sha256sum (Linux) or shasum -a 256 (macOS).
+# Tools used: sh, dd, od, wc, cp, mv, rm, cut, tr, grep, sed, head, mkdir, dirname, printf, and sha256sum (Linux) or shasum -a 256 (macOS).
 #
 # The patch data between BEGIN GENERATED and END GENERATED is written by re/tools/lxpatch_gen.py from the real
 # .ps1 output. Do not edit it by hand: run the generator again if the .ps1 changes.
@@ -354,8 +354,29 @@ TMPP=$APPS/SC3U.exe.patch_tmp
 trap 'rm -f "$TMPN" "$TMPP"' EXIT HUP INT TERM
 [ -f "$EXE" ] || die "SC3U.exe not found in $APPS. Pass --apps <folder>."
 
+# ---- reward plugin (2026-11-19, civmod) --------------------------------------------------------------------------
+# The building importer's new rewards live in their own plugin, PlugIn/bldimport_rewards, and their type ids are declared
+# by the mods loader: the bare stock exe stops while loading a city that holds one. --restore moves that folder out of
+# PlugIn (to Apps/sc3mods_off/PlugIn), a normal run moves it back. Civic looks and landmarks (PlugIn/bldimport) stay.
+move_reward_plugin() {   # $1 = 1: out of PlugIn, 0: back
+    rp_root=$APPS
+    if [ -f "$APPS/SC3U.ini" ]; then
+        rp_v=$(grep -i '^[[:space:]]*PlugIn[[:space:]]*=' "$APPS/SC3U.ini" | head -n 1 | cut -d= -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        [ -n "$rp_v" ] && rp_root=$rp_v
+    fi
+    rp_live=$rp_root/PlugIn/bldimport_rewards
+    rp_off=$APPS/sc3mods_off/PlugIn/bldimport_rewards
+    if [ "$1" -eq 1 ]; then rp_from=$rp_live; rp_to=$rp_off; else rp_from=$rp_off; rp_to=$rp_live; fi
+    [ -d "$rp_from" ] || return 0
+    if [ -e "$rp_to" ]; then echo "  note: $rp_to already exists: left $rp_from where it is."; return 0; fi
+    mkdir -p "$(dirname "$rp_to")" && mv "$rp_from" "$rp_to" || die "could not move $rp_from."
+    if [ "$1" -eq 1 ]; then echo "Moved the imported rewards out of PlugIn (to $rp_to): the stock game never sees their types."
+    else echo "Moved the imported rewards back into PlugIn ($rp_to)."; fi
+}
+
 # ---- restore -----------------------------------------------------------------------------------------------------
 if [ "$RESTORE" -eq 1 ]; then
+    move_reward_plugin 1
     [ -f "$BAK" ] || die "No backup SC3U.exe.orig in $APPS. Nothing to restore."
     identify "$BAK"
     [ -n "$BUILD" ] || die "Backup SC3U.exe.orig ($RAWSHA) is not a known stock build. Refusing to restore it."
@@ -373,6 +394,7 @@ if [ "$RESTORE" -eq 1 ]; then
 fi
 
 # ---- patch -------------------------------------------------------------------------------------------------------
+move_reward_plugin 0
 if has_section "$EXE"; then
     echo "SC3U.exe already imports sc3mods.dll (section .sc3mod present). Nothing to do."
     [ -f "$BAK" ] || echo "  note: no SC3U.exe.orig backup is present; --restore will not work until you reinstall stock."

@@ -24,7 +24,7 @@ Writes the landmark test models (bldimport kind landmark, a plugin in Apps\PlugI
   obelisk_2x2.obj/.mtl    2x2 monument: a red and gold obelisk on a stepped white plaza with four lamp posts
   pavilion_3x3.obj/.mtl   3x3 pavilion: a teal dome on a round colonnade, a fountain basin in front
   models.json             kind landmark 2x2 and 3x3, plus two entries bldimport must refuse (landmark_5x5.obj: a
-                          5x5 landmark; civic_1x1.obj: kind civic with no base)
+                          5x5 landmark; civic_1x1.obj: kind ploppable, not imported)
 
     py -3.12 re/tools/bldimport/make_testmodels.py --civmod <out folder>   (task civmod, 2026-11-19)
 
@@ -445,8 +445,8 @@ def landmarks(out):
              notes="landmark 3x3, stats of Arc de Triomphe 9528"),
         dict(common, file="landmark_5x5.obj", name="Refused: landmark 5x5", kind="landmark", lot=[5, 5],
              height_m=22.4, notes="landmarks are 1x1 to 4x4 in this tool: bldimport skips this entry"),
-        dict(common, file="civic_1x1.obj", name="Refused: civic", kind="civic", lot=[1, 1], height_m=28.5,
-             notes="civic buildings are not imported: skipped")]}
+        dict(common, file="civic_1x1.obj", name="Refused: ploppable", kind="ploppable", lot=[1, 1], height_m=28.5,
+             notes="kind ploppable is not imported (civic looks are kind civic, task civmod): skipped")]}
     with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
         json.dump(models, fh, indent=2)
     print("wrote landmark test models to", out)

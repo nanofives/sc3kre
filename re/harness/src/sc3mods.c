@@ -191,6 +191,121 @@ static int decide(HINSTANCE self) {
     return 1;
 }
 
+/* ===== REWARD TYPES (child civmod 2026-11-19, owner call "Loader declares"; re/analysis/CIVIC_REWARD.md 5.2).
+ * A building whose type id is not declared like a CitySim.ini [AgentTypes] row has no agent type object: placing it
+ * faults the City Planner (SIMADV 0x1000b392) and a city holding one stops the game while it loads. bldimport's new
+ * rewards have their own type ids, listed in <PlugIn root>\PlugIn\bldimport_rewards\bldimport_types.ini in the
+ * CitySim.ini format ([AgentTypes] <type>=<name>:<text key>, [AgentTypeHierarchy] <type>=<parent>). The declaration lives
+ * here, not in a mod, so it is made whenever the loader runs: every mod off on the mods page, sc3resize off, or
+ * SC3MODS_OFF=1. cSC3App::LoadRegistry (SC3U 0x0040b761, app init, after this DllMain) reads CitySim.ini with
+ * cSC3CompressibleINIFile::EnumEntries (0x00486f55) at 0x0040bc80 ([AgentTypes], callback RegisterAgentTypeCallback
+ * 0x0040cb70) and 0x0040bccb ([AgentTypeHierarchy], RegisterAgentRelationCallback 0x0040cc08). The two calls' rel32 go to
+ * at_types / at_hier, which run the stock EnumEntries and then hand our rows to the same callback as exe cRZString
+ * (char* ctor 0x00402a40, dtor 0x00402a96). The registry categories they fill build the agent type tree (SIMINIT
+ * 0x10002eb1). No file: nothing patched. sc3mods_reward_types() tells sc3resize which types were declared (it unlocks
+ * only those). SC3MODS_DECLARE=0 (test only) skips it, to reproduce what the bare stock exe sees. */
+#define AT_MAX 64
+static DWORD g_at_type[AT_MAX];
+static int   g_at_n;
+static DWORD g_at_enum;
+static char  g_at_path[MAX_PATH];
+
+static DWORD at_call(void *self, DWORD fn, DWORD a0, DWORD a1, DWORD a2, int n) {   /* __thiscall with 0..3 args */
+    DWORD rv;
+    __asm {
+        mov  eax, n
+        cmp  eax, 3
+        jl   at_l2
+        push a2
+    at_l2:
+        cmp  eax, 2
+        jl   at_l1
+        push a1
+    at_l1:
+        cmp  eax, 1
+        jl   at_l0
+        push a0
+    at_l0:
+        mov  ecx, self
+        call fn
+        mov  rv, eax
+    }
+    return rv;
+}
+
+typedef void (__cdecl *AT_CB)(void *key, void *value, void *ctx);
+static void at_feed(const char *sec, AT_CB cb, void *ctx) {
+    DWORD exe = (DWORD)GetModuleHandleA(NULL);
+    unsigned char ks[0x20], vs[0x20];
+    char buf[8192], k[16], *e, *eq;
+    int rel = !lstrcmpA(sec, "AgentTypeHierarchy"), i;
+    if (!GetPrivateProfileSectionA(sec, buf, sizeof(buf), g_at_path)) return;
+    for (e = buf; *e; e += lstrlenA(e) + 1) {
+        DWORD t = strtoul(e, NULL, 0);
+        eq = strchr(e, '=');
+        if (*e == ';' || !eq || eq - e >= (int)sizeof(k)) continue;
+        if (t < 38000 || t > 38999) { logf("[!] reward types: [%s] %s outside 38000..38999, not declared", sec, e); continue; }
+        for (i = 0; i < g_at_n && g_at_type[i] != t; i++) ;
+        if (rel ? i == g_at_n : (i < g_at_n || g_at_n >= AT_MAX)) continue;   /* parents only for declared types */
+        memcpy(k, e, eq - e); k[eq - e] = 0;
+        memset(ks, 0, sizeof(ks)); memset(vs, 0, sizeof(vs));
+        at_call(ks, exe + 0x2a40, (DWORD)k, 0, 0, 1);          /* cRZString(char const *) */
+        at_call(vs, exe + 0x2a40, (DWORD)(eq + 1), 0, 0, 1);
+        cb(ks, vs, ctx);
+        at_call(ks, exe + 0x2a96, 0, 0, 0, 0);                 /* ~cRZString */
+        at_call(vs, exe + 0x2a96, 0, 0, 0, 0);
+        if (!rel) g_at_type[g_at_n++] = t;
+        logf("[+] reward types: declared [%s] %s", sec, e);
+    }
+}
+static unsigned char __fastcall at_types(void *ini, void *edx, void *sec, AT_CB cb, void *ctx) {
+    unsigned char r = (unsigned char)at_call(ini, g_at_enum, (DWORD)sec, (DWORD)cb, (DWORD)ctx, 3);
+    (void)edx;
+    at_feed("AgentTypes", cb, ctx);
+    return r;
+}
+static unsigned char __fastcall at_hier(void *ini, void *edx, void *sec, AT_CB cb, void *ctx) {
+    unsigned char r = (unsigned char)at_call(ini, g_at_enum, (DWORD)sec, (DWORD)cb, (DWORD)ctx, 3);
+    (void)edx;
+    at_feed("AgentTypeHierarchy", cb, ctx);
+    return r;
+}
+/* the types declared (the game's registry has them before the agent type tree is built) */
+int __stdcall sc3mods_reward_types(DWORD *out, int cap) {
+    int i;
+    for (i = 0; out && i < g_at_n && i < cap; i++) out[i] = g_at_type[i];
+    return g_at_n;
+}
+
+/* <PlugIn root>\PlugIn\bldimport_rewards\bldimport_types.ini; root = Apps\SC3U.ini [Directories] PlugIn=, else Apps\
+   (cGZFileSystem::PlugInDirectory, SC3U 0x00482532) */
+static void at_install(void) {
+    unsigned char *exe = (unsigned char *)GetModuleHandleA(NULL), *c1 = exe + 0xbc80, *c2 = exe + 0xbccb;
+    char dir[MAX_PATH], ini[MAX_PATH], root[MAX_PATH], v[8], *b;
+    DWORD old;
+    if (GetEnvironmentVariableA("SC3MODS_DECLARE", v, sizeof(v)) && v[0] == '0') { logf("[-] reward types: SC3MODS_DECLARE=0, not declared (test)"); return; }
+    if (!GetModuleFileNameA(NULL, dir, sizeof(dir)) || !(b = strrchr(dir, '\\'))) return;
+    b[1] = 0;
+    _snprintf(ini, sizeof(ini), "%sSC3U.ini", dir); ini[sizeof(ini) - 1] = 0;
+    GetPrivateProfileStringA("Directories", "PlugIn", "", root, sizeof(root), ini);
+    if (!root[0]) lstrcpynA(root, dir, sizeof(root));
+    else if (root[lstrlenA(root) - 1] != '\\') lstrcatA(root, "\\");
+    _snprintf(g_at_path, sizeof(g_at_path), "%sPlugIn\\bldimport_rewards\\bldimport_types.ini", root);
+    g_at_path[sizeof(g_at_path) - 1] = 0;
+    if (GetFileAttributesA(g_at_path) == INVALID_FILE_ATTRIBUTES) return;   /* no reward types: CitySim.ini alone */
+    if (c1[-6] != 0x68 || *(DWORD *)(c1 - 5) != (DWORD)exe + 0xcb70 || c1[0] != 0xe8 ||
+        c2[-6] != 0x68 || *(DWORD *)(c2 - 5) != (DWORD)exe + 0xcc08 || c2[0] != 0xe8 ||
+        (DWORD)(c1 + 5 + *(LONG *)(c1 + 1)) != (DWORD)exe + 0x86f55 || (DWORD)(c2 + 5 + *(LONG *)(c2 + 1)) != (DWORD)exe + 0x86f55) {
+        logf("[!] reward types: SC3U LoadRegistry differs from shipped, %s not declared", g_at_path); return; }
+    if (!VirtualProtect(c1, 0x50, PAGE_EXECUTE_READWRITE, &old)) { logf("[!] reward types: VirtualProtect failed %lu", GetLastError()); return; }
+    g_at_enum = (DWORD)exe + 0x86f55;
+    *(LONG *)(c1 + 1) = (LONG)((DWORD)at_types - (DWORD)(c1 + 5));
+    *(LONG *)(c2 + 1) = (LONG)((DWORD)at_hier - (DWORD)(c2 + 5));
+    /* protection left writable on purpose: a restore can land mid-write in a mod patching the same page (task onramp) */
+    FlushInstructionCache(GetCurrentProcess(), c1, 0x50);
+    logf("[+] reward types of %s go after CitySim.ini's (SC3U 0x0040bc80 / 0x0040bccb)", g_at_path);
+}
+
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res) {
     char v[8];
     if (reason == DLL_PROCESS_ATTACH) {
@@ -200,6 +315,15 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res) {
             _snprintf(g_log, sizeof(g_log), "%s\\sc3mods.log", g_dir);
             if (GetEnvironmentVariableA("SC3MODS_MULTI", v, sizeof(v)) && v[0] == '1') unique_mutex();
             load_mods(res);
+        }
+        /* REWARD TYPES: whenever the patched exe maps the loader as a static import, mods on or off. A late dynamic
+           load (unpatched exe) loads no mods and that game runs stock: nothing declared there. */
+        if (res && host_is_sc3u()) {
+            if (!g_log[0]) {   /* SC3MODS_OFF=1: the log beside this DLL */
+                char self[MAX_PATH], *s;
+                if (GetModuleFileNameA(inst, self, sizeof(self)) && (s = strrchr(self, '\\'))) { *s = 0; _snprintf(g_log, sizeof(g_log), "%s\\sc3mods.log", self); }
+            }
+            at_install();
         }
     }
     return TRUE;
