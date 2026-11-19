@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+r"""catalog.py - task sc4conv (2026-11-18h): what SimCity 4 buildings a folder of plugin files holds.
+
+Reads every DBPF file under a folder (.dat .sc4desc .sc4lot .sc4model), indexes all entries by TGI (a later file
+wins, as SC4 loads plugins), then for each building exemplar (exemplar type 2) collects what the converter needs.
+Property ids and what they hold in the JMyers pack (re/analysis/SC4_FORMATS.md 3; meaning checked on the pack's
+values: the occupant size matches the S3D box, the model key names an S3D entry, the name key an LText entry):
+
+  0x00000010 exemplar type (2 = building, 0x10 = lot configuration, 0x1E = prop, 0x11 = the foundation model)
+  0x00000020 exemplar name (string)
+  0x27812810 occupant size, 3 f32 (width x, height y, depth z, metres)
+  0x27812821 model key {type 0x5AD0E817, group, base instance}: S3D views at base + zoom << 8 + rotation << 4
+  0x27812832 wealth (u8: 1 / 2 / 3)       0x27812833 purpose (u8: 1 = residential in the pack)
+  0x27812834 capacity, pairs {demand group, count}, e.g. {0x1010 (R$), 11}
+  0x27812870 building family id(s): the lot's building row names this id, any member of the family grows there
+  0x8A416A99 name key {0x2026960B, group, instance} -> LText (the in-game building name)
+  0x88FCD877 foundation exemplar instance (the 'FND' model, group 0x361CF9D5)
+  lot configuration: 0x88EDC790 lot size {width, depth} (u8 x 2), 0x27812837 growth stage (u8; the lot names
+  'R$1_' / 'R$2_' / 'R$3_' agree on all 42 lots), 0x88EDC900.. 0x88EDCDFF lot objects (13 u32 each:
+  type 0 = building, 1 = prop, 2 = texture, ...; +2 rotation 0-3; +3/+5 x/z centre in 1/65536 m; +6..+9 bounds;
+  +12 the object's id: for type 0 the building family or building instance)
+"""
+import os
+import struct
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import dbpf as D  # noqa: E402
+import exemplar as X  # noqa: E402
+
+DBPF_EXT = ('.dat', '.sc4desc', '.sc4lot', '.sc4model')
+LOTOBJ_FIRST, LOTOBJ_LAST = 0x88EDC900, 0x88EDCDFF
+
+
+def dbpf_files(root):
+    if os.path.isfile(root):
+        return [root]
+    out = []
+    for dp, dn, fn in os.walk(root):
+        dn.sort()
+        for n in sorted(fn):
+            if n.lower().endswith(DBPF_EXT):
+                out.append(os.path.join(dp, n))
+    return out
+
+
+class Index:
+    """TGI -> (DBPF, entry) over many files; later files override earlier ones."""
+
+    def __init__(self, root):
+        self.files = []
+        self.tgi = {}
+        for p in dbpf_files(root):
+            try:
+                f = D.DBPF(p)
+            except (ValueError, struct.error) as e:
+                print('  skip %s: %s' % (p, e))
+                continue
+            self.files.append(f)
+            for e in f.entries:
+                if e.type != D.T_DIR:
+                    self.tgi[e.tgi] = (f, e)
+
+    def read(self, tgi):
+        f, e = self.tgi[tgi]
+        return f.read(e)
+
+    def has(self, tgi):
+        return tgi in self.tgi
+
+    def of_type(self, t):
+        return [k for k in self.tgi if k[0] == t]
+
+    def exemplar(self, tgi):
+        return X.parse_exemplar(self.read(tgi))
+
+
+def pv(ex, pid, default=None):
+    v = ex['props'].get(pid)
+    return default if v is None else v[1]
+
+
+def as_list(v):
+    return v if isinstance(v, list) else [v]
+
+
+def buildings(idx):
+    """-> list of building dicts, with the lots that grow them."""
+    lots = []
+    for k in idx.of_type(D.T_EXEMPLAR):
+        try:
+            ex = idx.exemplar(k)
+        except (ValueError, KeyError, struct.error):
+            continue
+        t = pv(ex, 0x10)
+        if t == 0x10:
+            objs = []
+            for pid in ex['order']:
+                if LOTOBJ_FIRST <= pid <= LOTOBJ_LAST:
+                    r = [x & 0xFFFFFFFF for x in as_list(pv(ex, pid))]
+                    sgn = [x - (1 << 32) if x & 0x80000000 else x for x in r]
+                    objs.append({'type': r[0], 'rot': r[2] & 3, 'x': sgn[3] / 65536.0, 'z': sgn[5] / 65536.0,
+                                 'bounds': [sgn[6] / 65536.0, sgn[7] / 65536.0, sgn[8] / 65536.0, sgn[9] / 65536.0],
+                                 'ids': r[12:]})
+            sz = as_list(pv(ex, 0x88EDC790, [0, 0]))
+            lots.append({'tgi': k, 'name': pv(ex, 0x20, ''), 'size': [int(sz[0]), int(sz[1])],
+                         'stage': pv(ex, 0x27812837), 'objects': objs})
+        elif t == 2:
+            pass
+    out = []
+    for k in idx.of_type(D.T_EXEMPLAR):
+        try:
+            ex = idx.exemplar(k)
+        except (ValueError, KeyError, struct.error):
+            continue
+        if pv(ex, 0x10) != 2:
+            continue
+        rk = pv(ex, 0x27812821)
+        if not rk or len(rk) < 3 or rk[0] != D.T_S3D:
+            continue
+        name_key = pv(ex, 0x8A416A99)
+        title = None
+        if name_key and len(name_key) == 3 and idx.has(tuple(name_key)):
+            title = X.ltext(idx.read(tuple(name_key))).strip()
+        fams = [x & 0xFFFFFFFF for x in as_list(pv(ex, 0x27812870, []))]
+        cap = as_list(pv(ex, 0x27812834, []))
+        b = {'tgi': k, 'name': pv(ex, 0x20, ''), 'title': title, 'model': tuple(rk[:3]),
+             'size_m': [float(x) for x in as_list(pv(ex, 0x27812810, [0, 0, 0]))],
+             'wealth': pv(ex, 0x27812832), 'purpose': pv(ex, 0x27812833),
+             'capacity': [(cap[i], cap[i + 1]) for i in range(0, len(cap) - 1, 2)],
+             'families': fams, 'foundation': pv(ex, 0x88FCD877), 'lots': []}
+        for lot in lots:
+            for o in lot['objects']:
+                if o['type'] == 0 and (k[2] in o['ids'] or any(f in o['ids'] for f in fams)):
+                    b['lots'].append({'name': lot['name'], 'size': lot['size'], 'stage': lot['stage'],
+                                      'rot': o['rot'], 'x': o['x'], 'z': o['z'],
+                                      'via': 'family' if k[2] not in o['ids'] else 'building'})
+        out.append(b)
+    out.sort(key=lambda b: b['name'].lower())
+    return out, lots
+
+
+def views(idx, b, zoom=4):
+    """S3D keys of the four views (rotation 0-3) at a zoom (0-4 = SC4 zooms 1-5)."""
+    t, g, base = b['model']
+    return [(t, g, base + (zoom << 8) + (r << 4)) for r in range(4)]
+
+
+def main(argv):
+    root = argv[1]
+    idx = Index(root)
+    bs, lots = buildings(idx)
+    print('%d files, %d entries, %d buildings, %d lots' % (len(idx.files), len(idx.tgi), len(bs), len(lots)))
+    for b in bs:
+        ok = all(idx.has(v) for v in views(idx, b))
+        print('%-28s %-26r %s w%s p%s cap %s size %s lots %s views %s' % (
+            b['name'], b['title'], '%08X/%08X' % b['model'][1:], b['wealth'], b['purpose'],
+            b['capacity'], ['%.1f' % x for x in b['size_m']],
+            ['%dx%d s%s r%d %s' % (l['size'][0], l['size'][1], l['stage'], l['rot'], l['via'][0]) for l in b['lots']],
+            'ok' if ok else 'MISSING'))
+
+
+if __name__ == '__main__':
+    main(sys.argv)
