@@ -7,6 +7,9 @@
 //        (task sc4pass2: a download without building models: no cards, Install off, the note names the buildings)
 //   node pagetest.mjs --golden <sc4_props_setup.py dir> --game <tree> --case sc4props --sc4zip <JMyers .zip> --sc4deps <BSC zip>
 //        (task sc4props: both picked in Open SC4 .zip, the 1.7 GB pack streamed by the page, props baked, installed)
+//   node pagetest.mjs --golden <dir> --game <tree> --case landmarkdesc --edit-desc "<file>=<text>"
+//        (plop2: the entry's description blanked, typed into the panel's Description box, installed from the page's own
+//        models.json; the outputs, ids.json included, must equal bldimport.py's on golden_setup case landmarkdesc)
 //
 // Opens classifier.html?bldtest=<manifest> from disk in a headless Chrome of its own (temporary profile,
 // --allow-file-access-from-files so the test hook can fetch the folders), waits for the hook (webtest/pagetest.js)
@@ -25,6 +28,7 @@ const golden = arg('golden'), tree = arg('game'), cs = arg('case', 'kenney');
 const modelsDir = arg('models', golden && path.join(golden, 'src', cs)), action = arg('action', 'install');
 const apply = process.argv.includes('--apply'), compare = !process.argv.includes('--no-compare'), shot = arg('shot');
 const sc4zip = arg('sc4zip');
+const editArg = arg('edit-desc');           // plop2: "<file>=<text>"
 const sc4deps = arg('sc4deps');           // task sc4props: a dependency pack picked with the download (the BSC zip)
 const chrome = arg('chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 function walk(d, base = d, out = []) {
@@ -38,7 +42,8 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const dirUrl = d => pathToFileURL(d).href.replace(/\/?$/, '/');
 const man = { models: { base: dirUrl(modelsDir), files: sc4zip ? [] : walk(modelsDir) }, game: { base: dirUrl(tree), files: walk(tree) }, action, apply,
   sc4: sc4zip ? { base: dirUrl(path.dirname(path.resolve(sc4zip))), files: [path.basename(sc4zip)],
-    deps: sc4deps ? [{ base: dirUrl(path.dirname(path.resolve(sc4deps))), file: path.basename(sc4deps) }] : [] } : null };
+    deps: sc4deps ? [{ base: dirUrl(path.dirname(path.resolve(sc4deps))), file: path.basename(sc4deps) }] : [] } : null,
+  editDesc: editArg ? { file: editArg.slice(0, editArg.indexOf('=')), text: editArg.slice(editArg.indexOf('=') + 1) } : null };
 const manPath = path.join(golden || os.tmpdir(), `pagetest_${cs}_${action}.json`);
 fs.writeFileSync(manPath, JSON.stringify(man));
 const page = pathToFileURL(path.join(here, '..', 'classifier.html')).href + '?bldtest=' + encodeURIComponent(pathToFileURL(manPath).href) + (arg('wait') ? '&wait=' + arg('wait') : '');
@@ -104,7 +109,14 @@ try {
   else {
     const pyOut = path.join(golden, 'py', cs, 'out');
     const want = walk(pyOut);
-    total = want.length + 4 + (res.sc4 ? 3 : 0);
+    total = want.length + 4 + (res.sc4 ? 3 : 0) + (man.editDesc ? 3 : 0);
+    if (man.editDesc) {
+      const e = res.editDesc || {}, t = man.editDesc.text;
+      console.log('  editDesc: ' + JSON.stringify(e));
+      line('Description box hidden for a card that is not a landmark', !!e.hiddenFor && e.hiddenFor[2] === true, e.hiddenFor && e.hiddenFor.join(' '));
+      line('Description box shown for the landmark, empty after the blanking (and no description key written then)', e.shown === true && e.boxBefore === '' && e.blankSaved === false);
+      line(`typed description reaches models.json ("${t}")`, e.saved === t && e.meta === t, String(e.saved));
+    }
     if (res.sc4) {
       const s4 = res.sc4, pm = JSON.parse(fs.readFileSync(path.join(golden, 'src', cs, 'models.json'), 'utf8')).models;
       const designs = new Set(pm.map(m => m.x_sc4 && m.x_sc4.design)).size;

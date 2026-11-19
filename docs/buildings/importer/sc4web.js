@@ -1491,7 +1491,8 @@ function SC4WEB_LIB(B) {
           const pr = props.get(i), b = pr ? byModel.get(pr.model.join(',')) : undefined;
           if (b) {
             if (!versions.has(b.tgi)) versions.set(b.tgi, []);
-            versions.get(b.tgi).push({ lot: lot.name, kind: bld.landmark ? 'landmark' : 'ploppable', building: labelOf(bld), jobs: !!bld.jobs });
+            versions.get(b.tgi).push({ lot: lot.name, kind: bld.landmark ? 'landmark' : 'ploppable', building: labelOf(bld), jobs: !!bld.jobs,
+              exemplar: bld.name, building_tgi: tgiHex(bld.tgi) });
           }
         }
       }
@@ -1508,10 +1509,48 @@ function SC4WEB_LIB(B) {
     if (unres.length) lines.push(unres.length + ' ' + (unres.length > 1 ? 'lots name' : 'lot names') + ' a building that is not in this download: ' + unres.join(', '));
     for (const b of conv) {
       const vs = versions.get(b.tgi);
-      if (vs && vs.length) lines.push(labelOf(b) + ' also comes as ' + vs.map(v => 'the ' + v.kind + ' lot ' + v.lot + ' (building ' + v.building + ')').join(', ') +
-        ': SC3 grows buildings, so ' + (vs.length > 1 ? 'they are' : 'it is') + ' listed for later, not converted');
+      if (!(vs && vs.length)) continue;
+      const n = lotFor(b);
+      let tail;
+      if (!LANDMARK_LOTS.includes(n)) tail = 'not converted: SC3 landmarks are 1x1 to 4x4 and this building needs ' + n + 'x' + n;
+      else {
+        const on = vs.filter(v => versionOn(vs, v, n)).map(v => v.lot), off = vs.filter(v => !versionOn(vs, v, n)).map(v => v.lot);
+        tail = 'converted as ' + (vs.length > 1 ? 'SC3 landmarks' : 'an SC3 landmark') + ' for the landmark menu (kind landmark), ' + (on.join(', ') || 'none') + ' on';
+        if (off.length) tail += ', ' + off.join(', ') + ' off (the same building again, and SC3 landmarks have no jobs)';
+      }
+      lines.push(labelOf(b) + ' also comes as ' + vs.map(v => 'the ' + v.kind + ' lot ' + v.lot + ' (building ' + v.building + ')').join(', ') + ': ' + tail);
     }
     return [lines, missing, versions];
+  }
+
+  // ================================================================================================ SC4 landmarks (task plop2)
+  // sc4conv.landmark_entry and helpers: an SC4 landmark / ploppable lot of a converted building becomes an SC3 landmark
+  // entry (kind landmark) whose OBJ is a byte copy of the building's own <stem>.obj.
+  const LANDMARK_LOTS = [1, 2, 3, 4], LANDMARK_DESC = 'From SimCity 4';
+  const LANDMARK_EDITABLE = EDITABLE.concat(['kind', 'description']);
+  function versionOn(vs, v, n) {
+    if (!LANDMARK_LOTS.includes(n)) return false;
+    if (v.kind === 'landmark') return true;
+    return !vs.some(x => x.kind === 'landmark') && v === vs[0];
+  }
+  function landmarkFile(b, v, vs) {
+    const same = vs.filter(x => x.kind === v.kind), k = same.indexOf(v);
+    return stemOf(b.name) + '_' + v.kind + (k === 0 ? '' : String(k + 1)) + '.obj';
+  }
+  function landmarkEntry(b, e, v, vs, style, keepDiag) {
+    const n = lotFor(b), x = e.x_sc4, diag = !!x.diagonal;
+    let notes = 'SC4 ' + v.kind + ' lot ' + v.lot + ' (building ' + v.building + ') as an SC3 landmark: the landmark menu, one per city, stats of a stock' +
+      " landmark of the lot. The model is " + labelOf(b) + " without the SC4 lot's props.";
+    if (!LANDMARK_LOTS.includes(n)) notes += ' Off: SC3 landmarks are 1x1 to 4x4, this building needs ' + n + 'x' + n + '.';
+    else if (!versionOn(vs, v, n)) notes += ' Off by default: the same building as the landmark entry, and SC3 landmarks have no jobs.';
+    return {
+      file: landmarkFile(b, v, vs), name: v.building, kind: 'landmark', class: null, lot: [n, n], weight: 1, height_m: e.height_m,
+      scale: new PyFloat(1.0), rotate_deg: 0, style: 'any', enabled: !!(versionOn(vs, v, n) && (keepDiag || !diag)),
+      description: LANDMARK_DESC, notes,
+      x_bldrender: { style },
+      x_sc4: { exemplar: v.exemplar, design: v.building, colour: null, version: v.kind, sc4_lot: v.lot, model_of: b.name,
+        building_tgi: v.building_tgi, model_key: x.model_key, size_m: x.size_m, diagonal: diag, foundation: x.foundation, views: x.views },
+    };
   }
   async function depsOf(readmes) {          // every readme of the input, in walk order; a pair once
     const deps = [], seen = new Set();
@@ -1575,6 +1614,19 @@ function SC4WEB_LIB(B) {
         }
       }
       models.push(e);
+      const vs = versions.get(b.tgi) || [];
+      for (const v of vs) {                 // task plop2: the building's SC4 landmark / ploppable lots as SC3 landmarks
+        const le = landmarkEntry(b, e, v, vs, style, !!opt.diagonal);
+        files.set(le.file, files.get(stemOf(b.name) + '.obj'));
+        const la = {}; for (const k of LANDMARK_EDITABLE) la[k] = le[k];
+        le.x_sc4.auto = la;
+        const o = old.get('X' + le.x_sc4.exemplar) || old.get('F' + le.file);
+        if (o) {                            // the player's edits since the last run (description included)
+          const prev = (o.x_sc4 && o.x_sc4.auto) || {};
+          for (const k of LANDMARK_EDITABLE) if (k in o && k in prev && !pyEq(o[k], prev[k])) le[k] = o[k];
+        }
+        models.push(le);
+      }
     }
     for (const ln of propsNotes(pctx.plans)) { log(ln); report.push(ln); }
     const top = { sc3models: 1, models };

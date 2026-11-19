@@ -73,9 +73,11 @@ footer a { color: var(--ui-info-text); }
   <li><a href="#classify">Classifying</a></li>
   <li><a href="#install">Installing</a></li>
   <li><a href="#ports">Airports and seaports</a></li>
+  <li><a href="#landmarks">Landmarks</a></li>
   <li><a href="#bld">.bld files</a></li>
   <li><a href="#render">Real .bld views</a></li>
   <li><a href="#packs">Simtropolis packs</a></li>
+  <li><a href="#maxispacks">Maxis landmark packs</a></li>
   <li><a href="#sc4">SC4 buildings</a></li>
   <li><a href="#look">Stock look</a></li>
   <li><a href="#trouble">Troubleshooting</a></li>
@@ -90,7 +92,7 @@ footer a { color: var(--ui-info-text); }
 <figcaption>Sacramento at zoom 4, after a few game-run minutes: Red Roof Houses, Gable Houses (dark green roofs) and Brick Houses grown among the stock houses. Every building here grew on its own, none was placed by hand.</figcaption></figure>
 <h3>What it does not do</h3>
 <ul>
-  <li>Ploppable buildings (landmarks, rewards). Only buildings that grow by themselves for now: in residential, commercial and industrial zones, and in airport and seaport zones (<a href="#ports">Airports and seaports</a>). The page lists the ploppable plugins of a pack (<code>.pin</code> and <code>.dat</code> files) but does not install them yet.</li>
+  <li>Rewards and civic buildings (police stations, schools, parks). Your models can grow in residential, commercial, industrial, airport and seaport zones, or be landmarks you place yourself (<a href="#landmarks">Landmarks</a>), and nothing else for now.</li>
   <li>Lots that are not square. A building sits on a 1x1, 2x2, 3x3 or 4x4 lot, as every stock growable does.</li>
   <li>Night lights and animation. The stock houses have none either.</li>
   <li>3D formats other than OBJ, the Building Architect's <code>.bld</code> and SimCity 4 buildings. Convert glTF, FBX or anything else to OBJ first (Blender does it).</li>
@@ -207,9 +209,10 @@ footer a { color: var(--ui-info-text); }
   <li>Select <b>Open folder</b> and pick the folder with your models. Each model shows as a card with a 3D view you can turn.</li>
   <li>Select a card (or several) and set the fields on the right:
     <ul>
-      <li><b>Kind</b>: <code>growable</code> for a building of a residential, commercial or industrial zone, <code>airport</code> or <code>seaport</code> for one that grows in those zones (<a href="#ports">Airports and seaports</a>).</li>
-      <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above). Airport and seaport buildings have no class.</li>
+      <li><b>Kind</b>: <code>growable</code> for a building of a residential, commercial or industrial zone, <code>airport</code> or <code>seaport</code> for one that grows in those zones (<a href="#ports">Airports and seaports</a>), <code>landmark</code> for one you place from the landmark menu (<a href="#landmarks">Landmarks</a>).</li>
+      <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above). Airport, seaport and landmark buildings have no class.</li>
       <li><b>Lot</b>: 1x1 to 4x4. Airport buildings are 1x1 only, seaport buildings 1x1 or 2x2.</li>
+      <li><b>Description</b>, for a landmark only: the line under its name in the landmark menu.</li>
       <li><b>Weight</b>: how often it is picked against the other members of its family. Most stock buildings have weight 1, a few have 2 or 3. The sample pack uses 2. For an airport building the weight works differently, see <a href="#ports">Airports and seaports</a>.</li>
       <li><b>Scale</b> and <b>Rotate (deg)</b>: size and turn (in 90 degree steps) before the model is set on its lot.</li>
       <li><b>Name</b>: what the query box shows.</li>
@@ -279,6 +282,34 @@ footer a { color: var(--ui-info-text); }
 <p>The runway strips and pier pieces stay on those lots until you bulldoze them. No other lot changes. Install the package again with the same <code>ids.json</code> to get your buildings back instead.</p>
 </section>
 
+<section class="fam" id="landmarks">
+<h2>Landmarks</h2>
+<p>A model can also be a landmark: a building you place yourself from the game's landmark menu, like the stock Coit Tower or the Empire State Building. Set its kind to <code>landmark</code> and install as usual. It shows at the end of the landmark menu with its own picture, and you place it where you like. As with the stock landmarks, each one stands once per city: once it is built, the menu shows it greyed out.</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>Landmark</th></tr></thead>
+<tbody>
+<tr><td>Lot</td><td>1x1, 2x2, 3x3 or 4x4. A larger landmark is left out.</td></tr>
+<tr><td>Stats from</td><td>the first stock landmark with the same lot, for example Coit Tower for 2x2, the Arc de Triomphe for 3x3 and the Palace of Fine Arts for 4x4</td></tr>
+<tr><td>Class and weight</td><td>not used</td></tr>
+<tr><td>Name</td><td>the first line in the landmark menu and what the query box shows</td></tr>
+<tr><td>Description</td><td>the second line in the landmark menu, where the stock landmarks name the city they stand in. Left empty, the name shows there again</td></tr>
+<tr><td>Ids</td><td>from the same range as your other buildings, 38000 to 38999, kept in <code>sc3build\ids.json</code></td></tr>
+</tbody></table></div>
+<p><b>Suggest for all</b> picks <code>landmark</code> when the model's name has landmark, monument, statue, obelisk, memorial, museum, cathedral, basilica, palace, castle, pavilion or temple in it. The Description box shows in the panel when the selected cards are all landmarks.</p>
+<h3>Where the files go</h3>
+<p>Landmarks go into one plugin, <code>Apps\PlugIn\bldimport\bldimport.pin</code> and <code>bldimport.dat</code>, the way Maxis shipped its own landmark packs. The game loads every plugin in <code>Apps\PlugIn</code> by itself when it starts. They are not written into the road mod's overlay folder.</p>
+<h3>Our test</h3>
+<p>Two test models, an obelisk on 2x2 and a pavilion on 3x3, and the 251 m SimCity 4 office tower as a 4x4 landmark (<a href="#sc4">SimCity 4 buildings</a>) were placed in Madison. They draw at zoom 3 and 4, and the two test models drew in all four view rotations and stood where they were after the city was saved and loaded again.</p>
+<h3>Removing landmarks</h3>
+<p><b>Remove from the game</b> deletes the plugin. A city saved with your landmarks and opened without them does not crash. The landmarks are gone, and each of their lots shows orange-brown ground: the game still marks those cells as the lot of a placed building, with nothing on it. You can use that ground again:</p>
+<ul>
+  <li><b>Zone it.</b> Zoning over the orange cells turns them into normal zoned land. In our test 3 cells became residential zone for the usual $10 each.</li>
+  <li><b>Place a building on it.</b> We placed Coit Tower on the lot of the removed tower. If you bulldoze that building later, only its own footprint turns back into plain ground, and the rest of the lot stays orange.</li>
+  <li>The bulldozer alone does nothing on an orange cell with nothing on it.</li>
+</ul>
+<p>To get the landmarks back instead, install them again with the same <code>ids.json</code> before you open the city. A city saved while they were missing has lost them for good.</p>
+</section>
+
 <section class="fam" id="bld">
 <h2>Building Architect .bld files</h2>
 <p>Downloaded Building Architect buildings (<code>.bld</code>) work in the same folder as your OBJ models. The page reads the name, lot and category from the file and suggests a class. Files from both Building Architects work: the one that comes with SimCity 3000 Unlimited and the older 1999 one.</p>
@@ -324,7 +355,7 @@ footer a { color: var(--ui-info-text); }
 <ul>
   <li><b>Buildings</b>: <code>.bld</code> files, from the SimCity 3000 Unlimited Building Architect or the 1999 one.</li>
   <li><b>Building Architect parts</b>: the textures and props the buildings are made of, <code>.tga</code> and <code>.bmp</code> pictures and prop <code>.met</code> files, often sorted in <code>Paints</code>, <code>Details</code> and <code>Props</code> folders. The Building Architect reads them from the game's <code>Apps\BACustom</code> folder.</li>
-  <li><b>Plugins</b>: a <code>.pin</code> and its <code>.dat</code> files, the format of Maxis' own add-on buildings. These are ploppables. The page names the buildings in them but does not install them yet.</li>
+  <li><b>Plugins</b>: a <code>.pin</code> and its <code>.dat</code> files, the format of Maxis' own add-on landmarks. The page installs them into <code>Apps\PlugIn</code> (<a href="#maxispacks">Maxis landmark packs</a>).</li>
   <li>Readmes, and sometimes other <code>.zip</code> files or installers. The page opens <code>.zip</code> files inside the pack and never runs a program from it.</li>
 </ul>
 <h3>Open a pack</h3>
@@ -353,7 +384,7 @@ footer a { color: var(--ui-info-text); }
   <li>A part the page cannot sort (not in a <code>Paints</code>, <code>Details</code> or <code>Props</code> folder, and named by no <code>.met</code> or <code>.bld</code>) waits until you pick its kind.</li>
   <li>Select <b>Install N new parts into Apps\BACustom</b>. Every line goes to the page's Log.</li>
 </ol>
-<p><b>Remove the parts this page installed</b> puts every backed-up file back and deletes the files the install created. A file that changed after the install is left in place, and the Log names it. The backups are kept in <code>mods\netmod\sc3pack\</code>, apart from the building backups, so removing parts never undoes your buildings.</p>
+<p><b>Remove what this page installed</b> puts every backed-up file back and deletes the files the install created. A file that changed after the install is left in place, and the Log names it. The backups are kept in <code>mods\netmod\sc3pack\</code>, apart from the building backups, so removing parts never undoes your buildings.</p>
 <p>Without folder access (Firefox, Safari, or a folder the browser refuses), select <b>Read the game folder for an install .zip</b>. Install and Remove then download <code>sc3-parts-install.zip</code> or <code>sc3-parts-removal.zip</code>. Close the Building Architect, unpack the zip into the game folder and let it replace files. A removal zip can also hold <code>DELETE_THESE_FILES.txt</code>: delete the files it names.</p>
 <h3>Install the buildings</h3>
 <p>The parts are what the Building Architect needs. The buildings themselves go into the game through the importer, as in <a href="#install">Installing</a>:</p>
@@ -363,6 +394,22 @@ footer a { color: var(--ui-info-text); }
   <li>Select <b>Open folder</b>, pick that folder, check the classes and select <b>Install into the game</b>. The building ids stay in that folder's <code>sc3build\ids.json</code>.</li>
 </ol>
 <p>For a quick look, <b>Show its N buildings here</b> in the pack panel puts the pack's <code>.bld</code> files in the grid straight from the <code>.zip</code>. That grid has no folder to save in, so install from it with <b>Make the install .zip</b> (under <b>No folder access</b>) and keep the <code>ids.json</code> it downloads.</p>
+</section>
+
+<section class="fam" id="maxispacks">
+<h2>Maxis landmark packs</h2>
+<p>In 2000 Maxis released add-on landmark packs for SimCity 3000 as plugins: a <code>.pin</code> file and its <code>.dat</code> files. SimCity 3000 Unlimited still loads them by itself from <code>Apps\PlugIn</code>, and their buildings join the landmark menu. Their pictures are in an older format that Unlimited no longer draws, so a landmark placed from a pack as it was shipped shows as a pale blue grid with no building on it.</p>
+<p>The importer installs your own copy of a pack with its pictures converted. We do not ship the packs: they are Maxis' work.</p>
+<ol>
+  <li>Open the importer in Chrome or Edge and select <b>Game folder</b> first.</li>
+  <li>Select <b>Open SC3 pack</b> and pick the pack's <code>.zip</code>, or <b>Open a pack folder</b> for a pack you already unpacked.</li>
+  <li>The pack panel shows one Plugin line per <code>.pin</code>: how many buildings it holds, the folder in <code>Apps\PlugIn</code> it goes to, and how many pictures it converts.</li>
+  <li>Close the game and select <b>Install N plugins into Apps\PlugIn</b> (in a pack that also brings Building Architect parts, the same button installs both).</li>
+  <li>Start the game. The pack's landmarks are at the end of the landmark menu.</li>
+</ol>
+<p>A plugin file the game already has under the same name with other content is left alone, and the Log names it as a conflict. <b>Remove what this page installed</b> takes the plugins out again. A city where you placed a pack's landmark before converting it draws that landmark once the converted pack is installed.</p>
+<h3>Our test</h3>
+<p>We installed Landmark Pack 1 and 2. The page converted their 80 pictures (48 and 32), and the five landmarks of the two packs showed at the end of the landmark menu: Museum Of Modern Art, Transamerica Tower, Palace Of Fine Arts, Guggenheim and New York Public Library. The pack's Palace Of Fine Arts is an entry of its own, next to the stock one. The Museum Of Modern Art, placed in Madison, draws at zoom 3 and 4 and in all four view rotations.</p>
 </section>
 
 <section class="fam" id="sc4">
@@ -383,7 +430,7 @@ footer a { color: var(--ui-info-text); }
   <li><b>Converts:</b> growable buildings, with their name, wealth, number of residents or jobs and size. The class follows from wealth and residents or jobs, the lot from the size: a house that fits in 16 m goes on a 1x1 lot. SimCity 3000 has one commercial zone for shops and offices and two commercial wealths, so SimCity 4's $ becomes low wealth and $$ or $$$ high wealth. Up to 100 jobs is light, up to 1,000 medium, more is dense. That is a rule of this tool, not a measured match. Industrial buildings get dirty, clean or farm classes the same way. Of the commercial and industrial buildings, only the office tower below was tried in game.</li>
   <li><b>Tall towers convert.</b> SimCity 4 cuts the pictures of a tall building into tiles, and the page puts them back together. Our test tower, 251 m tall, became a dense high-wealth office on a 4x4 lot and grew in Berlin by the first autosave, a little taller than the tallest stock tower. As with the sample Skyscraper, that was with Berlin set to rebuild its commercial lots more often (see <a href="#trouble">Troubleshooting</a>).</li>
   <li><b>Lots up to 4x4.</b> SimCity 3000 lots are square, 1x1 to 4x4, so the lot is the smallest square the building fits in, and it can be one row deeper than the SimCity 4 lot. A building that needs more than 4x4 gets no class and stays off.</li>
-  <li><b>Growable versions only.</b> A SimCity 4 download can hold the same building as a growable, a ploppable and a landmark. The page converts the growable and names the ploppable and landmark versions in its report. Those are not converted yet.</li>
+  <li><b>Landmark versions become landmarks.</b> A SimCity 4 download can hold the same building as a growable, a ploppable and a landmark. The page converts the growable, and the landmark version becomes a landmark (<a href="#landmarks">Landmarks</a>) with the same pictures, named as in SimCity 4 and described as <code>From SimCity 4</code>. A ploppable version gets a landmark entry too, switched off, since SimCity 3000 landmarks have no jobs and it is the same building again. The landmark has the building alone, without the props of its SimCity 4 lot. Our test tower's landmark version went into the landmark menu as a 4x4 landmark and was placed in Madison.</li>
   <li><b>Light painted in.</b> Each SimCity 4 picture is lit from the same side of the screen. In two of the four view rotations the converted houses are lit from the other side than their stock neighbours.</li>
   <li><b>Roofs seen from higher up.</b> SimCity 4 looks down at 45 degrees, SimCity 3000 at 30. In each view one wall is stretched sideways and shows less detail.</li>
   <li><b>Lot props only with the dependency pack.</b> The fences, trees and cars of a SimCity 4 lot mostly come from other downloads. Give the page the BSC Common Dependencies Pack and it puts them on the lot with the building (<a href="#sc4props">Lot props</a>). Without it, the building stands centred on plain lawn and the yard is left out. Lot textures (driveways, paths) are not converted either way.</li>

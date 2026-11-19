@@ -98,6 +98,34 @@ def main():
             "%d files converted" % len(os.listdir(conv)) if os.path.isdir(conv) else "nothing written"))
     # the tower through bldimport (render + pack), as golden_setup.py does for its cases
     g = os.path.join(a.out, "goc")
+    # plop2 (2026-11-19): the rerun keeps the player's edits on an SC4 landmark entry. models.json as the page saves it
+    # (JSON.stringify, indent 2, whole floats as ints) with the ploppable lot's landmark switched on and its
+    # description changed; sc4conv.py run again over it (sc4_packs.mjs does the same in JS and compares)
+    j = json.load(open(os.path.join(g, "conv", "models.json"), encoding="utf-8"))
+    pl = [m for m in j["models"] if m.get("kind") == "landmark" and m["x_sc4"].get("version") == "ploppable"]
+    if len(pl) != 1:
+        raise SystemExit("the tower has %d ploppable landmark entries, expected 1" % len(pl))
+    pl[0]["description"] = "Edited in the page"
+    pl[0]["enabled"] = True
+
+    def ints(v):
+        if isinstance(v, float) and v.is_integer():
+            return int(v)
+        if isinstance(v, list):
+            return [ints(x) for x in v]
+        if isinstance(v, dict):
+            return {k: ints(x) for k, x in v.items()}
+        return v
+    rd = os.path.join(g, "rerun")
+    shutil.rmtree(rd, ignore_errors=True)
+    os.makedirs(rd)
+    open(os.path.join(rd, "models.json"), "w", encoding="utf-8", newline="\n").write(
+        json.dumps(ints(j), indent=2, ensure_ascii=False) + "\n")
+    r = subprocess.run([sys.executable, SC4CONV, os.path.join(g, "src"), "--out", rd], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    open(os.path.join(g, "sc4conv_rerun_log.txt"), "w", encoding="utf-8").write(r.stdout + r.stderr)
+    if r.returncode:
+        raise SystemExit("sc4conv.py rerun failed on the tower")
     shutil.copytree(os.path.join(g, "conv"), os.path.join(g, "folder"))
     r = subprocess.run([sys.executable, BLDIMPORT, "pack", os.path.join(g, "folder"), "--game", a.game, "--out",
                         os.path.join(g, "out")], capture_output=True, text=True)

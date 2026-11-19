@@ -74,7 +74,7 @@
       done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4, empty: true });
       return;
     }
-    if (man.action === 'open' && !man.sc4) {   // sc3compat-a: a models folder opened in the grid as Open folder does
+    if ((man.action === 'open' || man.editDesc) && !man.sc4) {   // sc3compat-a: a models folder opened in the grid as Open folder does
       const files = [];
       for (const rel of man.models.files) {
         if (rel.includes('/')) continue;
@@ -84,6 +84,28 @@
       window.bc.S.dirHandle = null; window.bc.S.folderName = 'test folder'; window.bc.S.allFiles = files;
       await window.bc.openFiles({ all: files, models: files.filter(f => /\.(obj|bld|gltf|glb|fbx)$/i.test(f.name)) },
         files.find(f => f.name.toLowerCase() === 'models.json') || null);
+    }
+    let editDesc = null;
+    if (man.editDesc) {
+      // plop2 (2026-11-19): the landmark Description field. The entry's description is blanked, the card selected, the
+      // value typed into the panel's Description box (a change event, as the player's typing), and the install reads
+      // the page's own models.json (modelsFolder(), as Install does for a folder opened read-only).
+      const S = window.bc.S, ed = man.editDesc, rec = S.recs.find(r => r.file === ed.file);
+      if (!rec) throw new Error('editDesc: no card for ' + ed.file);
+      const rowOf = () => [...document.querySelectorAll('#form .row')].find(r => r.querySelector('label').textContent === 'Description');
+      const card = f => document.getElementById('grid').querySelector('.card[data-file="' + f + '"]');
+      editDesc = { before: rec.meta.description };
+      const other = S.recs.find(r => r.meta.kind !== 'landmark');
+      if (other) { card(other.file).click(); await new Promise(r => setTimeout(r, 0)); editDesc.hiddenFor = [other.file, other.meta.kind, rowOf().hidden]; }
+      rec.meta.description = ''; if (rec.raw) delete rec.raw.description;
+      editDesc.blankSaved = 'description' in (JSON.parse(window.bc.toJSONText()).models.find(m => m.file === ed.file) || {});
+      card(ed.file).click(); await new Promise(r => setTimeout(r, 0));
+      const row = rowOf(), inp = row.querySelector('input');
+      editDesc.shown = !row.hidden; editDesc.boxBefore = inp.value;
+      inp.value = ed.text; inp.dispatchEvent(new Event('change'));
+      const saved = JSON.parse(window.bc.toJSONText()).models.find(m => m.file === ed.file);
+      editDesc.saved = saved && saved.description; editDesc.meta = rec.meta.description;
+      mfs = window.bc.modelsFolder();
     }
     if (man.action === 'open') {           // task sc4web: open only (pictures of the grid and the preview)
       const S = window.bc.S, pick = S.recs.find(r => r.meta.enabled) || S.recs[0];
@@ -97,7 +119,7 @@
     if ((man.action || 'install') === 'remove') rep = ['restored ' + await B.restore(B.handleFS(game), () => {}) + ' file(s)'];
     else rep = (await window.bc.installWith(mfs || B.handleFS(models), B.handleFS(game), { style: 'stock' })).rep;
     const res = { pass: true, action: man.action || 'install', seconds: (performance.now() - t0) / 1000, rep, files: {}, models: {}, deleted: [],
-      worker: B.lastWorkerMode || null, sc4 };
+      worker: B.lastWorkerMode || null, sc4, editDesc };
     const b64 = d => { let s = ''; for (let k = 0; k < d.length; k += 8192) s += String.fromCharCode.apply(null, d.subarray(k, k + 8192)); return btoa(s); };
     for (const [p, d] of written(game)) res.files[p] = { sha: B.sha256(d), size: d.length, b64: man.apply ? b64(d) : undefined };
     for (const [p, d] of written(models)) res.models[p] = { sha: B.sha256(d), size: d.length, b64: man.apply ? b64(d) : undefined };

@@ -50,7 +50,7 @@ async function samePixels(a, b) {
 const g = (key, ...p) => path.join(golden, key, ...p);
 const readJson = p => JSON.parse(fs.readFileSync(p, 'utf8'));
 const pyOut = g('goc', 'out'), outFiles = fs.existsSync(pyOut) ? walk(pyOut) : [];
-let total = 3 + 9 + 1 + outFiles.length + (wantFrames ? 1 : 0) + 2 * 4, k = 0, bad = 0;
+let total = 3 + 9 + 2 + 1 + outFiles.length + (wantFrames ? 1 : 0) + 2 * 4, k = 0, bad = 0;
 const line = (what, ok, extra = '') => { k++; bad += !ok; console.log(`[${k}/${total}] ${what} ${ok ? 'PASS' : 'FAIL'}${extra ? ' ' + extra : ''}`); };
 const log = s => console.log('  ' + s);
 
@@ -82,7 +82,7 @@ const pyModels = readJson(path.join(pyConv, 'models.json')).models;
 {
   const m = pyModels[0] || {}, stem = (m.file || '').replace(/\.obj$/i, ''), notes = [];
   for (const ext of ['.obj', '.mtl']) if (!eqBytes(fs.readFileSync(path.join(pyConv, stem + ext)), conv.files.get(stem + ext))) notes.push(ext + ' differs');
-  line(`tower ${m.file}: OBJ + MTL text`, pyModels.length === 1 && !notes.length, notes.join('; '));
+  line(`tower ${m.file}: OBJ + MTL text`, pyModels.length === 3 && !notes.length, notes.join('; '));
   const pn = [];
   for (const v of ['S', 'W', 'N', 'E']) {
     const png = `${stem}_${v}.png`, js = conv.files.get(png);
@@ -101,12 +101,26 @@ const pyModels = readJson(path.join(pyConv, 'models.json')).models;
   line(`tower class ${cm.class}, lot ${JSON.stringify(cm.lot)}, ${cm.height_m} m, tiles ${tiles}`, cm.class === 6700 && JSON.stringify(cm.lot) === '[4,4]' && tiles === '12/14/12/14' && cm.enabled === true);
   const vs = (x.versions || []).map(v => v.kind + ':' + v.lot);
   line(`tower ploppable + landmark versions named (${vs.join(', ')})`, vs.length === 2 && vs.includes('ploppable:Global Office Center Jobs') && vs.includes('landmark:Global Office Center Landmark'));
+  // plop2 (2026-11-19): the two SC4 lot versions as SC3 landmark entries (kind landmark), each a byte copy of the OBJ
+  const lms = conv.models.filter(mm => mm.kind === 'landmark');
+  const lmDesc = lms.map(mm => `${mm.file} ${mm.x_sc4.version} ${JSON.stringify(mm.lot)} ${mm.enabled ? 'on' : 'off'}`).join(', ');
+  const obj = conv.files.get(stem + '.obj');
+  line(`tower landmark entries (${lmDesc})`, lms.length === 2 && lms.every(mm => mm.class === null && JSON.stringify(mm.lot) === '[4,4]' && mm.description === 'From SimCity 4' && eqBytes(conv.files.get(mm.file), obj)) &&
+    lms.filter(mm => mm.enabled).map(mm => mm.x_sc4.version).join() === 'landmark' && lms.some(mm => mm.name === 'Global Office Center - Landmark'));
   const pn2 = readJson(g('goc', 'notes.json'));
   line('tower notes = sc4conv.py', JSON.stringify(conv.notes) === JSON.stringify(pn2.notes) && conv.notes.length === 1, conv.notes[0] ? conv.notes[0].slice(0, 100) : '');
   t0 = Date.now();
   const convF = await W.convert(await W.sourcesFrom(fileInputs(g('goc', 'src'))), {});
   const diff = [...conv.files.keys()].filter(f => !eqBytes(conv.files.get(f), convF.files.get(f)));
   line(`tower folder route = .zip route (${convF.files.size} files)`, !diff.length && convF.files.size === conv.files.size, diff.join(', '));
+  // plop2: a rerun keeps the player's description and switch on a landmark entry (the page's edits, as models.json)
+  const oldJ = JSON.parse(new TextDecoder().decode(conv.files.get('models.json')));
+  const lmOld = oldJ.models.find(mm => mm.kind === 'landmark' && mm.x_sc4.version === 'ploppable');
+  lmOld.description = 'Edited in the page'; lmOld.enabled = true;
+  const convR = await W.convert(await W.sourcesFrom(zipInputs('goc')), { old: JSON.stringify(oldJ, null, 2) + '\n' });
+  const lmNew = convR.models.find(mm => mm.kind === 'landmark' && mm.x_sc4.version === 'ploppable');
+  line('tower rerun keeps a landmark entry\'s description + switch', !!lmNew && lmNew.description === 'Edited in the page' && lmNew.enabled === true &&
+    eqBytes(fs.readFileSync(g('goc', 'rerun', 'models.json')), convR.files.get('models.json')), lmNew ? lmNew.description : 'missing');
   line(`tower sc4conv.py exit ${fs.readFileSync(g('goc', 'exit.txt'), 'utf8')}`, fs.readFileSync(g('goc', 'exit.txt'), 'utf8') === '0');
 }
 t0 = Date.now();
