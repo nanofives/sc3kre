@@ -1,9 +1,9 @@
 # sc3compat-b results (round 2026-11-19e): the pack reader
 
-Verdict: steps 1 to 5 done, except the classifier.html hook (it waits for the orchestrator, gamefont). New
+Verdict: steps 1 to 5 done, and the classifier.html hook (section 6). New
 `re/tools/bldimport/sc3pack.js` (page) and `sc3pack.py` (Python twin) open a pack as downloaded, sort its files,
 report every .bld's parts, and install / remove parts in Apps\BACustom. The page and Python write the same JSON, byte
-for byte, on 6 packs. Tests: sc3pack_golden.mjs 21 of 21, sc3pack_pagetest.mjs (Chrome) 9 of 9, run_all.sh 18 of 18.
+for byte, on 6 packs. Tests: sc3pack_golden.mjs 21 of 21, sc3pack_pagetest.mjs (Chrome) 11 of 11, run_all.sh 24 of 24 (all six arguments, main 308f450 + hook).
 
 ## 1. Open and sort
 
@@ -102,25 +102,26 @@ apply() puts back every file of its last run, so sharing its state would undo th
   click passes `["Mariners 04.tga"]` and `{"sc3pt loose.tga": "detail"}`; no horizontal scroll at 412 px.
   Pictures: `owner_shots/sc3pack_view_phone.png`, `sc3pack_view_desktop.png`.
 - `run_all.sh`: 4 new steps (test packs, Python golden, JS golden, Chrome). Samples from `SC3PACK_PACKS`
-  (default `<repo>\stage\st_packs`). Result: **18 of 18** steps, SC4 included (14 existing + 4 new), on main 743d532 + this branch, game = dev\sc3compat-b\tree. Log `verify/sc3compat_b/run_all.log`.
+  (default `<repo>\stage\st_packs`). Result after the hook, on main 308f450 + this branch, all six arguments (SC4 .zip from .happy-uploads, stage\st_packs\sc4_jmyers_homes, stage\st_packs\sc4), game = dev\sc3compat-b\tree: **24 of 24** steps (13 base + 4 pack + 3 SC4 + 4 SC4 packs). Log `verify/sc3compat_b/run_all.log`. Before the merge: 18 of 18.
 
-## The classifier.html hook (waiting for the orchestrator)
+## 6. The classifier.html hook (2026-11-19, after gamefont + sc4pass2, main 308f450)
 
-```html
-<script src="sc3pack.js"></script>            <!-- after bldweb.js; sync_css.py --publish must copy it too -->
-<button id="packOpen">Open a building pack (.zip or folder)</button> <div id="packView"></div>
-```
-```js
-const ents = await SC3PACK.openFiles(input.files);           // or SC3PACK.openHandle(await showDirectoryPicker())
-const draw = async () => SC3PACK.view(document, packView, await SC3PACK.report(ents, gameFS), {
-  onInstall: async (ow, kinds) => { await SC3PACK.install(gameFS, ents, packName, ow, kinds); await draw(); },
-  onRemove: async () => { await SC3PACK.remove(gameFS); await draw(); } });
-```
-`gameFS` = the page's game folder view (handleFS, or listFS then `BLDWEB.zipOf(game.writes)` as the download, as the
-importer does). The view uses sc3ui.css classes only (ui-group, ui-table, ui-note, ui-label, button.primary).
+- Header button **Open SC3 pack** (a .zip as downloaded); in the pack panel **Open a pack folder** (folder picker, or
+  a webkitdirectory list), **Show its N buildings here** (the pack's .bld files into the grid as a read-only models
+  folder: install them through the .zip route), **Close**.
+- The report uses the chosen **Game folder** (read permission asked) and says so; with no game folder it reports
+  without one and offers **Read the game folder for an install .zip** (listFS: Install / Remove download
+  `sc3-parts-install.zip` / `sc3-parts-removal.zip`, plus DELETE_THESE_FILES.txt when files must go).
+- Install / Remove with folder access write the game folder (write permission asked), through runBusy, every log line
+  in the page's Log. Hint: close the Building Architect first (it reads BACustom at start-up).
+- Page CSS: `.packbox` (outside the sc3ui.css copy). `window.bc.openPack` / `window.bc.PK` for the tests.
+- `sync_css.py --publish` now also copies `sc3pack.js` to docs/buildings/importer/.
+- `sc3pack_pagetest.mjs` now 11 checks: + classifier.html opens bld_parts.zip in the pack panel (4 groups, "Choose the
+  Game folder" hint) and "Show its 1 building here" puts sc3pt Test Plant.bld in the grid. Picture
+  `owner_shots/sc3pack_classifier.png`.
 
 ## Not done / limits
-- The hook (above). The plugin .dat/.pin are identified, not installed (ploppables: a later round).
+- The plugin .dat/.pin are identified, not installed (ploppables: a later round).
 - Whether a BACustom file has the content a .bld was made with cannot be checked (hash [UNCERTAIN]); the report says
   "custom" and the pack's copy is byte-compared only against files.
 - ZIP64 and encrypted .zip are not read (reported). Python's zipfile reads ZIP64; the page does not.
