@@ -14,6 +14,9 @@
 //                        hidden back walls + floor
 //   sc4conv/sc4conv.py   class / lot / name rules, OBJ / MTL / models.json text, one colour per design, the
 //                        rerun merge that keeps the player's edits (x_sc4.auto)
+//   sc4conv/deps.py      task sc4props: dependency packs (the 1.7 GB BSC zip) read by streaming: the zip's central
+//                        directory by slices, the jar inside inflated front to back, prop exemplars + entry index
+//   sc4conv/props.py     the lot's props resolved, turned and placed in the house's frame (sc4conv.write_props)
 //
 // Byte identity (webtest/sc4_golden.mjs): the OBJ, MTL and models.json text equal sc4conv.py's to the byte, the
 // textures equal its PNGs pixel for pixel (alpha too; the PNG bytes differ: PIL deflates, this file stores), and
@@ -912,7 +915,7 @@ function SC4WEB_LIB(B) {
   const tgiHex = t => t.map(x => hexU(x, 8)).join('-');
   const textBytes = s => { const b = B.cp1252Encode(s); return b || new TextEncoder().encode(s); };   // open(..., 'w'): cp1252
 
-  function writeBuilding(idx, b, files, enabled, style, fill, dg = null, keepDiag = false, versions = null) {   // sc4conv.write_building -> entry
+  function writeBuilding(idx, b, files, enabled, style, fill, dg = null, keepDiag = false, versions = null, pctx = null) {   // sc4conv.write_building -> entry
     const vs = loadViews(idx, b, ZOOM5);
     const stem = stemOf(b.name);
     const obj = ['# ' + b.name + ', converted from SimCity 4 by sc4conv.py (local use only: see the pack licence)', 'mtllib ' + stem + '.mtl'];
@@ -968,8 +971,443 @@ function SC4WEB_LIB(B) {
     if (versions && versions.length) entry.x_sc4.versions = versions;
     files.set(stem + '.obj', textBytes(obj.join('\n') + '\n'));
     files.set(stem + '.mtl', textBytes(mtl.join('\n')));
+    const pinfo = pctx ? writeProps(b, vs, stem, obj, mtl, files, pctx, fill) : null;
+    if (pinfo) { entry.x_sc4.props = pinfo; if (pinfo.on) entry.file = stem + '_props.obj'; }   // task sc4props
     for (const [png, im] of pngs) files.set(png, im);         // RGBA image; png() turns it into PNG bytes
     return entry;
+  }
+
+  // ================================================================================================ lot props (task sc4props)
+  // sc4conv/deps.py + props.py + sc4conv.write_props, the same steps and float order: the props of the building's
+  // smallest SC4 lot, from the download itself and from dependency packs read by streaming (a 1.7 GB zip holding a
+  // 1.64 GB jar: never read whole; its central directory by slices, the jar inflated front to back, one .dat at a time).
+  const DEPS_MIN = 200 * 1024 * 1024;       // an archive this large is a dependency pack, streamed (sourcesFrom)
+  const P_TYPE = 0x10, P_NAME = 0x20, P_FAMILY = 0x27812870, P_RKT0 = 0x27812820, P_RKT1 = 0x27812821, P_RKT4 = 0x27812824;
+  const P_INTERVAL = 0x0A751675, P_START = 0xCA7515CC, P_DURATION = 0x4A764564;
+  const PROP_DATE = [7, 1], MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], NUDGE_M = 1.0;
+  const turn = (x, z, q) => { for (let k = 0; k < ((q % 4) + 4) % 4; k++) { const nx = -z, nz = x; x = nx; z = nz; } return [x, z]; };  // props.turn, QUARTER -1
+  const dayOfYear = (m, d) => { let s = 0; for (let k = 0; k < Math.max(0, Math.min(12, pyInt(m)) - 1); k++) s += MONTH_DAYS[k]; return s + pyInt(d) - 1; };
+  const isInt = v => typeof v === 'number' && Number.isInteger(v);
+  function propValue(src, inst, pid, dflt = null) {   // DepsIndex / OwnSource.prop_value (cohort parents, 8 deep)
+    let rec = src.props.get(inst), seen = 0;
+    while (rec && seen < 8) {
+      if (rec.p.has(pid)) { const v = rec.p.get(pid); if (v !== null && v !== undefined) return v; }
+      const par = rec.parent;
+      rec = par.some(x => x) ? src.cohorts.get(tgiKey(par[0] >>> 0, par[1] >>> 0, par[2] >>> 0)) : null;
+      seen++;
+    }
+    return dflt;
+  }
+  function familyMembers(src, fam) {
+    if (!src.fam) {
+      src.fam = new Map();
+      for (const inst of src.props.keys()) {
+        const v = propValue(src, inst, P_FAMILY);
+        for (const f of (Array.isArray(v) ? v : v !== null ? [v] : [])) {
+          const k = pyInt(f) >>> 0; if (!src.fam.has(k)) src.fam.set(k, []); src.fam.get(k).push(inst);
+        }
+      }
+      for (const v of src.fam.values()) v.sort((a, b) => a - b);
+    }
+    return src.fam.get(fam) || [];
+  }
+  function exRec(ex, g) { const p = new Map(); for (const [k, v] of ex.props) p.set(k, v[1]); return { g, parent: ex.parent.map(x => x >>> 0), p }; }
+  function propType(ex) { let t = ex.props.get(P_TYPE); t = t ? t[1] : null; return Array.isArray(t) && t.length === 1 ? t[0] : t; }
+  function ownSource(idx) {                 // props.OwnSource: the download's own prop exemplars
+    const props = new Map(), cohorts = new Map();
+    for (const k of idx.ofType(T_EXEMPLAR).concat(idx.ofType(T_COHORT))) {
+      let ex; try { ex = parseExemplar(idx.read(...k)); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) continue; throw e; }
+      if (k[0] === T_COHORT) cohorts.set(tgiKey(...k), exRec(ex, k[1]));
+      else if (propType(ex) === 0x1E) props.set(k[2], exRec(ex, k[1]));
+    }
+    return { own: true, props, cohorts, fam: null, has: (t, g, i) => idx.has(t, g, i), read: (t, g, i) => idx.read(t, g, i) };
+  }
+  function propActive(src, inst) {          // props.active
+    if (propValue(src, inst, P_INTERVAL) !== 365) return true;
+    const st = propValue(src, inst, P_START), du = propValue(src, inst, P_DURATION);
+    if (!Array.isArray(st) || st.length < 2 || !isInt(du)) return true;
+    return pyMod(dayOfYear(...PROP_DATE) - dayOfYear(st[0], st[1]), 365) < du;
+  }
+  function modelOf(src, inst) {             // props.model_of -> [model, null] or [null, why]
+    const r1 = propValue(src, inst, P_RKT1);
+    if (Array.isArray(r1) && r1.length >= 3) return [[r1[0] >>> 0, r1[1] >>> 0, r1[2] >>> 0], null];
+    const r4 = propValue(src, inst, P_RKT4);
+    if (Array.isArray(r4) && r4.length >= 8) {
+      const recs = []; for (let k = 0; k + 7 < r4.length; k += 8) recs.push(r4.slice(k, k + 8));
+      const ok = recs.filter(r => r[4] === P_RKT1);
+      const pick = ok.find(r => r[0] === 0) || (ok.length ? ok[0] : null);
+      if (pick) return [[pick[5] >>> 0, pick[6] >>> 0, pick[7] >>> 0], null];
+      return [null, 'resource key type 4 without a type-1 record'];
+    }
+    if (propValue(src, inst, P_RKT0) !== null) return [null, 'resource key type 0 (not read)'];
+    return [null, 'no model key'];
+  }
+  function resolveProp(sources, pid, row) {   // props.resolve -> [src, inst, null] or [null, null, why]
+    for (const s of sources) if (s.props.has(pid)) return propActive(s, pid) ? [s, pid, null] : [null, null, 'season'];
+    for (const s of sources) {
+      const ms = familyMembers(s, pid);
+      if (ms.length) { const live = ms.filter(m => propActive(s, m)); return live.length ? [s, live[row % live.length], null] : [null, null, 'season']; }
+    }
+    return [null, null, 'missing'];
+  }
+  const viewKeys = (m, zoom = 4) => [0, 1, 2, 3].map(r => [m[0], m[1], (m[2] + (zoom << 8) + (r << 4)) >>> 0]);
+  function chooseLot(b, lots) {             // props.choose_lot
+    let best = null;
+    b.lots.forEach((bl, k) => {
+      const lot = lots.find(l => l.name === bl.name && l.size[0] === bl.size[0] && l.size[1] === bl.size[1]);
+      if (!lot) return;
+      const row = lot.objects.find(o => o.type === 0);
+      if (!row) return;
+      const key = [lot.size[0] * lot.size[1], k];
+      if (!best || key[0] < best[0][0] || (key[0] === best[0][0] && key[1] < best[0][1])) best = [key, lot, row];
+    });
+    return best ? [best[1], best[2]] : null;
+  }
+  function windowAxis(L0, L1, h0, h1, S, front) {
+    if (L1 - L0 <= S) { const c = (L0 + L1) / 2.0; return [c - S / 2.0, c + S / 2.0]; }
+    if (front) { const w1 = Math.min(L1, h0 + S); return [w1 - S, w1]; }
+    const c = (h0 + h1) / 2.0;
+    let w0 = c - S / 2.0; w0 = Math.max(L0, Math.min(w0, L1 - S));
+    return [w0, w0 + S];
+  }
+  function propPlan(b, lots, sources, box, n) {   // props.plan
+    const got = chooseLot(b, lots);
+    if (!got) return null;
+    const [lot, hrow] = got, kb = hrow.rot & 3;
+    const W = lot.size[0] * CELL_M, Dp = lot.size[1] * CELL_M;
+    const cs = [[0.0, 0.0], [W, Dp]].map(([cx, cz]) => turn(cx - hrow.x, cz - hrow.z, -(kb - 2)));
+    const L = [Math.min(cs[0][0], cs[1][0]), Math.max(cs[0][0], cs[1][0]), Math.min(cs[0][1], cs[1][1]), Math.max(cs[0][1], cs[1][1])];
+    const S = n * CELL_M;
+    const wx = windowAxis(L[0], L[1], box[0], box[1], S, false), wz = windowAxis(L[2], L[3], box[2], box[3], S, true);
+    const win = [wx[0], wx[1], wz[0], wz[1]], rows = [];
+    lot.objects.forEach((o, k) => {
+      if (o.type !== 1 || !o.ids.length) return;
+      const pid = o.ids[0] >>> 0;
+      const [s, inst, why] = resolveProp(sources, pid, k);
+      const [x, z] = turn(o.x - hrow.x, o.z - hrow.z, -(kb - 2));
+      const r = { row: k, id: pid, inst, name: null, src: s, model: null, x, z, q: pyMod((o.rot & 3) - kb, 4), state: why || 'ok' };
+      if (s) {
+        const nm = propValue(s, inst, P_NAME);
+        r.name = nm || hexU(inst, 8);
+        const [m, mwhy] = modelOf(s, inst);
+        if (!m) r.state = mwhy;
+        else { r.model = m; if (!viewKeys(m).every(k2 => s.has(...k2))) r.state = 'model not in the packs'; }
+      }
+      if (r.state === 'ok' && !(win[0] <= x && x <= win[1] && win[2] <= z && z <= win[3])) r.state = 'outside';
+      rows.push(r);
+    });
+    return { lot, house: hrow, kb, window: win, lot_box: L, rows };
+  }
+  function propViews(src, model, label) {   // props.prop_views
+    const [, g] = model, out = [];
+    viewKeys(model).forEach((key, r) => {
+      if (!src.has(...key)) throw new Sc4Error(label + ': S3D ' + tgiHex(key) + ' not found');
+      const meshes = [];
+      for (const m of readS3D(src.read(...key))) {
+        if (!m.mat.tex.length || !m.tris.length) continue;
+        const fk = [T_FSH, g, m.mat.tex[0].id >>> 0];
+        if (!src.has(...fk)) throw new Sc4Error(label + ': texture ' + hexU(fk[2], 8) + ' not found');
+        meshes.push([m.P, m.UV, m.tris, fk]);
+      }
+      if (!meshes.length) throw new Sc4Error(label + ' view ' + r + ': no textured mesh');
+      let fill = null;
+      if (meshes.length === 1 && meshes[0][0].length === 7) {
+        const [P, UV, , fk] = meshes[0];
+        const bm = readFshFirst(src.read(...fk));
+        const [A, , d] = fitCamera(P, UV, bm.w, bm.h);
+        fill = hiddenFaces({ r, P_view: P, A, tex_size: [bm.w, bm.h], cam: { forward_view: d } });
+      }
+      out.push({ r, meshes: meshes.map(([P, UV, tris, fk]) => [P.map(p => toModel1(p, r)), UV, tris, fk]), fill, fill_key: meshes[0][3],
+        az: pyMod(22.5 + 90.0 * r + 180.0, 360.0) - 180.0 });
+    });
+    return out;
+  }
+  const rad = x => x * (Math.PI / 180.0);
+  function azTurned(az, q) { const [x, z] = turn(Math.sin(rad(az)), Math.cos(rad(az)), q); return degrees(Math.atan2(x, z)); }
+  function matchPropView(pv, q, slot) {
+    const a = SC3_SLOT_AZ[slot];
+    let best = null, bk = Infinity;
+    for (const v of pv) { const k = Math.abs(pyMod(azTurned(v.az, q) - a + 180, 360) - 180); if (best === null || k < bk) { best = v; bk = k; } }
+    return best;
+  }
+  function nudge(lo, hi, w0, w1) {
+    if (hi - lo > w1 - w0) return null;
+    let d = 0.0;
+    if (lo < w0) d = w0 - lo; else if (hi > w1) d = w1 - hi;
+    return Math.abs(d) <= NUDGE_M ? d : null;
+  }
+  function placedMeshes(pl, cache, fill = true) {   // props.placed_meshes
+    const slots = [[], [], [], []], [x0w, x1w, z0w, z1w] = pl.window;
+    for (const r of pl.rows) {
+      if (r.state !== 'ok') continue;
+      if (!r.src.cid) r.src.cid = ++srcSerial;
+      const ck = r.model.join(':') + '@' + r.src.cid;
+      if (!cache.has(ck)) {
+        try { cache.set(ck, propViews(r.src, r.model, r.name)); }
+        catch (e) { if (!(e instanceof Sc4Error) && !(e instanceof RangeError)) throw e; cache.set(ck, String(e.message || e)); }
+      }
+      const pv = cache.get(ck);
+      if (typeof pv === 'string') { r.state = 'unreadable'; r.why = pv; continue; }
+      let xmin = Infinity, xmax = -Infinity, zmin = Infinity, zmax = -Infinity;
+      for (const v of pv) for (const m of v.meshes) for (const p of m[0]) {
+        const [x, z] = turn(p[0], p[2], r.q), X = x + r.x, Z = z + r.z;
+        if (X < xmin) xmin = X; if (X > xmax) xmax = X; if (Z < zmin) zmin = Z; if (Z > zmax) zmax = Z;
+      }
+      const dx = nudge(xmin, xmax, x0w, x1w), dz = nudge(zmin, zmax, z0w, z1w);
+      if (dx === null || dz === null) { r.state = 'outside'; continue; }
+      if (dx || dz) r.nudge_m = [dx, dz];
+      const ox = r.x + dx, oz = r.z + dz;
+      for (let slot = 0; slot < 4; slot++) {
+        const v = matchPropView(pv, r.q, slot);
+        const parts = v.meshes.slice();
+        if (fill && v.fill) parts.push([v.fill[0], v.fill[1], v.fill[2], v.fill_key]);
+        for (const [P, UV, tris, fk] of parts) {
+          const Pt = P.map(p => { const [x, z] = turn(p[0], p[2], r.q); return [x + ox, p[1], z + oz]; });
+          slots[slot].push([Pt, UV, tris, fk, r.src]);
+        }
+      }
+    }
+    return slots;
+  }
+  let srcSerial = 0;
+  const countBy = (xs) => { const m = new Map(); for (const x of xs) m.set(x, (m.get(x) || 0) + 1); return m; };
+  const cmpStr = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  function propSummary(pl) {                // props.summary, with 'on' first (sc4conv.write_props)
+    const st = countBy(pl.rows.map(r => r.state));
+    const miss = countBy(pl.rows.filter(r => r.state === 'missing').map(r => r.id));
+    const used = countBy(pl.rows.filter(r => r.state === 'ok').map(r => r.name));
+    let unread = 0; for (const [k, v] of st) if (!['ok', 'outside', 'season', 'missing'].includes(k)) unread += v;
+    return { lot: pl.lot.name, rows: pl.rows.length, placed: st.get('ok') || 0,
+      nudged: pl.rows.filter(r => r.state === 'ok' && r.nudge_m).length,
+      outside_sc3_lot: st.get('outside') || 0, other_season: st.get('season') || 0, missing: st.get('missing') || 0, unreadable: unread,
+      window_m: pl.window.map(x => new PyFloat(pyRound(x, 2))),
+      used: [...used.entries()].sort((a, b) => cmpStr(a[0], b[0])).map(([k, v]) => [k, v]),
+      missing_ids: [...miss.entries()].map(([k, v]) => [hexU(k, 8), v]).sort((a, b) => cmpStr(a[0], b[0])) };
+  }
+  const houseBox = vs => { const P = vs[0].P; let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity; for (const p of P) { if (p[0] < a) a = p[0]; if (p[0] > b) b = p[0]; if (p[2] < c) c = p[2]; if (p[2] > d) d = p[2]; } return [a, b, c, d]; };
+  function writeProps(b, vs, stem, obj, mtl, files, pctx, fill) {   // sc4conv.write_props -> x_sc4.props or null
+    const pl = propPlan(b, pctx.lots, pctx.sources, houseBox(vs), lotFor(b));
+    if (!pl) return null;
+    const slots = placedMeshes(pl, pctx.cache, fill);
+    const s = propSummary(pl);
+    const info = Object.assign({ on: s.placed > 0 && !pctx.off }, s);
+    pctx.plans.push([b, pl]);
+    if (!s.placed) return info;
+    const pobj = [obj[0], 'mtllib ' + stem + '_props.mtl'].concat(obj.slice(2)), pmtl = mtl.slice(), seen = new Set();
+    let vbase = obj.filter(l => l.startsWith('v ')).length, tbase = obj.filter(l => l.startsWith('vt ')).length;
+    for (let slot = 0; slot < 4; slot++) {
+      pobj.push('g sc3slot' + slot);
+      let cur = null;
+      for (const [P, UV, tris, fk, src] of slots[slot]) {
+        const mname = 'sc4p_' + hexU(fk[1], 8) + '_' + hexU(fk[2], 8);
+        if (!seen.has(mname)) {
+          seen.add(mname);
+          const png = 'sc4prop_' + hexU(fk[1], 8) + '_' + hexU(fk[2], 8) + '.png';
+          if (!files.has(png)) { const bm = readFshFirst(src.read(...fk)); files.set(png, { w: bm.w, h: bm.h, d: bm.image }); }
+          pmtl.push('newmtl ' + mname, 'Kd 1 1 1', 'map_Kd ' + png, '');
+        }
+        if (mname !== cur) { pobj.push('usemtl ' + mname); cur = mname; }
+        for (const p of P) pobj.push('v ' + pyFixed(p[0], 5) + ' ' + pyFixed(p[1], 5) + ' ' + pyFixed(p[2], 5));
+        for (const uv of UV) pobj.push('vt ' + pyFixed(uv[0], 6) + ' ' + pyFixed(1.0 - uv[1], 6));
+        for (const t of tris) pobj.push('f ' + t.map(i => (vbase + 1 + i) + '/' + (tbase + 1 + i)).join(' '));
+        vbase += P.length; tbase += UV.length;
+      }
+    }
+    const [x0, x1, z0, z1] = pl.window;
+    let y0 = Infinity; for (const v of vs) for (const p of v.P) if (p[1] < y0) y0 = p[1];
+    const V3 = (x, y, z) => 'v ' + pyFixed(x, 5) + ' ' + pyFixed(y, 5) + ' ' + pyFixed(z, 5);
+    pobj.push('g sc4lot', 'usemtl sc4lot', V3(x0, y0, z0), V3(x1, y0, z1), V3(x1, y0, z1), 'f ' + (vbase + 1) + ' ' + (vbase + 2) + ' ' + (vbase + 3));
+    pmtl.push('newmtl sc4lot', 'Kd 1 1 1', '');
+    files.set(stem + '_props.obj', textBytes(pobj.join('\n') + '\n'));
+    files.set(stem + '_props.mtl', textBytes(pmtl.join('\n')));
+    return info;
+  }
+  function propsNotes(plans) {              // sc4conv.props_notes
+    if (!plans.length) return [];
+    const st = new Map([['ok', 0], ['outside', 0], ['season', 0], ['missing', 0], ['unreadable', 0]]), miss = new Map();
+    let tot = 0;
+    for (const [, pl] of plans) for (const r of pl.rows) {
+      const k = ['ok', 'outside', 'season', 'missing'].includes(r.state) ? r.state : 'unreadable';
+      st.set(k, st.get(k) + 1); tot++;
+      if (r.state === 'missing') miss.set(r.id, (miss.get(r.id) || 0) + 1);
+    }
+    const nb = plans.filter(([, pl]) => pl.rows.some(r => r.state === 'ok')).length;
+    const lines = ['Lot props: ' + st.get('ok') + ' of ' + tot + ' prop rows placed (' + nw(nb, 'building', 'buildings') + '), ' + st.get('outside') +
+      ' outside the SC3 lot, ' + st.get('season') + ' of another season, ' + st.get('missing') + ' in no pack given, ' + st.get('unreadable') + ' without a readable model'];
+    if (miss.size) lines.push("Props not found (" + miss.size + " ids, rows in brackets; SimCity 4's own props or a dependency not given): " +
+      [...miss.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([k, v]) => hexU(k, 8) + ' (' + v + ')').join(', '));
+    return lines;
+  }
+  async function propsContext(idx, bs, lots, deps, fill, off, log) {   // sc4conv.props_context
+    const sources = [ownSource(idx)];
+    for (const d of deps) sources.push(await depsIndex(d, log));
+    const ctx = { lots, sources, cache: new Map(), plans: [], off: !!off };
+    const want = new Map();
+    for (const b of bs) {
+      let vs; try { vs = loadViews(idx, b, ZOOM5); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) continue; throw e; }
+      const pl = propPlan(b, lots, sources, houseBox(vs), lotFor(b));
+      if (!pl) continue;
+      for (const r of pl.rows) if (r.state === 'ok' && !r.src.own) {
+        if (!want.has(r.src)) want.set(r.src, new Map());
+        for (const k of viewKeys(r.model)) want.get(r.src).set(tgiKey(...k), k);
+      }
+    }
+    for (const [s, keys] of want) await s.fetch([...keys.values()], log);
+    return ctx;
+  }
+
+  // ---- dependency packs by streaming (deps.DepsIndex). input: { path, size, mtime, slice(a, b) -> Promise<Uint8Array>,
+  //      stream(a, b) -> ReadableStream<Uint8Array> } (a File: Blob.slice; node: fs ranges)
+  class ByteStream {                        // deps._Stream: take / skip over a ReadableStream of chunks
+    constructor(rs) { this.r = rs.getReader(); this.q = []; this.have = 0; this.done = false; }
+    async fill(n) { while (this.have < n && !this.done) { const { value, done } = await this.r.read(); if (done) { this.done = true; break; } if (value && value.length) { this.q.push(value); this.have += value.length; } } }
+    async take(n) {
+      await this.fill(n);
+      const k = Math.min(n, this.have), out = new Uint8Array(k);
+      let o = 0;
+      while (o < k) { const c = this.q[0], m = Math.min(c.length, k - o); out.set(c.subarray(0, m), o); o += m; if (m === c.length) this.q.shift(); else this.q[0] = c.subarray(m); }
+      this.have -= k; return out;
+    }
+    async skip(n) {
+      while (n > 0) {
+        if (!this.have) { await this.fill(1); if (!this.have) return; }
+        const c = this.q[0], m = Math.min(c.length, n);
+        if (m === c.length) this.q.shift(); else this.q[0] = c.subarray(m);
+        this.have -= m; n -= m;
+      }
+    }
+    cancel() { try { this.r.cancel(); } catch (e) { /* closed */ } }
+  }
+  const DAT_RE = /\.(dat|sc4desc|sc4lot|sc4model)$/i;
+  async function zipDirOf(input) {          // the central directory of a big zip, read by slices
+    const tail = Math.min(input.size, 65557);
+    const t = await input.slice(input.size - tail, input.size);
+    let eo = -1;
+    for (let p = t.length - 22; p >= 0; p--) if (t[p] === 0x50 && t[p + 1] === 0x4B && t[p + 2] === 5 && t[p + 3] === 6) { eo = p; break; }
+    if (eo < 0) throw new Sc4Error(input.path + ': not a .zip file');
+    const r = new Rd(t), n = r.u16(eo + 10), cdSize = r.u32(eo + 12), cdOff = r.u32(eo + 16);
+    if (cdOff === 0xFFFFFFFF || n === 0xFFFF) throw new Sc4Error(input.path + ': ZIP64 archives are not read');
+    const cd = await input.slice(cdOff, cdOff + cdSize), c = new Rd(cd), out = [];
+    let p = 0;
+    for (let k = 0; k < n; k++) {
+      if (c.u32(p) !== 0x02014b50) throw new Sc4Error(input.path + ': broken .zip directory');
+      const flags = c.u16(p + 8), method = c.u16(p + 10), csize = c.u32(p + 20), usize = c.u32(p + 24);
+      const nl = c.u16(p + 28), xl = c.u16(p + 30), cl = c.u16(p + 32), lho = c.u32(p + 42);
+      const raw = cd.subarray(p + 46, p + 46 + nl);
+      out.push({ name: flags & 0x800 ? new TextDecoder('utf-8').decode(raw) : latin1(raw), method, csize, usize, lho, flags });
+      p += 46 + nl + xl + cl;
+    }
+    return out;
+  }
+  async function memberStart(input, e) { const h = await input.slice(e.lho, e.lho + 30), r = new Rd(h); if (r.u32(0) !== 0x04034b50) throw new Sc4Error(e.name + ': broken .zip entry'); return e.lho + 30 + r.u16(26) + r.u16(28); }
+  async function inflateMember(method, raw, name) { if (method === 0) return raw; if (method === 8) return inflateRaw(raw); throw new Sc4Error(name + ': .zip method ' + method + ' is not read'); }
+  // deps.walk: every DBPF file of the pack in load order -> cb(path, bytes or null); want(path) false: not inflated
+  async function walkDeps(input, cb, want = null) {
+    const ents = await zipDirOf(input);
+    const names = ents.map(e => e.name).sort(cmpStr), byName = new Map(ents.map(e => [e.name, e]));
+    for (const n of names) {
+      if (!/\.jar$/i.test(n)) continue;
+      const e = byName.get(n), start = await memberStart(input, e);
+      let rs = input.stream(start, start + e.csize);
+      if (e.method === 8) rs = rs.pipeThrough(new DecompressionStream('deflate-raw'));
+      else if (e.method !== 0) throw new Sc4Error(n + ': .zip method ' + e.method + ' is not read');
+      const s = new ByteStream(rs), label = input.path + '!' + n;
+      for (;;) {
+        const h = await s.take(30);
+        if (h.length < 30 || !(h[0] === 0x50 && h[1] === 0x4B && h[2] === 3 && h[3] === 4)) break;
+        const r = new Rd(h), flag = r.u16(6), meth = r.u16(8), cs = r.u32(18), us = r.u32(22), nl = r.u16(26), el = r.u16(28);
+        const nb = await s.take(nl), name = flag & 0x800 ? new TextDecoder('utf-8').decode(nb) : cp437(nb);
+        await s.skip(el);
+        if (flag & 8) throw new Sc4Error(label + ': member ' + name + ' uses a data descriptor, the streaming reader needs sizes in the local header');
+        const path = label + '!' + name;
+        if (!DAT_RE.test(name)) { await s.skip(cs); continue; }
+        if (want && !want(path)) { await s.skip(cs); await cb(path, null); continue; }
+        const data = await inflateMember(meth, await s.take(cs), name);
+        if (data.length !== us) throw new Sc4Error(label + ': member ' + name + ' inflated to ' + data.length + ' bytes, header says ' + us);
+        await cb(path, data);
+      }
+      s.cancel();
+    }
+    if (names.some(n => DAT_RE.test(n))) {
+      for (const n of names) {
+        if (!DAT_RE.test(n)) continue;
+        const path = input.path + '!' + n;
+        if (want && !want(path)) { await cb(path, null); continue; }
+        const e = byName.get(n), start = await memberStart(input, e);
+        await cb(path, await inflateMember(e.method, await input.slice(start, start + e.csize), n));
+      }
+    }
+  }
+  const CP437_HI = 'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ';
+  const cp437 = b => { let s = ''; for (const c of b) s += c < 128 ? String.fromCharCode(c) : CP437_HI[c - 128]; return s; };
+  const DEPS_CACHE = new Map();             // pack (path, size, mtime) -> index, for the page session (Python: on disk)
+  async function depsIndex(input, log = () => {}) {
+    const ck = input.path + '|' + input.size + '|' + (input.mtime || 0);
+    if (DEPS_CACHE.has(ck)) { log('deps: index ' + input.path + ' (cached in this page)'); return DEPS_CACHE.get(ck); }
+    const t0 = Date.now(), dats = [], props = new Map(), cohorts = new Map();
+    const mt = [[], [], [], []];            // map rows: type (0 S3D, 1 FSH), group, instance, dat
+    await walkDeps(input, async (path, data) => {
+      const di = dats.length; dats.push(path);
+      let f; try { f = readDbpf(path, data); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) { log('  deps: skip ' + path + ': ' + (e.message || e)); return; } throw e; }
+      for (const e of f.entries) {
+        if (e.type === T_S3D || e.type === T_FSH) { mt[0].push(e.type === T_S3D ? 0 : 1); mt[1].push(e.group); mt[2].push(e.instance); mt[3].push(di); }
+        else if (e.type === T_EXEMPLAR || e.type === T_COHORT) {
+          let ex; try { ex = parseExemplar(f.read(e)); } catch (x) { if (x instanceof Sc4Error || x instanceof RangeError) continue; throw x; }
+          const rec = exRec(ex, e.group); rec.dat = di;
+          if (e.type === T_COHORT) cohorts.set(tgiKey(e.type, e.group, e.instance), rec);
+          else if (propType(ex) === 0x1E) props.set(e.instance, rec);   // a later file wins (Python: the dict keeps the first position)
+        }
+      }
+      if (dats.length % 16 === 0) log('deps: ' + dats.length + ' DBPF files read');
+      await new Promise(res => setTimeout(res, 0));
+    });
+    // lookup: per type, rows sorted by (group, instance, row) -> binary search, the last equal row wins
+    const N = mt[0].length, T = Uint8Array.from(mt[0]), G = Uint32Array.from(mt[1]), I = Uint32Array.from(mt[2]), Dd = Uint32Array.from(mt[3]);
+    const ord = Uint32Array.from({ length: N }, (_, k) => k).sort((a, b) => T[a] - T[b] || G[a] - G[b] || I[a] - I[b] || a - b);
+    const find = (t, g, i) => {
+      const tt = t === T_S3D ? 0 : t === T_FSH ? 1 : -1;
+      if (tt < 0) return -1;
+      let lo = 0, hi = N;               // first row > key
+      while (lo < hi) { const m = (lo + hi) >> 1, k = ord[m]; const c = T[k] - tt || G[k] - g || I[k] - i; if (c <= 0) lo = m + 1; else hi = m; }
+      if (lo === 0) return -1;
+      const k = ord[lo - 1];
+      return T[k] === tt && G[k] === g && I[k] === i ? Dd[k] : -1;
+    };
+    const entries = new Map();
+    const src = { own: false, path: input.path, dats, props, cohorts, fam: null, entries,
+      has: (t, g, i) => find(t >>> 0, g >>> 0, i >>> 0) >= 0,
+      read(t, g, i) { const x = entries.get(tgiKey(t >>> 0, g >>> 0, i >>> 0)); if (!x) throw new Sc4Error(hexU(t, 8) + '-' + hexU(g, 8) + '-' + hexU(i, 8) + ' not fetched'); return x; },
+      async fetch(keys, flog = log) {     // deps.DepsIndex.fetch: the S3D and every FSH they name, rounds as in Python
+        let want = keys.filter(k => src.has(...k) && !entries.has(tgiKey(...k))), rounds = 0, wrote = 0;
+        while (want.length && rounds < 3) {
+          rounds++;
+          const t1 = Date.now(), dset = new Set(want.map(k => find(...k))), names = new Map([...dset].map(d => [dats[d], d]));
+          const more = new Map();
+          await walkDeps(input, async (path, data) => {
+            if (!data) return;
+            const f = readDbpf(path, data), di = names.get(path), byTgi = new Map(f.entries.map(e => [tgiKey(e.type, e.group, e.instance), e]));
+            for (const t of want) {
+              if (find(...t) !== di) continue;
+              const e = byTgi.get(tgiKey(...t)); if (!e) continue;
+              const b = f.read(e); entries.set(tgiKey(...t), b); wrote++;
+              if (t[0] !== T_S3D) continue;
+              let ms = []; try { ms = readS3D(b); } catch (x) { if (!(x instanceof Sc4Error) && !(x instanceof RangeError)) throw x; }
+              for (const m of ms) for (const tx of m.mat.tex) {
+                const k = [T_FSH, t[1], tx.id >>> 0], kk = tgiKey(...k);
+                if (!src.has(...k) || entries.has(kk)) continue;
+                const e2 = find(...k) === di ? byTgi.get(kk) : null;
+                if (e2) { entries.set(kk, f.read(e2)); wrote++; } else more.set(kk, k);
+              }
+            }
+          }, p => names.has(p));
+          flog('deps: fetch round ' + rounds + ': ' + dset.size + ' DBPF files read, ' + wrote + ' entries cached, ' + Math.round((Date.now() - t1) / 1000) + ' s');
+          want = [...more.values()].filter(k => !entries.has(tgiKey(...k)));
+        }
+        return wrote;
+      } };
+    log('deps: indexed ' + dats.length + ' DBPF files, ' + props.size + ' prop exemplars, ' + cohorts.size + ' cohorts, ' + N + ' S3D / FSH entries in ' + Math.round((Date.now() - t0) / 1000) + ' s');
+    DEPS_CACHE.set(ck, src);
+    return src;
   }
 
   // ================================================================================================ lot-only packs (task sc4pass2)
@@ -1105,7 +1543,7 @@ function SC4WEB_LIB(B) {
       return { files: new Map(), models: [], text: pyDump({ sc3models: 1, models: [] }, 1), report, notes, missing, empty: true };
     }
     const old = new Map();
-    if (opt.old) { const j = pyLoad(opt.old); for (const m of (j && j.models) || []) old.set(m.file, m); }
+    if (opt.old) { const j = pyLoad(opt.old); for (const m of (j && j.models) || []) { old.set('F' + m.file, m); if (m.x_sc4 && m.x_sc4.exemplar) old.set('X' + m.x_sc4.exemplar, m); } }
     const keyOf = b => b.families.length ? 'F' + b.families.join(',') : 'D' + designOf(b.name)[0].toLowerCase();
     const fam = new Map();
     for (const b of bs) { const k = keyOf(b); if (!fam.has(k)) fam.set(k, []); fam.get(k).push(b); }
@@ -1114,22 +1552,31 @@ function SC4WEB_LIB(B) {
     const pick = new Map(), chosen = pickColours([...fam.values()], isDiag);
     [...fam.keys()].forEach((d, i) => pick.set(d, chosen[i] ? chosen[i].tgi : null));
     const files = new Map(), models = [];
+    const pctx = await propsContext(idx, bs, lots, sources.deps || opt.deps || [], fill, opt.noProps, log);   // task sc4props
     for (let bi = 0; bi < bs.length; bi++) {
       const b = bs[bi];
       if (opt.progress) await opt.progress(bi, bs.length, b);
       const first = pick.get(keyOf(b)) === b.tgi;
       let e;
-      try { e = writeBuilding(idx, b, files, opt.all || first, style, fill, diag.get(b), !!opt.diagonal, versions.get(b.tgi) || null); }
+      try { e = writeBuilding(idx, b, files, opt.all || first, style, fill, diag.get(b), !!opt.diagonal, versions.get(b.tgi) || null, pctx); }
       catch (ex) { if (!(ex instanceof Sc4Error)) throw ex; const line = '  skip ' + b.name + ': ' + ex.message; log(line); report.push(line); continue; }
       const auto = {}; for (const k of EDITABLE) auto[k] = e[k];
       e.x_sc4.auto = auto;
-      const o = old.get(e.file);
+      const pr = e.x_sc4.props || null;
+      if (pr) auto.props_on = pr.on;
+      const o = old.get('X' + e.x_sc4.exemplar) || old.get('F' + e.file);
       if (o) {
         const prev = (o.x_sc4 && o.x_sc4.auto) || {};
         for (const k of EDITABLE) if (k in o && k in prev && !pyEq(o[k], prev[k])) e[k] = o[k];
+        const op = o.x_sc4 && o.x_sc4.props;   // task sc4props: the player's props switch
+        if (pr && op && typeof op === 'object' && !Array.isArray(op) && 'props_on' in prev && !pyEq(op.on, prev.props_on)) {
+          pr.on = !!op.on && pr.placed > 0;
+          e.file = stemOf(b.name) + (pr.on ? '_props.obj' : '.obj');
+        }
       }
       models.push(e);
     }
+    for (const ln of propsNotes(pctx.plans)) { log(ln); report.push(ln); }
     const top = { sc3models: 1, models };
     if (missing.length) top.x_sc4_missing = missing;  // task sc4pass2: the download's buildings without a model, by name
     const text = pyDump(top, 1);
@@ -1268,9 +1715,10 @@ function SC4WEB_LIB(B) {
   }
   // inputs: [{ path: 'a/b/x.dat', bytes: async () => Uint8Array }] (folder listing or File objects), archives read
   async function sourcesFrom(inputs) {
-    const tree = newTree();
+    const tree = newTree(), deps = [];
     for (const it of inputs) {
       const parts = it.path.split('/').filter(Boolean), leaf = parts[parts.length - 1];
+      if (isArchive(leaf) && it.size > DEPS_MIN && it.slice && it.stream) { deps.push(it); continue; }   // task sc4props
       if (isArchive(leaf)) {
         let t = tree; for (const p of parts) { if (!t.dirs.has(p)) t.dirs.set(p, newTree()); t = t.dirs.get(p); }
         await addArchive(t, await it.bytes());
@@ -1278,21 +1726,28 @@ function SC4WEB_LIB(B) {
     }
     const out = walkOrder(tree);
     out.readmes = walkOrder(tree, isReadme);   // task sc4pass2: sc4conv.readme_files, the same walk
+    out.deps = deps;                          // task sc4props: dependency packs, read by streaming (depsIndex)
     return out;
   }
   // a File System Access folder handle -> inputs (recursive)
   async function handleInputs(dir, pre = '', out = []) {
     for await (const [name, h] of dir.entries()) {
       if (h.kind === 'directory') { if (name !== 'sc3build') await handleInputs(h, pre + name + '/', out); }
-      else if (isDbpfName(name) || isArchive(name) || isReadme(name)) out.push({ path: pre + name, bytes: async () => new Uint8Array(await (await h.getFile()).arrayBuffer()) });
+      else if (isArchive(name)) out.push(blobInput(pre + name, await h.getFile()));   // task sc4props: size, slices, stream
+      else if (isDbpfName(name) || isReadme(name)) out.push({ path: pre + name, bytes: async () => new Uint8Array(await (await h.getFile()).arrayBuffer()) });
     }
     return out;
   }
   // File objects (webkitdirectory list, or picked .zip / .jar files) -> inputs
   const fileInputs = files => files.filter(f => isDbpfName(f.name) || isArchive(f.name) || isReadme(f.name)).map(f => {
     const parts = String(f.webkitRelativePath || f.name).split('/'); if (parts.length > 1) parts.shift();
-    return { path: parts.join('/'), bytes: async () => new Uint8Array(await f.arrayBuffer()) };
+    return blobInput(parts.join('/'), f);
   });
+  // task sc4props: a File / Blob as an input that can also be read by slices and streamed (dependency packs)
+  function blobInput(path, f) {
+    return { path, size: f.size, mtime: f.lastModified || 0, bytes: async () => new Uint8Array(await f.arrayBuffer()),
+      slice: async (a, b) => new Uint8Array(await f.slice(a, b).arrayBuffer()), stream: (a, b) => f.slice(a, b).stream() };
+  }
 
   // The models-folder view the importer installs from: the converted files in memory over an optional real folder
   // (the picked SC4 folder: models.json and sc3build\ids.json are saved there so the choices and the ids stay).
@@ -1321,6 +1776,7 @@ function SC4WEB_LIB(B) {
     outlineShare45, foundationDiagonal, pickColours, markDiagonalCards,
     parseTextExemplar, composeTiles, modelState, others, packNotes, readmeDeps, fixEmptyNote,
     convert, sourcesFrom, handleInputs, fileInputs, zipEntries, zipRead, overlayFS, isDbpfName, isArchive,
+    depsIndex, walkDeps, propPlan, propSummary, propsNotes, ownSource, modelOf, resolveProp, DEPS_MIN,
   };
 }
 

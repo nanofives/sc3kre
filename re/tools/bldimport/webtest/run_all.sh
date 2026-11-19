@@ -30,6 +30,11 @@ work="$1"; game="$2"; kits="$3"; sc4zip="${4:-}"; sc4dir="${5:-}"; sc4packs="${6
 py="${PY:-$HOME/bin/py -3.12}"
 packs="${SC3PACK_PACKS:-$here/../../../../stage/st_packs}"
 steps=19; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
+# sc4props (2026-11-19g): SC4 lot props from the BSC Common Dependencies Pack, when the 6th argument's folder holds it
+# (and the JMyers .zip + folder are given): sc4_props_setup.py (sc4conv.py --deps) + sc4_props.mjs (sc4web.js streams
+# the 1.7 GB zip as the page does: slices and a stream, never read whole)
+bsc=""; [ -n "$sc4packs" ] && [ -n "$sc4zip" ] && for f in "$sc4packs"/*Common\ Dependencies*.zip; do [ -f "$f" ] && bsc="$f"; done
+[ -n "$bsc" ] && steps=$((steps + 2))
 [ -n "${BLD1999:-}" ] && steps=$((steps + 5))
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
@@ -75,6 +80,10 @@ if [ -n "$sc4packs" ]; then
   step "sc4_packs.mjs (sc4web.js: text exemplars, tiled tower, lot-only reports, pack, frames)" node "$here/sc4_packs.mjs" --golden "$work/sc4packs" --packs "$sc4packs" --game "$game" --frames
   step "pagetest.mjs sc4empty diego (the page on a lot-only zip)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4empty --action open --no-compare --sc4zip "$sc4packs/DiegoDLGrowablePack2019_Vanilla_DN.zip" --expect-empty "555 California Street,Willoughby Tower,Salesforce Tower,https://community.simtropolis.com/files/file/32961-salesforce-tower/"
   step "pagetest.mjs sc4empty im (the page on a blank-model zip)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4empty --action open --no-compare --sc4zip "$sc4packs/I-M manufacturers lots.zip" --expect-empty "a blank placeholder building,1542-hanjin,1542-uniglory"
+fi
+if [ -n "$bsc" ]; then
+  step "sc4_props_setup.py (sc4conv.py --deps: JMyers lot props from the BSC pack, rerun, --no-props, bldimport.py pack)" $py "$here/sc4_props_setup.py" --sc4 "$sc4dir" --deps "$bsc" --game "$game" --out "$work/sc4props"
+  step "sc4_props.mjs (sc4web.js: the BSC zip streamed, props baked, rerun switch, --no-props, pack, frames)" node "$here/sc4_props.mjs" --golden "$work/sc4props" --game "$game" --zip "$sc4zip" --deps "$bsc" --frames
 fi
 echo "$((n - bad)) of $n steps passed"
 exit $bad
