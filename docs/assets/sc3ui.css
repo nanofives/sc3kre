@@ -1,31 +1,52 @@
-/* sc3ui.css - the SimCity 3000 Unlimited UI look for every page the project publishes (round 2026-11-18f).
-   CSS only: no game bitmaps, icons or extracted art. Every colour is measured off the running game,
-   see re/analysis/UI_STYLE.md for the screenshot and pixel each one came from.
-   Fonts: Comic Neue (title bars) and Arimo (everything else) from Google Fonts, with local fallbacks. */
-@import url("https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400;0,700;1,400&family=Comic+Neue:wght@400;700&display=swap");
+/* sc3ui.css - the SimCity 3000 Unlimited UI look for every page the project publishes.
+   Round 2026-11-18f picked the colours. Round 2026-11-18g (sc3ui2) measured the rest at the game's native size
+   (800x600, no UI scale): fonts scored glyph by glyph against the game's own bitmap fonts, the cloud texture
+   matched by its statistics, every spacing counted in pixels. See re/analysis/UI_STYLE.md.
+   CSS only: no game bitmaps, icons, fonts or extracted art. The cloud tile is our own SVG noise.
+   One knob: --ui-scale. 1 = the game's own pixels. Pages use 1.25 (UI_STYLE.md, "Scale"). */
+@import url("https://fonts.googleapis.com/css2?family=Istok+Web:ital,wght@0,400;0,700;1,400&family=Comic+Relief:wght@400;700&display=swap");
 
 :root {
+  --ui-scale: 1.25;
+  --u: calc(var(--ui-scale) * 1px);
+
   /* measured palette (UI_STYLE.md) */
   --ui-blue: #7b92ff; --ui-blue-line: #7b8aff; --ui-blue-dark: #7382ff; --ui-blue-deep: #636dc6;
   --ui-navy-line: #4a599c; --ui-shadow: #182039; --ui-outline: #313863;
-  --ui-lav-50: #e7e7ff; --ui-lav-100: #dedfff; --ui-lav-150: #dedbff; --ui-lav-200: #d6dbff; --ui-lav-250: #d8dcf8;
-  --ui-lav-300: #c6c7ff; --ui-lav-400: #bdc3ff; --ui-lav-500: #adb6ff; --ui-cloud-hi: #f0f4f8; --ui-cloud-mid: #e0e4f8;
-  --ui-cloud-lo: #c8d0f8; --ui-hi: #ffffff; --ui-grey-edge: #848284;
+  --ui-lav-50: #e7e7ff; --ui-lav-100: #dedfff; --ui-lav-150: #dedbff; --ui-lav-200: #d6dbff; --ui-lav-250: #d8d9ff;
+  --ui-lav-300: #c6c7ff; --ui-lav-400: #bdc3ff; --ui-lav-500: #adb6ff; --ui-groove-hi: #fff3ff;
+  --ui-cloud-hi: #f0f4f8; --ui-cloud-mid: #e0e4f8; --ui-cloud-lo: #c8d0f8; --ui-hi: #ffffff; --ui-edge: #000000;
+  --ui-grey-edge: #848284;
   --ui-text: #31347b; --ui-label: #7b7db5; --ui-info-text: #18288c; --ui-title-text: #dedfff;
   --ui-select: #0000ff; --ui-select-text: #ffffff; --ui-ticker-bg: #000000; --ui-ticker: #fffb00;
+  --ui-mark-ring: #6b71bd; --ui-mark-lo: #7b82bd; --ui-mark-lo2: #b5b6e7;
+  --ui-btn-line: #848294; --ui-btn-line-lo: #5a5d6b;
+  --ui-btn-sh1: #393c4a; --ui-btn-sh2: #182039; --ui-btn-sh3: #313863; --ui-btn-sh4: #4a599c; --ui-btn-sh5: #6371ce;
   /* roles */
   --ui-page: var(--ui-lav-250); --ui-face: var(--ui-lav-100); --ui-face2: var(--ui-lav-200); --ui-frame: var(--ui-lav-300);
   --ui-field: #ffffff; --ui-btn-face: var(--ui-lav-150); --ui-btn-hi: var(--ui-lav-50); --ui-plate: var(--ui-blue);
   --ui-on-plate: var(--ui-text); --ui-link: #2a3fc4; --ui-warn-bg: #fffbc2; --ui-warn-line: #8a7a00;
-  --ui-font: Arimo, Arial, "Liberation Sans", Helvetica, sans-serif;
-  --ui-title-font: "Comic Neue", "Comic Sans MS", "Chalkboard SE", cursive;
+
+  /* fonts, scored against the game's FBF glyphs (re/tools/sc3ui/fontscore.py, UI_STYLE.md "Fonts") */
+  --ui-font: "Istok Web", Verdana, Tahoma, Arial, sans-serif;
+  --ui-title-font: "Comic Relief", "Comic Sans MS", "Chalkboard SE", cursive;
   --ui-mono: "Cascadia Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
-  --ui-clouds:
-    radial-gradient(ellipse 38% 22% at 18% 12%, rgba(240,244,248,.9), rgba(240,244,248,0) 70%),
-    radial-gradient(ellipse 30% 18% at 82% 30%, rgba(224,228,248,.95), rgba(224,228,248,0) 70%),
-    radial-gradient(ellipse 34% 20% at 30% 62%, rgba(184,192,248,.55), rgba(184,192,248,0) 70%),
-    radial-gradient(ellipse 40% 24% at 74% 84%, rgba(240,244,248,.85), rgba(240,244,248,0) 70%),
-    radial-gradient(ellipse 26% 16% at 60% 48%, rgba(200,208,248,.6), rgba(200,208,248,0) 70%);
+  /* MAIN9: every label, heading, list row, info bar, ticker */
+  --ui-type-ui: 700 calc(12.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);  --ui-ls-ui: 0px;
+  /* the same face at 400 for running text (the game has no paragraphs; see UI_STYLE.md) */
+  --ui-type-prose: 400 calc(12.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);
+  /* SYSTEM9: the budget's table rows */
+  --ui-type-row: 400 calc(11.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);  --ui-ls-row: calc(-.34 * var(--u));
+  /* MAIN10: the query dialog's building name */
+  --ui-type-name: 700 calc(13.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);  --ui-ls-name: calc(-.45 * var(--u));
+  /* TITLE12: title bars */
+  --ui-type-title: 400 calc(16 * var(--u)) / calc(28 * var(--u)) var(--ui-title-font);  --ui-ls-title: calc(.43 * var(--u));
+  /* TITLE9: pill buttons */
+  --ui-type-btn: 700 calc(11 * var(--u)) / calc(19 * var(--u)) var(--ui-title-font);  --ui-ls-btn: calc(.83 * var(--u));
+
+  /* the window body: our own 256 px tile, feTurbulence tuned to the game's tile statistics (re/tools/sc3ui/cloudgen.py) */
+  --ui-clouds: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.00586' numOctaves='5' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.3605 0 0 0 0.6650 0.3175 0 0 0 0.6912 0.0000 0 0 0 1.0000 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
+  --ui-cloud-size: calc(256 * var(--u));
   color-scheme: light;
 }
 /* Dark variant: the game has none, so it is built from the game's own darker colours (UI_STYLE.md, Dark variant). */
@@ -33,145 +54,214 @@
   :root:not([data-theme="light"]) {
     --ui-page: #10142e; --ui-face: #1c2152; --ui-face2: #262c66; --ui-frame: #31347b; --ui-field: #10142e;
     --ui-btn-face: #31347b; --ui-btn-hi: #4a599c; --ui-text: #dedfff; --ui-label: #adb6ff; --ui-info-text: #dedfff;
-    --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-hi: #636dc6; --ui-outline: #0a0d20; --ui-link: #adb6ff;
+    --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-groove-hi: #31347b; --ui-hi: #636dc6; --ui-edge: #05071a;
+    --ui-outline: #0a0d20; --ui-link: #adb6ff;
     --ui-warn-bg: #2e2a0c; --ui-warn-line: #fffb00; --ui-on-plate: #10142e; --ui-lav-50: #4a599c; --ui-lav-500: #636dc6; --ui-lav-300: #262c66;
-    --ui-clouds:
-      radial-gradient(ellipse 38% 22% at 18% 12%, rgba(49,52,123,.55), rgba(49,52,123,0) 70%),
-      radial-gradient(ellipse 34% 20% at 70% 70%, rgba(74,89,156,.25), rgba(74,89,156,0) 70%);
+    --ui-mark-ring: #4a599c; --ui-mark-lo: #31347b; --ui-mark-lo2: #262c66; --ui-btn-line: #0a0d20; --ui-btn-line-lo: #05071a;
+    --ui-btn-sh1: #05071a; --ui-btn-sh2: #05071a; --ui-btn-sh3: #0a0d20; --ui-btn-sh4: #10142e; --ui-btn-sh5: #1c2152;
+    --ui-clouds: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.00586' numOctaves='5' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.1316 0 0 0 0.0441 0.1170 0 0 0 0.0710 0.2632 0 0 0 0.1901 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --ui-page: #10142e; --ui-face: #1c2152; --ui-face2: #262c66; --ui-frame: #31347b; --ui-field: #10142e;
   --ui-btn-face: #31347b; --ui-btn-hi: #4a599c; --ui-text: #dedfff; --ui-label: #adb6ff; --ui-info-text: #dedfff;
-  --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-hi: #636dc6; --ui-outline: #0a0d20; --ui-link: #adb6ff;
+  --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-groove-hi: #31347b; --ui-hi: #636dc6; --ui-edge: #05071a;
+  --ui-outline: #0a0d20; --ui-link: #adb6ff;
   --ui-warn-bg: #2e2a0c; --ui-warn-line: #fffb00; --ui-on-plate: #10142e; --ui-lav-50: #4a599c; --ui-lav-500: #636dc6; --ui-lav-300: #262c66;
-  --ui-clouds:
-    radial-gradient(ellipse 38% 22% at 18% 12%, rgba(49,52,123,.55), rgba(49,52,123,0) 70%),
-    radial-gradient(ellipse 34% 20% at 70% 70%, rgba(74,89,156,.25), rgba(74,89,156,0) 70%);
+  --ui-mark-ring: #4a599c; --ui-mark-lo: #31347b; --ui-mark-lo2: #262c66; --ui-btn-line: #0a0d20; --ui-btn-line-lo: #05071a;
+  --ui-btn-sh1: #05071a; --ui-btn-sh2: #05071a; --ui-btn-sh3: #0a0d20; --ui-btn-sh4: #10142e; --ui-btn-sh5: #1c2152;
+  --ui-clouds: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.00586' numOctaves='5' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.1316 0 0 0 0.0441 0.1170 0 0 0 0.0710 0.2632 0 0 0 0.1901 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
 
 /* ---------------------------------------------------------------- base elements */
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; color: var(--ui-text); font: 15px/1.55 var(--ui-font);
-  background-color: var(--ui-page); background-image: var(--ui-clouds); background-attachment: fixed; overflow-x: hidden; }
-a { color: var(--ui-link); text-underline-offset: 2px; }
+body { margin: 0; color: var(--ui-text); font: var(--ui-type-prose); letter-spacing: var(--ui-ls-ui);
+  background-color: var(--ui-page); background-image: var(--ui-clouds); background-size: var(--ui-cloud-size);
+  overflow-x: hidden; }
+a { color: var(--ui-link); text-underline-offset: calc(2 * var(--u)); }
 a:hover { color: var(--ui-select); }
 :root[data-theme="dark"] a:hover { color: var(--ui-ticker); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) a:hover { color: var(--ui-ticker); } }
 h1, h2, h3 { color: var(--ui-text); }
+h3 { font: var(--ui-type-name); letter-spacing: var(--ui-ls-name); }
+b, strong { font-weight: 700; }
 img { max-width: 100%; }
 ::selection { background: var(--ui-select); color: var(--ui-select-text); }
-:focus-visible { outline: 2px dotted var(--ui-select); outline-offset: 2px; }
-code, kbd, samp { font-family: var(--ui-mono); font-size: .88em; background: var(--ui-face2); color: var(--ui-text);
-  padding: 1px 5px; border: 1px solid var(--ui-blue-line); overflow-wrap: anywhere; }
+:focus-visible { outline: calc(2 * var(--u)) dotted var(--ui-select); outline-offset: calc(2 * var(--u)); }
+code, kbd, samp { font-family: var(--ui-mono); font-size: .88em; letter-spacing: 0; background: var(--ui-face2); color: var(--ui-text);
+  padding: 0 calc(4 * var(--u)); border: 1px solid var(--ui-blue-line); overflow-wrap: anywhere; }
 
-/* ---------------------------------------------------------------- pill button (S3 "Opciones de mods...") */
+/* ---------------------------------------------------------------- pill button (query "Sustituir", budget "Gastos")
+   21 px tall with fully round ends, 8 px side padding, 1 px outline, a 2-row highlight along the top, and a 5-step
+   drop shadow down and right (measured x=100 y=402..409 in the query dialog). Text: TITLE9 = Comic Relief 700 11 px. */
 button, .ui-btn {
-  font: 700 13px/1.2 var(--ui-font); color: var(--ui-text); cursor: pointer; display: inline-flex; align-items: center;
-  justify-content: center; gap: 6px; min-height: 28px; padding: 5px 14px; border-radius: 999px; text-decoration: none;
-  background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face) 45%, var(--ui-btn-face) 80%, var(--ui-lav-500));
-  border: 1px solid var(--ui-outline);
-  box-shadow: inset 0 1px 0 var(--ui-hi), inset 0 -1px 0 rgba(123,138,255,.6), 2px 3px 0 -1px var(--ui-navy-line), 3px 4px 0 -1px var(--ui-shadow);
-  transition: transform .05s;
+  font: var(--ui-type-btn); letter-spacing: var(--ui-ls-btn); color: var(--ui-text); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: calc(5 * var(--u));
+  min-height: calc(21 * var(--u)); padding: 0 calc(8 * var(--u)); border-radius: calc(11 * var(--u)); text-decoration: none;
+  background: linear-gradient(var(--ui-btn-hi) 0 calc(2 * var(--u)), var(--ui-btn-face) calc(2 * var(--u)));
+  border: 1px solid; border-color: var(--ui-btn-line) var(--ui-btn-line-lo) var(--ui-btn-line-lo) var(--ui-btn-line);
+  box-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-btn-sh1), calc(2 * var(--u)) calc(2 * var(--u)) 0 0 var(--ui-btn-sh2),
+    calc(3 * var(--u)) calc(3 * var(--u)) 0 0 var(--ui-btn-sh3), calc(4 * var(--u)) calc(4 * var(--u)) 0 0 var(--ui-btn-sh4),
+    calc(5 * var(--u)) calc(5 * var(--u)) 0 0 var(--ui-btn-sh5);
+  margin: 0 calc(5 * var(--u)) calc(5 * var(--u)) 0;
 }
-button:hover:not(:disabled), .ui-btn:hover { background: linear-gradient(var(--ui-hi), var(--ui-lav-50) 45%, var(--ui-btn-face)); color: var(--ui-text); }
+button:hover:not(:disabled), .ui-btn:hover { background: linear-gradient(var(--ui-hi) 0 calc(2 * var(--u)), var(--ui-lav-50) calc(2 * var(--u))); color: var(--ui-text); }
 button:active:not(:disabled), .ui-btn:active, button[aria-pressed="true"], .ui-btn.is-on {
-  transform: translate(1px, 2px); box-shadow: inset 1px 1px 0 var(--ui-blue-line), 1px 1px 0 -1px var(--ui-shadow);
+  transform: translate(calc(2 * var(--u)), calc(2 * var(--u)));
+  box-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-btn-sh1), calc(2 * var(--u)) calc(2 * var(--u)) 0 0 var(--ui-btn-sh4),
+    calc(3 * var(--u)) calc(3 * var(--u)) 0 0 var(--ui-btn-sh5);
   background: var(--ui-lav-300); color: var(--ui-text); }
 :root[data-theme="dark"] button[aria-pressed="true"] { background: var(--ui-blue); color: #10142e; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button[aria-pressed="true"] { background: var(--ui-blue); color: #10142e; } }
 button:disabled, .ui-btn[aria-disabled="true"] { cursor: default; color: var(--ui-label); opacity: .75;
-  background: var(--ui-face2); box-shadow: inset 0 1px 0 var(--ui-hi); border-color: var(--ui-label); }
-button:focus-visible, .ui-btn:focus-visible { outline: 2px dotted var(--ui-select); outline-offset: 3px; }
-/* primary = the button the dialog wants you to press: on a blue plate, like the OK tick */
-button.primary, .ui-btn.primary { background: linear-gradient(#a5b4ff, var(--ui-blue) 50%, #6b80f0); color: #10142e;
-  box-shadow: inset 0 1px 0 #cfd8ff, 2px 3px 0 -1px var(--ui-navy-line), 3px 4px 0 -1px var(--ui-shadow); }
-button.primary:hover:not(:disabled), .ui-btn.primary:hover { background: linear-gradient(#bcc8ff, #8ea2ff 50%, var(--ui-blue)); color: #10142e; }
-button.primary:disabled { background: var(--ui-face2); color: var(--ui-label); }
-.ui-plate { display: inline-flex; flex-wrap: wrap; gap: 8px; padding: 5px 8px 7px; background: var(--ui-plate); }
+  background: var(--ui-face2); box-shadow: none; border-color: var(--ui-label); }
+button:focus-visible, .ui-btn:focus-visible { outline: calc(2 * var(--u)) dotted var(--ui-select); outline-offset: calc(2 * var(--u)); }
+/* primary = the button the dialog wants pressed: the same pill on its blue plate, like the OK tick (S3) */
+button.primary, .ui-btn.primary { background: linear-gradient(var(--ui-hi) 0 calc(2 * var(--u)), var(--ui-lav-50) calc(2 * var(--u)));
+  outline: calc(3 * var(--u)) solid var(--ui-blue); outline-offset: 0; }
+button.primary:hover:not(:disabled), .ui-btn.primary:hover { background: var(--ui-hi); }
+button.primary:focus-visible { outline: calc(3 * var(--u)) solid var(--ui-select); }
+button.primary:disabled { background: var(--ui-face2); outline-color: var(--ui-face2); }
+/* blue plate behind buttons and the inset blue panels of S3 (1 px #7b8aff border, #7b92ff fill) */
+.ui-plate { display: inline-flex; flex-wrap: wrap; align-items: center; gap: calc(6 * var(--u));
+  padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(1 * var(--u)) calc(5 * var(--u));
+  background: var(--ui-plate); border: 1px solid var(--ui-blue-line); }
 
-/* ---------------------------------------------------------------- form fields (S3 list face + inset bevel) */
+/* ---------------------------------------------------------------- form fields (S3 combo: 20 px, groove, white face, SYSTEM9 text) */
 input[type=text], input[type=number], input[type=search], input[type=url], select, textarea, .ui-field {
-  font: 14px/1.3 var(--ui-font); color: var(--ui-text); background: var(--ui-field); padding: 5px 7px; border-radius: 0;
-  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-hi) var(--ui-hi) var(--ui-blue-line);
-  box-shadow: inset 1px 1px 0 var(--ui-lav-500); max-width: 100%; }
-select { padding-right: 26px; appearance: none; -webkit-appearance: none; cursor: pointer;
+  font: var(--ui-type-row); line-height: calc(17 * var(--u)); letter-spacing: var(--ui-ls-row); color: var(--ui-text); background: var(--ui-field);
+  min-height: calc(20 * var(--u)); padding: 0 calc(3 * var(--u)) calc(1 * var(--u)); border-radius: 0;
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); max-width: 100%; }
+textarea { font: var(--ui-type-prose); }
+select { padding-right: calc(19 * var(--u)); appearance: none; -webkit-appearance: none; cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, var(--ui-text) 50%), linear-gradient(135deg, var(--ui-text) 50%, transparent 50%),
     linear-gradient(var(--ui-blue), var(--ui-blue));
-  background-position: right 11px top 50%, right 6px top 50%, right 0 top 0;
-  background-size: 5px 5px, 5px 5px, 22px 100%; background-repeat: no-repeat; }
-input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--ui-select); outline-offset: 0; }
-input[type=checkbox], input[type=radio] { appearance: none; -webkit-appearance: none; margin: 0 6px 0 0; width: 14px; height: 14px;
-  flex: none; vertical-align: -2px; cursor: pointer; background: var(--ui-field); border: 1px solid var(--ui-text);
-  box-shadow: inset 1px 1px 0 var(--ui-lav-500); display: inline-grid; place-content: center; }
-input[type=radio] { border-radius: 50%; }
-input[type=checkbox]::before { content: ""; width: 9px; height: 9px; transform: scale(0);
-  clip-path: polygon(14% 44%, 0 62%, 40% 100%, 100% 22%, 84% 6%, 38% 66%); background: var(--ui-text); }
-input[type=radio]::before { content: ""; width: 6px; height: 6px; border-radius: 50%; transform: scale(0); background: var(--ui-text); }
+  background-position: right calc(8 * var(--u)) top 50%, right calc(4 * var(--u)) top 50%, right 0 top 0;
+  background-size: calc(4 * var(--u)) calc(4 * var(--u)), calc(4 * var(--u)) calc(4 * var(--u)), calc(16 * var(--u)) 100%;
+  background-repeat: no-repeat; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: calc(2 * var(--u)) solid var(--ui-select); outline-offset: 0; }
+/* check box: 13 px footprint (S3 x=222..234): outer ring, 1 px navy border, 9 px white face, navy tick.
+   radio: 12 px footprint (S3 x=18..29): the same rings round an 8 px white face, 4 px navy dot. */
+input[type=checkbox], input[type=radio] { appearance: none; -webkit-appearance: none; flex: none; cursor: pointer;
+  width: calc(11 * var(--u)); height: calc(11 * var(--u)); margin: calc(1 * var(--u)) calc(4 * var(--u)) calc(1 * var(--u)) calc(1 * var(--u));
+  vertical-align: calc(-1 * var(--u)); background: var(--ui-field);
+  border: calc(1 * var(--u)) solid; border-color: var(--ui-text) var(--ui-mark-lo) var(--ui-mark-lo) var(--ui-text);
+  box-shadow: calc(-1 * var(--u)) calc(-1 * var(--u)) 0 0 var(--ui-mark-ring), calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-mark-lo2);
+  display: inline-grid; place-content: center; }
+input[type=radio] { width: calc(10 * var(--u)); height: calc(10 * var(--u)); border-radius: 50%; margin-right: calc(3 * var(--u)); }
+input[type=checkbox]::before { content: ""; width: calc(9 * var(--u)); height: calc(9 * var(--u)); transform: scale(0);
+  clip-path: polygon(2% 46%, 26% 40%, 40% 64%, 80% 2%, 100% 16%, 46% 98%, 30% 98%); background: var(--ui-text); }
+input[type=radio]::before { content: ""; width: calc(4 * var(--u)); height: calc(4 * var(--u)); border-radius: 50%; transform: scale(0); background: var(--ui-text); }
 input[type=checkbox]:checked::before, input[type=radio]:checked::before { transform: scale(1); }
 input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .5; cursor: default; }
-input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2px dotted var(--ui-select); outline-offset: 2px; }
+input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: calc(2 * var(--u)) dotted var(--ui-select); outline-offset: calc(2 * var(--u)); }
+/* slider (S3 sound panel): 3 px track, 2 rows black over 1 white, round light knob */
+input[type=range] { appearance: none; -webkit-appearance: none; background: transparent; height: calc(22 * var(--u)); margin: 0; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: calc(3 * var(--u)); background: linear-gradient(#080c18 66%, #ffffff 66%); }
+input[type=range]::-moz-range-track { height: calc(3 * var(--u)); background: linear-gradient(#080c18 66%, #ffffff 66%); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: calc(20 * var(--u)); height: calc(20 * var(--u)); margin-top: calc(-8.5 * var(--u));
+  border-radius: 50%; border: calc(1 * var(--u)) solid #292829; background: radial-gradient(circle at 45% 40%, #f0f3ff 0 45%, #b5bac6 75%, #5a5d63); }
+input[type=range]::-moz-range-thumb { width: calc(18 * var(--u)); height: calc(18 * var(--u)); border-radius: 50%; border: calc(1 * var(--u)) solid #292829;
+  background: radial-gradient(circle at 45% 40%, #f0f3ff 0 45%, #b5bac6 75%, #5a5d63); }
+/* one option per line: 18 px rows like the radio lists of S3 */
+.ui-opt { display: flex; align-items: center; min-height: calc(18 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); color: var(--ui-text); }
 
 /* ---------------------------------------------------------------- progress bar (inset well, blue fill) */
-progress, .ui-progress { appearance: none; -webkit-appearance: none; height: 14px; border-radius: 0; overflow: hidden;
-  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-hi) var(--ui-hi) var(--ui-blue-line); background: var(--ui-field); }
+progress, .ui-progress { appearance: none; -webkit-appearance: none; height: calc(12 * var(--u)); border-radius: 0; overflow: hidden;
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); background: var(--ui-field); }
 progress::-webkit-progress-bar { background: var(--ui-field); }
-progress::-webkit-progress-value { background: repeating-linear-gradient(90deg, var(--ui-blue) 0 10px, #6b80f0 10px 12px); }
+progress::-webkit-progress-value { background: var(--ui-blue); }
 progress::-moz-progress-bar { background: var(--ui-blue); }
 
 /* ---------------------------------------------------------------- details / summary (group heading look) */
-summary { cursor: pointer; color: var(--ui-label); font-weight: 700; }
+summary { cursor: pointer; color: var(--ui-label); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
 summary:hover { color: var(--ui-text); }
 
-/* ---------------------------------------------------------------- window: frame, title bar, body (S3) */
-.ui-window { background: var(--ui-frame); border: 1px solid var(--ui-grey-edge); box-shadow: inset 0 0 0 1px var(--ui-hi), 3px 4px 0 rgba(24,32,57,.35); padding: 5px; }
-.ui-titlebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 6px; padding: 4px 10px; min-height: 34px;
-  background: var(--ui-blue); color: var(--ui-title-text); box-shadow: 0 0 0 1px var(--ui-lav-500), 0 0 0 4px var(--ui-lav-50);
-  font: 400 1.25rem/1.25 var(--ui-title-font); text-shadow: 1px 1px 0 rgba(49,52,123,.55); }
-.ui-titlebar h1, .ui-titlebar h2, .ui-titlebar h3 { color: inherit; font: inherit; margin: 0; }
-.ui-window > .ui-titlebar { margin: 4px 4px 9px; }
-.ui-close { width: 22px; height: 20px; min-height: 0; padding: 0; border-radius: 0; margin-left: auto; font: 700 14px/1 var(--ui-font);
-  background: var(--ui-lav-200); border: 1px solid var(--ui-outline); box-shadow: inset 1px 1px 0 var(--ui-hi), 1px 1px 0 var(--ui-shadow); }
-.ui-panel { background-color: var(--ui-face); border: 1px solid var(--ui-blue-line); box-shadow: inset 1px 1px 0 var(--ui-hi); padding: 12px 14px; }
-.ui-body { background-color: var(--ui-page); background-image: var(--ui-clouds); border: 1px solid var(--ui-blue-line); padding: 12px 14px; }
+/* ---------------------------------------------------------------- window (S3 Preferencias, 480x472)
+   1 px white top/left, 1 px black right/bottom, clouded body. The title plate sits 3 px inside the edge line:
+   1 px #adb6ff border round a flat #7b92ff fill, 31 px tall, text TITLE12 = Comic Relief 16 px, ink 4 px in from the
+   plate's edge, baseline 21 px below its top. Content starts 7 px under the plate, 5 px in from the sides. */
+.ui-window { background-color: var(--ui-page); background-image: var(--ui-clouds); background-size: var(--ui-cloud-size);
+  border: 1px solid; border-color: var(--ui-hi) var(--ui-edge) var(--ui-edge) var(--ui-hi);
+  padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(5 * var(--u)); }
+.ui-titlebar { display: flex; align-items: center; gap: calc(8 * var(--u)); flex-wrap: wrap;
+  margin: 0 calc(-2 * var(--u)) calc(7 * var(--u)); padding: calc(1 * var(--u)) calc(3 * var(--u)) 0 calc(3 * var(--u)); min-height: calc(31 * var(--u));
+  background: var(--ui-blue); border: 1px solid var(--ui-lav-500); color: var(--ui-title-text);
+  font: var(--ui-type-title); letter-spacing: var(--ui-ls-title); }
+.ui-titlebar h1, .ui-titlebar h2, .ui-titlebar h3 { color: inherit; font: inherit; letter-spacing: inherit; margin: 0; }
+/* close box (S3 x=451..467, y=9..24): 17x16, the pill outline and drop shadow, an inner 1 px navy square with a 2 px X */
+.ui-close { position: relative; align-self: flex-start; width: calc(17 * var(--u)); height: calc(16 * var(--u)); min-height: 0; padding: 0;
+  border-radius: calc(2 * var(--u)); margin: calc(3 * var(--u)) calc(4 * var(--u)) 0 auto; color: transparent; font-size: 0; }
+.ui-close::after { content: ""; position: absolute; inset: 0; border: calc(1 * var(--u)) solid var(--ui-text);
+  background: linear-gradient(45deg, transparent calc(50% - 1.1 * var(--u)), var(--ui-text) calc(50% - 1.1 * var(--u)) calc(50% + 1.1 * var(--u)), transparent calc(50% + 1.1 * var(--u))),
+    linear-gradient(-45deg, transparent calc(50% - 1.1 * var(--u)), var(--ui-text) calc(50% - 1.1 * var(--u)) calc(50% + 1.1 * var(--u)), transparent calc(50% + 1.1 * var(--u)));
+  background-size: calc(9 * var(--u)) calc(8 * var(--u)); background-position: center; background-repeat: no-repeat; }
+/* panel = a group box face without the heading (kept for the pages' text blocks) */
+.ui-panel { background-color: var(--ui-face); border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line);
+  padding: calc(5 * var(--u)) calc(7 * var(--u)) calc(7 * var(--u)); }
+.ui-body { background-color: var(--ui-page); background-image: var(--ui-clouds); background-size: var(--ui-cloud-size);
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); padding: calc(5 * var(--u)) calc(7 * var(--u)); }
 
-/* group box: face, heading in the label colour (S3 "Efectos sonido") */
-.ui-group { background: var(--ui-face); border: 1px solid var(--ui-blue-line); box-shadow: inset 1px 1px 0 var(--ui-hi), 0 0 0 4px var(--ui-face2); padding: 10px 12px; margin: 4px; }
-.ui-group > .ui-label:first-child, .ui-label { color: var(--ui-label); font-weight: 700; }
+/* group box (S3): 1 px groove, #7b8aff top/left and #fff3ff bottom/right, flat face. Content 7 px inside the groove,
+   the heading's line box starts 4 px under it (baseline 17 px below the groove). Groups sit 6 px apart side by side and 4 px apart stacked. */
+.ui-group { background: var(--ui-face); border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line);
+  padding: calc(4 * var(--u)) calc(7 * var(--u)) calc(6 * var(--u)); margin: 0 0 calc(4 * var(--u)); }
+.ui-group > .ui-label:first-child, .ui-label { display: block; color: var(--ui-label); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
+/* a heading after other rows: 22 px from the last row's baseline instead of 18 (S3 "Trafico visible", "Sims visibles") */
+.ui-label + .ui-label, * + .ui-label { margin-top: calc(4 * var(--u)); }
+.ui-group > .ui-label:first-child { margin-top: 0; }
+.ui-groups { display: flex; flex-wrap: wrap; gap: calc(4 * var(--u)) calc(6 * var(--u)); }
+.ui-groups > .ui-group { margin: 0; }
+/* list (S3 "Musicas posibles"): grooved, face, 18 px rows; selection solid blue, white text */
+.ui-list { background: var(--ui-face); border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line);
+  padding: calc(3 * var(--u)) calc(6 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
+.ui-list > * { min-height: calc(18 * var(--u)); display: flex; align-items: center; }
+.ui-list > .is-sel { background: var(--ui-select); color: var(--ui-select-text); }
 
-/* blue strip heading (the "Escuchar eleccion" bar / a title bar inside a page) */
-.ui-strip { background: var(--ui-blue); color: var(--ui-on-plate); padding: 4px 10px; font-weight: 700; }
+/* blue strip with dark text (S3 "Escuchar eleccion", 28 px, text 6 px in) and a page title bar inside a page */
+.ui-strip { display: flex; align-items: center; gap: calc(6 * var(--u)); min-height: calc(28 * var(--u));
+  background: var(--ui-blue); border: 1px solid var(--ui-blue-line); color: var(--ui-on-plate);
+  padding: 0 calc(4 * var(--u)) 0 calc(6 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
 
 /* ---------------------------------------------------------------- chips (toolbar-style rounded squares) */
-.ui-chip { display: inline-flex; align-items: center; white-space: nowrap; padding: 4px 11px; border-radius: 7px; font: 700 13px/1.3 var(--ui-font);
-  color: var(--ui-text); text-decoration: none; background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face) 60%, var(--ui-lav-500));
-  border: 1px solid var(--ui-outline); box-shadow: inset 0 1px 0 var(--ui-hi), 1px 2px 0 var(--ui-navy-line); }
+.ui-chip { display: inline-flex; align-items: center; white-space: nowrap; min-height: calc(18 * var(--u)); padding: 0 calc(7 * var(--u));
+  border-radius: calc(5 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui);
+  color: var(--ui-text); text-decoration: none; background: linear-gradient(var(--ui-btn-hi) 0 calc(2 * var(--u)), var(--ui-btn-face) calc(2 * var(--u)));
+  border: 1px solid; border-color: var(--ui-btn-line) var(--ui-btn-line-lo) var(--ui-btn-line-lo) var(--ui-btn-line);
+  box-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-btn-sh1), calc(2 * var(--u)) calc(2 * var(--u)) 0 0 var(--ui-btn-sh4); }
 .ui-chip:hover, .ui-chip:focus-visible { background: var(--ui-select); color: var(--ui-select-text); }
 
-/* ---------------------------------------------------------------- info bar + ticker (S1/S3 bottom bar) */
-.ui-infobar { background: var(--ui-lav-400); color: var(--ui-info-text); font-weight: 700;
+/* ---------------------------------------------------------------- info bar + ticker (S1/S3 bottom bar)
+   Bevel #a5aeb5 / #ffffff / #cecfff #adb6ff #8c92ff #8496ff #636dc6, a 17 px black ticker with #fffb00 MAIN9 text,
+   then #bdc3ff fields with #18288c MAIN9 text, centred. */
+.ui-infobar { background: var(--ui-lav-400); color: var(--ui-info-text); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui);
   border-top: 1px solid var(--ui-hi);
-  box-shadow: 0 -1px 0 #a5aeb5, inset 0 1px 0 #cecfff, inset 0 2px 0 var(--ui-lav-500), inset 0 3px 0 #8c92ff, inset 0 4px 0 var(--ui-blue-deep); padding-top: 4px; }
-.ui-ticker { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: 700 13px/1.5 var(--ui-font); padding: 1px 10px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ui-fields { display: flex; flex-wrap: wrap; gap: 1px; background: #7b86ff; border-top: 2px solid var(--ui-blue-line); }
-.ui-fields > * { flex: 1 1 auto; background: var(--ui-lav-400); text-align: center; padding: 2px 10px; }
+  box-shadow: 0 -1px 0 #a5aeb5, inset 0 calc(1 * var(--u)) 0 #cecfff, inset 0 calc(2 * var(--u)) 0 var(--ui-lav-500),
+    inset 0 calc(3 * var(--u)) 0 #8c92ff, inset 0 calc(4 * var(--u)) 0 #8496ff, inset 0 calc(5 * var(--u)) 0 var(--ui-blue-deep);
+  padding-top: calc(5 * var(--u)); }
+.ui-ticker { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui);
+  line-height: calc(17 * var(--u)); padding: 0 calc(8 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-fields { display: flex; flex-wrap: wrap; gap: 1px; background: #7b86ff; border-top: calc(2 * var(--u)) solid var(--ui-blue-line); }
+.ui-fields > * { flex: 1 1 auto; background: var(--ui-lav-400); text-align: center; padding: calc(1 * var(--u)) calc(8 * var(--u)); }
 
-/* ---------------------------------------------------------------- card (group-box face, picture in a blue frame like S5) */
-.ui-card { background: var(--ui-face); border: 1px solid var(--ui-blue-line); box-shadow: inset 1px 1px 0 var(--ui-hi), 2px 3px 0 rgba(24,32,57,.25); padding: 6px; }
+/* ---------------------------------------------------------------- card (group-box face, picture in a 1 px blue frame like S5) */
+.ui-card { background: var(--ui-face); border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line);
+  padding: calc(5 * var(--u)); }
 .ui-card img { display: block; border: 1px solid var(--ui-blue); }
 
 /* ---------------------------------------------------------------- log box (the ticker colours) */
-.ui-log, pre.ui-log { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: 12px/1.4 var(--ui-mono); padding: 6px 8px;
-  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-hi) var(--ui-hi) var(--ui-blue-line); white-space: pre-wrap; overflow: auto; }
+.ui-log, pre.ui-log { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: calc(11 * var(--u)) / calc(15 * var(--u)) var(--ui-mono); letter-spacing: 0;
+  padding: calc(4 * var(--u)) calc(6 * var(--u));
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); white-space: pre-wrap; overflow: auto; }
 
-/* ---------------------------------------------------------------- tables (blue header plate, lavender rows) */
-.ui-table, table { border-collapse: collapse; width: 100%; font-size: .93rem; background: var(--ui-face); }
-table th, table td { text-align: left; padding: 6px 10px; border: 1px solid var(--ui-lav-500); vertical-align: top; }
-table th { background: var(--ui-blue); color: var(--ui-on-plate); font-weight: 700; white-space: nowrap; border-color: var(--ui-blue-line); }
+/* ---------------------------------------------------------------- tables (blue header plate, lavender rows; cells = SYSTEM9 like the budget rows) */
+.ui-table, table { border-collapse: collapse; width: 100%; background: var(--ui-face); font: var(--ui-type-row); letter-spacing: var(--ui-ls-row); }
+table th, table td { text-align: left; padding: calc(2 * var(--u)) calc(6 * var(--u)); border: 1px solid var(--ui-lav-500); vertical-align: top; }
+table th { background: var(--ui-blue); color: var(--ui-on-plate); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui);
+  white-space: nowrap; border-color: var(--ui-blue-line); }
 table tbody tr:nth-child(even) td { background: var(--ui-face2); }
 table tbody tr:hover td { background: var(--ui-select); color: var(--ui-select-text); }
 table tbody tr:hover td code { color: var(--ui-text); }
@@ -181,8 +271,8 @@ table tbody tr:hover td code { color: var(--ui-text); }
 .ui-lightbox::backdrop { background: rgba(16,20,46,.94); }
 
 /* ---------------------------------------------------------------- note (yellow of the ticker, softened) */
-.ui-note { background: var(--ui-warn-bg); color: var(--ui-text); border: 1px solid var(--ui-warn-line); border-left-width: 5px; padding: 9px 13px; }
+.ui-note { background: var(--ui-warn-bg); color: var(--ui-text); border: 1px solid var(--ui-warn-line); border-left-width: calc(4 * var(--u));
+  padding: calc(5 * var(--u)) calc(8 * var(--u)); }
 
 /* ---------------------------------------------------------------- page frame helpers */
 .ui-wrap { max-width: 1180px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
-@media (max-width: 600px) { body { font-size: 15px; } .ui-titlebar { font-size: 1.1rem; } }

@@ -7,50 +7,52 @@
 <meta name="description" content="How to turn your own 3D models into buildings that grow in SimCity 3000 Unlimited, with a free sample pack to start from.">
 <link rel="stylesheet" href="../assets/sc3ui.css">
 <style>
-/* page layout on top of sc3ui.css (the game's UI look, docs/assets/sc3ui.css) */
-html { scroll-padding-top: 64px; }
-body { line-height: 1.6; }
+/* page layout on top of sc3ui.css (the game's UI look, docs/assets/sc3ui.css). Sizes are in game pixels x --ui-scale
+   (var(--u)), fonts and shapes are the measured components (round 2026-11-18g, re/analysis/UI_STYLE.md). */
+html { scroll-padding-top: calc(48 * var(--u)); }
 header.top { max-width: 1000px; margin: 0 auto; padding: 24px 16px 16px; }
-h1 { font-size: clamp(1.45rem, 4vw, 2.1rem); line-height: 1.2; margin: 0; text-wrap: balance; }
-.lead { max-width: 75ch; margin: 0 0 8px; }
-.meta { color: var(--ui-label); font-size: .92rem; font-weight: 700; margin: 12px 0 0; }
+h1 { margin: 0; text-wrap: balance; }
+.lead { max-width: 75ch; margin: 0 0 calc(6 * var(--u)); }
+.meta { color: var(--ui-label); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); margin: calc(8 * var(--u)) 0 0; }
 nav.fams { position: sticky; top: 0; z-index: 5; }
-nav.fams ul { max-width: 1000px; margin: 0 auto; padding: 8px 16px 9px; list-style: none; display: flex; gap: 8px;
-  overflow-x: auto; scrollbar-width: thin; }
-nav.fams a { display: inline-flex; align-items: center; white-space: nowrap; padding: 4px 11px; border-radius: 7px;
-  font: 700 13px/1.3 var(--ui-font); color: var(--ui-text); text-decoration: none;
-  background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face) 60%, var(--ui-lav-500));
-  border: 1px solid var(--ui-outline); box-shadow: inset 0 1px 0 var(--ui-hi), 1px 2px 0 var(--ui-navy-line); }
+nav.fams ul { max-width: 1000px; margin: 0 auto; padding: calc(5 * var(--u)) 16px calc(6 * var(--u)); list-style: none; display: flex;
+  gap: calc(6 * var(--u)); overflow-x: auto; scrollbar-width: thin; }
+nav.fams a { display: inline-flex; align-items: center; white-space: nowrap; min-height: calc(18 * var(--u)); padding: 0 calc(7 * var(--u));
+  border-radius: calc(5 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); color: var(--ui-text); text-decoration: none;
+  background: linear-gradient(var(--ui-btn-hi) 0 calc(2 * var(--u)), var(--ui-btn-face) calc(2 * var(--u)));
+  border: 1px solid; border-color: var(--ui-btn-line) var(--ui-btn-line-lo) var(--ui-btn-line-lo) var(--ui-btn-line);
+  box-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-btn-sh1), calc(2 * var(--u)) calc(2 * var(--u)) 0 0 var(--ui-btn-sh4);
+  margin: 0 calc(2 * var(--u)) calc(2 * var(--u)) 0; }
 nav.fams a:hover, nav.fams a:focus-visible { background: var(--ui-select); color: var(--ui-select-text); }
 main { max-width: 1000px; margin: 0 auto; padding: 8px 16px 48px; }
-section.fam { padding-top: 30px; }
-section.fam > h2 { margin: 0 0 12px; padding: 4px 12px; background: var(--ui-blue); color: var(--ui-title-text);
-  font: 400 1.4rem/1.3 var(--ui-title-font); text-shadow: 1px 1px 0 rgba(49,52,123,.55);
-  box-shadow: 0 0 0 1px var(--ui-lav-500), 0 0 0 4px var(--ui-lav-50); }
-h3 { font-size: 1.05rem; margin: 22px 0 6px; color: var(--ui-label); }
+section.fam { padding-top: calc(20 * var(--u)); }
+section.fam > h2 { display: flex; align-items: center; margin: 0 0 calc(7 * var(--u)); padding: calc(1 * var(--u)) calc(3 * var(--u)) 0;
+  min-height: calc(31 * var(--u)); background: var(--ui-blue); border: 1px solid var(--ui-lav-500); color: var(--ui-title-text);
+  font: var(--ui-type-title); letter-spacing: var(--ui-ls-title); }
+h3 { font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); margin: calc(14 * var(--u)) 0 calc(4 * var(--u)); color: var(--ui-label); }
 p, li { max-width: 75ch; }
-ol li, ul li { margin: 4px 0; }
-kbd { background: linear-gradient(var(--ui-btn-hi), var(--ui-btn-face)); border: 1px solid var(--ui-outline); border-radius: 4px;
-  box-shadow: 1px 1px 0 var(--ui-navy-line); font-family: var(--ui-font); font-weight: 700; }
-.note { background: var(--ui-warn-bg); color: var(--ui-text); border: 1px solid var(--ui-warn-line); border-left-width: 5px;
-  padding: 9px 13px; max-width: 75ch; }
-.dl { font-size: 15px; min-height: 36px; padding: 8px 20px; }
-.tablewrap { overflow-x: auto; margin: 10px 0 6px; border: 1px solid var(--ui-blue-line); background: var(--ui-face);
-  box-shadow: 0 0 0 3px var(--ui-face2); }
-table { font-size: .93rem; }
-table th, table td { padding: 6px 10px; }
+ol li, ul li { margin: calc(2 * var(--u)) 0; }
+kbd { background: linear-gradient(var(--ui-btn-hi) 0 calc(2 * var(--u)), var(--ui-btn-face) calc(2 * var(--u)));
+  border: 1px solid; border-color: var(--ui-btn-line) var(--ui-btn-line-lo) var(--ui-btn-line-lo) var(--ui-btn-line);
+  border-radius: calc(3 * var(--u)); box-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-btn-sh1);
+  font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
+.note { background: var(--ui-warn-bg); color: var(--ui-text); border: 1px solid var(--ui-warn-line); border-left-width: calc(4 * var(--u));
+  padding: calc(5 * var(--u)) calc(8 * var(--u)); max-width: 75ch; }
+.dl { min-height: calc(24 * var(--u)); padding: 0 calc(12 * var(--u)); font-size: calc(13 * var(--u)); }
+.tablewrap { overflow-x: auto; margin: calc(6 * var(--u)) 0 calc(4 * var(--u)); background: var(--ui-face);
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); }
 td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-figure { margin: 16px 0; background: var(--ui-face); border: 1px solid var(--ui-blue-line); padding: 6px;
-  box-shadow: inset 1px 1px 0 var(--ui-hi), 0 0 0 3px var(--ui-face2), 3px 4px 0 2px rgba(24,32,57,.22); }
+figure { margin: calc(10 * var(--u)) 0; background: var(--ui-face); padding: calc(5 * var(--u));
+  border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); }
 figure img { display: block; width: 100%; height: auto; background: #4a5a3c; border: 1px solid var(--ui-blue); }
 figure a { display: block; }
-figcaption { padding: 8px 4px 2px; font-size: .92rem; }
-.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px; }
+figcaption { padding: calc(5 * var(--u)) calc(2 * var(--u)) calc(1 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: calc(6 * var(--u)); }
 .pair figure { margin: 0; }
 .pair { align-items: start; }
-footer { margin: 0; padding: 0 0 8px; font-size: .88rem; }
-footer .in { max-width: 1000px; margin: 0 auto; padding: 14px 16px 24px; }
-footer p { max-width: 80ch; margin: 0 0 10px; font-weight: 400; }
+footer { margin: 0; padding: 0 0 8px; }
+footer .in { max-width: 1000px; margin: 0 auto; padding: calc(8 * var(--u)) 16px 24px; }
+footer p { max-width: 80ch; margin: 0 0 calc(6 * var(--u)); font: var(--ui-type-prose); }
 footer a { color: var(--ui-info-text); }
 </style>
 </head>
