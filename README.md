@@ -73,9 +73,9 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 ### Building tools (sc3resize)
 - "Move" button in the query window of rewards, business deals and landmarks, the ones you imported included: pick
   the building up and place it somewhere else (half its price plus bulldozing and levelling).
-- Civic looks and new rewards from the [building importer](https://nanofives.github.io/sc3kre/buildings/): press a
-  civic button again to switch between the original building and your looks (the cost label names the look), and
-  your rewards unlock at the population and year you set.
+- Civic looks and new rewards from the [building importer](https://nanofives.github.io/sc3kre/buildings/): a civic
+  button with looks opens a list of the original building and your looks, with picture and price, and builds the
+  one you pick. Your rewards unlock at the population and year you set.
 - Buildings placed from a menu, and road, rail, highway and power line drags, can go over zoned buildings,
   which are demolished first (bulldozing added to the cost, undo puts them back).
 - Zoning over buildings of another zone type, and de-zoning, demolish them (same type left alone).

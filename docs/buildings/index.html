@@ -316,7 +316,7 @@ footer a { color: var(--ui-info-text); }
 
 <section class="fam" id="civic">
 <h2>Civic buildings</h2>
-<p>A model can be a second look for one of the game's civic buttons. Set its kind to <code>civic</code> and pick the button in <b>Base</b>. Each press of that button then builds the next look: the stock building first, then your looks in the order of <code>models.json</code>, then the stock one again. The price label next to the pointer names the look, for example "Look 2 of 2: Test police look".</p>
+<p>A model can be a second look for one of the game's civic buttons. Set its kind to <code>civic</code> and pick the button in <b>Base</b>. Pressing that button then opens a list: the stock building first, then your looks in the order of <code>models.json</code>, each with its picture and price. Pick one and place it with the usual tool. The price label next to the pointer names the look, for example "Look 2 of 2: Test police look".</p>
 <p>The game treats your look as the stock building of that button. A police look is a police station, with the stock price and coverage. The picture and the name are yours.</p>
 <div class="tablewrap"><table>
 <thead><tr><th></th><th>Civic look</th></tr></thead>
@@ -333,7 +333,7 @@ footer a { color: var(--ui-info-text); }
 <h3>What it needs</h3>
 <p>The looks go into the landmark plugin, <code>Apps\PlugIn\bldimport</code>, with one more file, <code>bldimport_civic.ini</code>, the list of looks per button. The mods read that list: the row "Civic buildings: more looks" on the <b>Turn mods on or off</b> page switches it. With the mods off the button builds the stock building, and the looks you placed stay where they are.</p>
 <h3>Our test</h3>
-<p>A police look on 3x3 in Madison. Three presses of the Police Station button built the stock station, our look, and the stock station again. Placed, our look cost $505 and the stock station $522: the $500 police price plus clearing the lot. Next to a powered building our look drew its own coverage circle on the crime map. It stood where it was after the city was saved and loaded again.</p>
+<p>A police look on 3x3 in Madison. Placed, our look cost $505 and the stock station $522: the $500 police price plus clearing the lot. Next to a powered building our look drew its own coverage circle on the crime map. It stood where it was after the city was saved and loaded again. With three looks for the Police Station, each of the four entries in the list was picked and placed, and all four still stood after the city was saved and loaded again. Looks for the fire station, school, hospital and college were placed too, and each showed its own service figures in the query window.</p>
 <h3>Removing looks</h3>
 <p><b>Remove from the game</b> deletes the plugin. A city saved with a placed look loads, and the look comes back as the stock building of its button: in our test, the police look as a stock police station.</p>
 </section>
