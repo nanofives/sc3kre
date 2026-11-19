@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>sc3font calibration</title>
+<!-- gamefont (round 2026-11-19d): measures how this browser draws a partial-coverage bar (sc3font.js calibrate()).
+     build_fonts.mjs --measure opens it in headless Chrome (--dump-dom) and keeps the table in font_calibration.json,
+     so the published fonts carry the same partial-pixel widths the importer's run-time builder picks. -->
+<script src="../bldimport/sc3font.js"></script>
+</head>
+<body>
+<pre id="result">pending</pre>
+<script>
+SC3Font.calibrate().then(c => {
+  document.getElementById('result').textContent = JSON.stringify({ ua: navigator.userAgent, got: c.got, why: c.why || null });
+});
+</script>
+</body>
+</html>

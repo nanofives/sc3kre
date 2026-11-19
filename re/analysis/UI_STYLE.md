@@ -186,7 +186,7 @@ matrix onto the game's colour axis; chosen from 1,000 rendered candidates by oct
 
 Blue is constant: the clouds vary only along red + green, one or two large blobs per tile (91% of the variance at
 wavelengths of 128 to 256 px). Pass 1's radial gradients were far smaller. The SVG is 500 bytes inline; `--ui-cloud-size`
-scales it with `--ui-scale`. Dark theme: the same noise mapped onto the dark navy (designed, the game has no dark theme).
+scales it with `--ui-scale`. (The dark theme's navy copy went with the dark theme in gamefont, 2026-11-19d.)
 
 ### Spacing, native px (R3 unless noted)
 
@@ -213,6 +213,9 @@ scales it with `--ui-scale`. Dark theme: the same noise mapped onto the dark nav
 | ticker | 17 px black strip, MAIN9 `#fffb00` (R1) |
 
 ### Scale
+
+Superseded by "Game fonts and scale" below (gamefont, 2026-11-19d): `--u` is now snapped to whole device pixels.
+
 
 sc3ui.css writes every length as `calc(N * var(--u))` with N in game pixels and `--u: calc(var(--ui-scale) * 1px)`.
 `--ui-scale: 1` reproduces the game's pixels (the replica). Pages use **1.25**: the game's body text is 12.5 px, and
@@ -310,6 +313,9 @@ Istok Web stays the best free family. 13.0 px with -1.06 px spacing scores 0.693
 
 ## Game fonts at run time (importer only, sc3ui3)
 
+Since gamefont (2026-11-19d) this is the fallback: the published fonts below come first, and `useGame()` builds from the
+player's folder only when they did not load.
+
 Owner call: the game's font, but never published. `re/tools/bldimport/sc3font.js` reads the FBF files of the player's
 own game folder (`Apps\Res\Text\<lang>\`, all 7 language folders hold byte-identical fonts, file name case varies)
 when the importer is given that folder, builds TrueType fonts in memory and switches the `--ui-type-*` tokens to them.
@@ -334,11 +340,105 @@ pixel. Navy text: every ink pixel exactly `#31347b`. The replica with the game f
 (`replica_prefs.html?gamefont=1&game=<install URL>`): title, labels, radio labels, list rows and dropdown text carry the
 game's ink pixel for pixel (aligned IoU 1.000, ink ratio 1.00), placed within 1 px by the stylesheet's line flow.
 
-## Dark variant
+## Game fonts and scale (gamefont, round 2026-11-19d)
 
-The game has no dark theme. The dark tokens reuse the game's own darker colours: page `#10142e` and panels `#1c2152`
-(between the button shadow `#182039` and the text navy `#31347b`), lines `#4a599c` and `#636dc6`, text `#dedfff`, labels
-`#adb6ff`, title bars and plates stay `#7b92ff` with navy text, ticker stays black and yellow.
+Owner, 2026-11-19: "Use it on every page": web fonts built from the game's FBF files are published in `docs/` (risk
+accepted). The .FBF files themselves never enter the repo. Also from the owner the same day: light theme only. The dark
+variant, its tokens, `data-theme` / `?theme=` and the importer's Theme button are gone, and `:root` keeps
+`color-scheme: light`.
+
+### The files (`docs/assets/fonts/`, `re/tools/sc3ui/build_fonts.mjs`)
+
+`node re/tools/sc3ui/build_fonts.mjs --game <install>` runs sc3font.js's own `parseFBF` + `buildTTF` in node (the same
+code path as the importer's run-time builder) and writes one WOFF2 per font. The partial-pixel bar widths of the
+anti-aliased fonts come from Chrome's measured coverage curve, `re/tools/sc3ui/font_calibration.json` (`--measure`
+re-measures it in headless Chrome with `font_calib.html`, Chrome 157). `--check` rebuilds and compares (a `run_all.sh`
+step). All seven languages carry byte-identical FBF files, so one build serves every install.
+
+| file | bytes (TTF) | glyphs | line / baseline px | kind | family in sc3ui.css | token |
+|---|---|---|---|---|---|---|
+| MAIN9.woff2 | 5,692 (39,276) | 220 | 14 / 12 | 1-bit | "SC3 Main", "SC3 Text" bold | `--ui-type-ui`, `<b>` in prose |
+| SYSTEM9.woff2 | 5,016 (34,492) | 220 | 14 / 11 | 1-bit | "SC3 Text" regular, "SC3 System" | `--ui-type-prose`, `--ui-type-row`, `code` |
+| MAIN10.woff2 | 5,784 (40,840) | 220 | 16 / 13 | 1-bit | "SC3 Name" | `--ui-type-name` |
+| TITLE9.woff2 | 17,452 (172,656) | 220 | 18 / 14 | 15 levels | "SC3 Button" | `--ui-type-btn` |
+| TITLE12.woff2 | 21,956 (201,544) | 220 | 23 / 18 | 15 levels | "SC3 Title" | `--ui-type-title` |
+| SERIF17.woff2 | 29,712 (355,272) | 220 | 29 / 23 | 15 levels | "SC3 Serif" | none yet (main menu) |
+
+85,612 bytes for all six, against 843,080 as TTF. A page downloads only the faces it draws. Format: WOFF2 with the null
+transform on every table (glyf and loca as built, one brotli stream from node's own zlib, no dependency). It carries the
+COLR v1 / CPAL tables unchanged, and those make Chrome draw the glyphs exactly.
+
+Browsers: **Chrome 157 and Edge 157** (both tested): every glyph is a COLR v1 colour glyph in the text colour,
+rasterised by Chrome's own FreeType path, so 1-bit fonts are pixel-exact and anti-aliased ones within 0.012 coverage
+(`sc3font_check.py`, published pass, 9 of 9 strings in each browser). **Firefox** (COLR v1 since version 107) and
+**Safari** (no COLR v1: it draws the plain outlines under the colour glyphs, the same rectangles) are not installed on
+this PC, so they are not measured `[UNCERTAIN]`. A browser that cannot load the files falls back to the free fonts.
+
+Glyph coverage: 220 code points per font, Windows-1252 (the game's own byte table). Every character the three pages use
+is in all six fonts (`verify/gamefont/coverage.py`: the page sources are ASCII plus `‹ ›`, the gallery's lightbox arrows,
+which every font has). A character outside Windows-1252 would draw in the free font of the same token.
+
+### How sc3ui.css uses them
+
+- One font pixel = 64 units of a 1024-unit em. Each `@font-face` has a `size-adjust` so that the token's measured free
+  font size (12.5 / 11.5 / 13.5 / 16 / 11 game px) draws exactly one font pixel per `--u`: 128%, 139.130435%,
+  118.518519%, 100%, 145.454546%. **Round the percentage up**: 139.1304% gives 15.99999 px, the baseline lands 1 px
+  higher and 210 of 2,870 pixels change (measured). Weights are declared as the full range, so nothing is synthesised.
+- "SC3 Text" is SYSTEM9 (the game's regular face, 1 px stems) at weights 1..549 and MAIN9 (its bold face, the same 9 px
+  caps) at 550..1000: running text reads in the regular face and `<b>` / `<strong>` in the bold one.
+- "SC3 Main" adds `ascent-override: 75%; descent-override: 25%` (12 + 4 font px): in an 18 px row the game draws a
+  MAIN9 cell 1 px under the row top, and with these metrics the page does too. List rows (2 px in the game) get
+  `padding-top: 2u; line-height: 16u`, the blue strip text sits 7 px in and 2 px down, the dropdown has
+  `line-height: 18u`.
+- Letter-spacing tokens are 0: the game's advances are in the fonts. The free fonts keep their fitted sizes but not their
+  fitted spacing (they are a fallback only).
+- `code` / `kbd` / `samp` and `.ui-log` use SYSTEM9 (the game has no monospace face). `--ui-mono` stays only for the
+  importer's rules editor (JSON). Page-level `font-size` overrides of game text were removed (importer badges 10.5, guide
+  download button 13, gallery arrows 14): a game font at any size other than its token's draws at a fraction of a pixel.
+
+### Scale: `--u` snapped to whole device pixels
+
+A pixel font is crisp only when one font pixel covers a whole number of screen pixels. `--ui-scale` is the wanted size
+of a game pixel in CSS px, and `--u = max(1, round(--ui-scale x dpr)) / dpr` px, with `--ui-dpr` set by
+`min-resolution` media queries at the common ratios (0.5 to 4, browser zoom included, the nearest one in between).
+Browsers without CSS `round()` keep the unsnapped size. The bitmaps (`image-rendering: pixelated`) gain the same: at
+1.25 on a 100% screen they used to draw every fourth game pixel twice, now none.
+
+Measured (`verify/gamefont/scale/scale_check.py`: game strings at each `--ui-scale` and device scale, compared with the
+FBF rendering blown up by whole pixels. "Full ink" = share of ink pixels drawn at full strength). Screen px per game px,
+CSS px in brackets:
+
+| --ui-scale | 100% screen | 125% | 150% | 200% | phone (3x) | unsnapped full ink, 100% / 150% / phone |
+|---|---|---|---|---|---|---|
+| 1 | 1 (1) | 1 (0.8) | 2 (1.33) | 2 (1) | 3 (1) | 1.00 / 0.53 / 1.00 |
+| **1.25** | **1 (1)** | **2 (1.6)** | **2 (1.33)** | **3 (1.5)** | **4 (1.33)** | 0.36 / 0.43 / 0.70 |
+| 1.5 | 2 (2) | 2 (1.6) | 2 (1.33) | 3 (1.5) | 5 (1.67) | 0.53 / 0.57 / 0.81 |
+| 2 | 2 (2) | 3 (2.4) | 3 (2) | 4 (2) | 6 (2) | 1.00 / 1.00 / 1.00 |
+
+Snapped, all 20 combinations are exact whole-pixel blow-ups of the game's glyphs (3 of 3 strings each, full ink 1.00).
+Unsnapped, the fractional ones blur: at 1.25 on a 100% screen only 36% of the ink stays solid.
+
+**Pick: `--ui-scale` 1.25 on every page. The replica and the font tests use 1.** On a 100% desktop 1.25 is the game's
+own size, one screen pixel per game pixel: crisp, and the only crisp step below 2x. 2x on a 100% screen doubles
+every length (body caps 18 px, title bars 56 px), so a 1280 px window shows a quarter of the area of text it shows at
+1x. On 125% and 150% laptop screens 1.25 lands on 2 screen px (1.6 and 1.33 CSS
+px), close to the old sizes, and on a 390 px phone on 4 device px (1.33 CSS px): caps 12 CSS px. 1.5 on a phone (5 px)
+gives caps 15 CSS px, larger than the page text a phone shows elsewhere.
+A reader who wants larger text on a 100% screen uses browser zoom: at 125% zoom the page snaps to 2 screen px per game
+pixel and stays crisp (`verify/gamefont/owner_shots/scale_desktop_1x_vs_2x.jpg`, `scale_phone_4_scales.jpg`).
+
+### Proof: the replica with the published fonts against R3
+
+`replica_diff.py` + `verify/gamefont/text_pixels.py`, the 16 labels of Preferencias, the replica at `--ui-scale` 1:
+
+| | main (free fonts) | gamefont |
+|---|---|---|
+| text ink IoU, all labels | 0.291 | **1.000** |
+| text pixels with identical RGB | 0.123 | 0.974 (the anti-aliased title's edge pixels) |
+| labels with top and bottom within 1 px | 15 of 16 (5 at 0 px) | 16 of 16, all at 0 px (one by the replica's own rule for its 17 px bottom rows) |
+| ink mass ours / game | 0.91 to 1.14 | 1.000 (title 0.978) |
+| element "dropdown box", identical pixels | 87.8% | 99.8% |
+| 1 px lines within 1 px | 30 of 30 | 30 of 30 |
 
 ## Rules for new pages
 
@@ -348,6 +448,8 @@ The game has no dark theme. The dark tokens reuse the game's own darker colours:
 2. Build with the components (`ui-window`, `ui-titlebar`, `ui-panel`, `ui-group`, `ui-btn`, `ui-plate`, `ui-chip`,
    `ui-infobar`, `ui-ticker`, `ui-field`, `ui-progress`, `ui-log`, `ui-table`, `ui-card`, `ui-lightbox`, `ui-close`,
    `ui-play`, `ui-stop`, `ui-volume`), and only the tokens for colours. The only game bitmaps are the ones in
-   `docs/assets/sc3ui/` (Game bitmaps above). No other game icons or UI art, and never a game font file or a font made
-   from one: the importer builds the player's own at run time.
+   `docs/assets/sc3ui/` (Game bitmaps above) and the game fonts the ones in `docs/assets/fonts/` (Game fonts and
+   scale above). No other game icons or UI art, never a raw .FBF file.
+2b. Text only through the `--ui-type-*` tokens, without `font-size` overrides: a game font at another size draws at a
+   fraction of a pixel and blurs. Light theme only: no dark rules, no theme switch.
 3. Check phone width (390 px): 16 px gutters, no sideways scroll.

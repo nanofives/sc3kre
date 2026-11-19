@@ -30,7 +30,9 @@ html, body { margin: 0; background: #000; }
 .ind > select { margin-top: -1px; }
 .rows24 > .ui-opt { min-height: 24px; }
 .tight { padding-top: 0; }
-.tight .ui-opt { min-height: 17px; }
+/* gamefont: the bottom group pitch is 17 px; with the game font a 16 px line keeps its MAIN9 cell where the game has it */
+.tight .ui-opt { min-height: 17px; line-height: 16px; align-items: flex-start; }
+.tight .ui-opt > input { margin-top: 2px; }
 .ui-plate.panel { padding: 0; display: block; }
 .ui-plate.panel .ui-volume { position: absolute; left: 13px; top: 3px; }
 .ui-plate.panel input[type=range] { position: absolute; left: 5px; width: 86px; }

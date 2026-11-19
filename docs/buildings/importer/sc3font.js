@@ -1,7 +1,11 @@
 /* sc3font.js - sc3ui3 (round 2026-11-19b): the game's own UI fonts in the importer page, built at run time.
 
-   Owner call 2026-11-19: the page may draw its text with SimCity 3000's bitmap fonts, but those fonts are never
-   published. So nothing here ships a font: when the player chooses their game folder, this file reads the .FBF files
+   gamefont (round 2026-11-19d): the owner then chose to publish web fonts built from the FBF files (docs/assets/fonts/,
+   re/tools/sc3ui/build_fonts.mjs runs buildTTF below in node), so pages carry them through sc3ui.css. In the page this
+   file is now the fallback: useGame() builds only when those faces did not load (publishedLoaded()).
+
+   Owner call 2026-11-19 (sc3ui3): the page may draw its text with SimCity 3000's bitmap fonts. When the player
+   chooses their game folder, this file reads the .FBF files
    from that folder (Apps\Res\Text\<language>\), turns each glyph's pixels into a TrueType outline in memory, registers
    the result with the FontFace API and points the page's sc3ui.css type tokens (--ui-type-*) at it. Without a game
    folder the page keeps its free fonts. Nothing is cached or stored: the fonts live as long as the page.
@@ -249,6 +253,11 @@
   // and picks for each wanted coverage the width that draws it. A canvas draws
   // text through the same rasteriser as the page (sc3font_check.py checks the page itself). No canvas: area = coverage.
   let calib = null;
+  // the inverse of a measured table: for a wanted coverage c, the bar width (0..64 units) that draws closest to it.
+  // Also used by re/tools/sc3ui/build_fonts.mjs with the table it measured in Chrome (font_calibration.json).
+  function sideFrom(got) {
+    return c => { let best = 0, bd = 9; for (let k = 0; k <= 64; k++) { const d = Math.abs(got[k] - c); if (d < bd) { bd = d; best = k; } } return best; };
+  }
   async function calibrate() {
     if (calib) return calib;
     try {
@@ -264,7 +273,7 @@
       for (let k = 1; k <= 64; k++) got.push(px[(1 * 132 + (k - 1) * 2) * 4 + 3] / 255);
       document.fonts.delete(face);
       if (!(got[64] > 0.95 && got[1] < 0.2)) throw new Error('calibration glyphs did not draw');
-      calib = { got, side: c => { let best = 0, bd = 9; for (let k = 0; k <= 64; k++) { const d = Math.abs(got[k] - c); if (d < bd) { bd = d; best = k; } } return best; } };
+      calib = { got, side: sideFrom(got) };
     } catch (e) { calib = { got: null, side: areaSide, why: e.message }; }
     return calib;
   }
@@ -378,10 +387,21 @@
     for (const f of Object.values(applied.info.fonts)) document.fonts.delete(f.face);
     delete r.dataset.sc3font; applied = null;
   }
+  // gamefont (round 2026-11-19d): sc3ui.css now carries the game fonts as published web fonts (docs/assets/fonts/,
+  // inlined in the importer by sync_css.py). This run-time builder is the fallback: it only builds from the player's
+  // game folder when those faces did not load. opts.force builds anyway (sc3font_test.html).
+  async function publishedLoaded() {
+    if (typeof document === 'undefined' || !document.fonts) return false;
+    try { const f = await document.fonts.load('400 12.5px "SC3 Main"', 'Aa'); return f.length > 0 && f.every(x => x.status === 'loaded'); }
+    catch (e) { return false; }
+  }
   async function useGame(src, opts) {
+    opts = opts || {};
+    if (!opts.force && await publishedLoaded()) { if (root.console) console.info('sc3font: the published game fonts are in use'); return null; }
+    if (!src) return null;
     try { const info = await load(src, opts); apply(info, opts); return info; }
     catch (e) { if (root.console) console.info('sc3font: game fonts not used:', e.message); return null; }
   }
 
-  root.SC3Font = { load, apply, reset, useGame, buildTTF, parseFBF, calibrate, FONTS, TOKENS };
+  root.SC3Font = { load, apply, reset, useGame, publishedLoaded, buildTTF, parseFBF, calibrate, sideFrom, FONTS, TOKENS };
 })(typeof window !== 'undefined' ? window : globalThis);

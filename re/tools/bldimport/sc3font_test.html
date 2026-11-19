@@ -42,11 +42,44 @@ const SAMPLES = [
   ['SERIF17', 'Nueva Ciudad Cargar Ciudad'],
   ['MAIN9', 'Navy on lavender like the game', '#31347b'],
 ];
+// gamefont (round 2026-11-19d): ?published=1 draws the same strings with the published web fonts of sc3ui.css
+// (docs/assets/fonts/*.woff2, built by re/tools/sc3ui/build_fonts.mjs) at their token sizes: family, CSS px, line px
+// (SC3 Main: 16, its ascent / descent overrides in sc3ui.css make a 16 px line box with the cell at the top)
+const PUB = { MAIN9: ['SC3 Main', 12.5, 16], MAIN10: ['SC3 Name', 13.5, 16], SYSTEM9: ['SC3 System', 11.5, 14],
+  TITLE9: ['SC3 Button', 11, 18], TITLE12: ['SC3 Title', 16, 23], SERIF17: ['SC3 Serif', 16, 29] };
+async function published(out) {
+  const box = document.getElementById('samples');
+  out.fonts = {};
+  for (const [nm, [fam, size]] of Object.entries(PUB)) {
+    let faces = [];
+    try { faces = await document.fonts.load(`400 ${size}px "${fam}"`, 'Aa'); } catch (e) { /* missing file */ }
+    out.fonts[nm] = { family: fam, status: faces.length && faces.every(f => f.status === 'loaded') ? 'loaded' : 'error' };
+  }
+  SAMPLES.forEach(([nm, text, col], i) => {
+    const [fam, size, line] = PUB[nm];
+    const d = document.createElement('div');
+    d.style.top = (10 + i * 36) + 'px';
+    d.style.font = `400 ${size}px/${line}px "${fam}"`;
+    if (col) d.style.color = col;
+    d.textContent = text; box.appendChild(d);
+    out.samples.push({ font: nm, text, x: 10, y: 10 + i * 36, color: col || '#000000' });
+  });
+  await document.fonts.ready;
+  out.tokens = Object.fromEntries(['t_ui', 't_row', 't_title'].map(id => [id, getComputedStyle(document.getElementById(id)).fontFamily]));
+  { const pr = document.createElement('div'); pr.style.cssText = 'position:absolute;width:calc(100 * var(--u));height:1px'; document.body.appendChild(pr); out.u = (pr.getBoundingClientRect().width / 100) + 'px'; pr.remove(); }
+  out.lang = 'ENGLISH'; out.ok = true; out.published = true;
+  document.getElementById('result').textContent = JSON.stringify(out);
+}
 (async () => {
   const q = new URLSearchParams(location.search), out = { samples: [], ok: false };
+  if (q.get('published') === '1') return published(out);
   const game = q.get('game');
-  if (!game) { document.getElementById('result').textContent = JSON.stringify({ fallback: true, family: getComputedStyle(document.getElementById('t_ui')).fontFamily }); return; }
-  const info = await SC3Font.useGame(game, { mode: q.get('mode') || 'snap' });
+  if (!game) {   // no game folder: the page keeps sc3ui.css's fonts (the published game fonts, free fonts behind them)
+    const used = await SC3Font.useGame(null);
+    document.getElementById('result').textContent = JSON.stringify({ fallback: true, used: !!used, family: getComputedStyle(document.getElementById('t_ui')).fontFamily });
+    return;
+  }
+  const info = await SC3Font.useGame(game, { mode: q.get('mode') || 'snap', force: true });
   if (!info) { document.getElementById('result').textContent = JSON.stringify({ error: 'no fonts' }); return; }
   out.lang = info.lang;
   const cal = await SC3Font.calibrate(); out.calibration = cal.got ? cal.got.map(v => +v.toFixed(3)) : cal.why;

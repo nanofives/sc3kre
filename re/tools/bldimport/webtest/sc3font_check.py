@@ -21,7 +21,7 @@ from PIL import Image
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / 'sc3ui'))
 from fbf import Font  # noqa: E402
-CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
+CHROME = os.environ.get('SC3_BROWSER') or r'C:\Program Files\Google\Chrome\Application\chrome.exe'  # SC3_BROWSER=<msedge.exe>: Edge
 PAGE = HERE.parent / 'sc3font_test.html'
 ONE_BIT = {'MAIN9', 'MAIN10', 'SYSTEM9'}
 
@@ -45,6 +45,36 @@ def find_file(d, name):
     return None
 
 
+def compare(tag, r, rgb, cov, lang_dir, step, side):
+    for s in (r or {}).get('samples', []):
+        f = Font(find_file(str(lang_dir), s['font']))
+        exp = f.render(s['text'])
+        h, w = exp.shape
+        x, y = s['x'], s['y']
+        got = cov[y:y + h, x:x + w + 4]
+        exp_p = np.zeros_like(got); exp_p[:, :w] = exp
+        # nothing may be drawn outside the expected box either (a shifted baseline or advance would show here)
+        around = cov[max(0, y - 3):y + h + 3, max(0, x - 3):x + w + 7].sum() - got.sum()
+        d = np.abs(got - exp_p)
+        if s.get('color', '#000000') != '#000000':
+            want = np.array([int(s['color'][k:k + 2], 16) for k in (1, 3, 5)], float)
+            ink = rgb[y:y + h, x:x + w][exp > 0.99]
+            err = float(np.abs(ink - want).max()) if len(ink) else 99
+            step(tag + '%s in %s "%s"' % (s['font'], s['color'], s['text'][:20]), err <= 2 and len(ink) > 0,
+                 '%d ink pixels, max channel difference from %s: %.0f' % (len(ink), s['color'], err))
+            continue
+        if s['font'] in ONE_BIT:
+            wrong = int(((got > 0.5) != (exp_p > 0.5)).sum())
+            ok = wrong == 0 and d.max() < 0.35 and around < 1
+            detail = '%d of %d px differ (ink threshold 0.5), max coverage error %.3f' % (wrong, got.size, d.max())
+        else:
+            p99 = float(np.percentile(d, 99))
+            ok = d.max() <= 0.02 and around < 1
+            detail = 'coverage error mean %.3f, p99 %.3f, max %.3f' % (d.mean(), p99, d.max())
+        step(tag + '%s "%s"' % (s['font'], s['text'][:28]), ok, detail)
+        side.append(np.concatenate([exp_p, np.ones((h, 3)), got], 1))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--game', required=True)
@@ -65,40 +95,21 @@ def main():
     step('sc3ui.css tokens switch to the game fonts', bool(fam) and 'SC3 MAIN9' in fam.get('t_ui', '') and 'SC3 SYSTEM9' in fam.get('t_row', '')
          and 'SC3 TITLE12' in fam.get('t_title', ''), json.dumps(fam) + ' gpx ' + str((r or {}).get('gpx')))
     fb = result_of(chrome(PAGE.as_uri(), ['--dump-dom']).stdout)
-    step('no game folder: the free fonts stay', bool(fb and fb.get('fallback') and 'Istok Web' in fb.get('family', '')), json.dumps(fb))
-    png = out / 'sc3font_test.png'
-    chrome(url, ['--screenshot=' + str(png)])
-    rgb = np.asarray(Image.open(png).convert('RGB'), float)
-    cov = 1 - rgb.mean(2) / 255.0
+    step('no game folder: sc3ui.css fonts stay (published game font first, free font behind it)',
+         bool(fb and fb.get('fallback') and not fb.get('used') and fb.get('family', '').startswith('"SC3 Main"') and 'Istok Web' in fb.get('family', '')), json.dumps(fb))
+    # gamefont (round 2026-11-19d): the published web fonts (docs/assets/fonts/*.woff2) through sc3ui.css's @font-face
+    pub = result_of(chrome(PAGE.as_uri() + '?published=1', ['--dump-dom']).stdout)
+    step('published web fonts load through sc3ui.css (6 files)', bool(pub and pub.get('ok') and len(pub['fonts']) == 6
+         and all(f['status'] == 'loaded' for f in pub['fonts'].values()) and pub.get('u') == '1px'), json.dumps(pub and pub.get('fonts')) + ' --u ' + str((pub or {}).get('u')))
     lang_dir = game / 'Apps' / 'Res' / 'Text' / (r or {}).get('lang', 'ENGLISH')
     side = []
-    for s in (r or {}).get('samples', []):
-        f = Font(find_file(str(lang_dir), s['font']))
-        exp = f.render(s['text'])
-        h, w = exp.shape
-        x, y = s['x'], s['y']
-        got = cov[y:y + h, x:x + w + 4]
-        exp_p = np.zeros_like(got); exp_p[:, :w] = exp
-        # nothing may be drawn outside the expected box either (a shifted baseline or advance would show here)
-        around = cov[max(0, y - 3):y + h + 3, max(0, x - 3):x + w + 7].sum() - got.sum()
-        d = np.abs(got - exp_p)
-        if s.get('color', '#000000') != '#000000':
-            want = np.array([int(s['color'][k:k + 2], 16) for k in (1, 3, 5)], float)
-            ink = rgb[y:y + h, x:x + w][exp > 0.99]
-            err = float(np.abs(ink - want).max()) if len(ink) else 99
-            step('%s in %s "%s"' % (s['font'], s['color'], s['text'][:20]), err <= 2 and len(ink) > 0,
-                 '%d ink pixels, max channel difference from %s: %.0f' % (len(ink), s['color'], err))
-            continue
-        if s['font'] in ONE_BIT:
-            wrong = int(((got > 0.5) != (exp_p > 0.5)).sum())
-            ok = wrong == 0 and d.max() < 0.35 and around < 1
-            detail = '%d of %d px differ (ink threshold 0.5), max coverage error %.3f' % (wrong, got.size, d.max())
-        else:
-            p99 = float(np.percentile(d, 99))
-            ok = d.max() <= 0.02 and around < 1
-            detail = 'coverage error mean %.3f, p99 %.3f, max %.3f' % (d.mean(), p99, d.max())
-        step('%s "%s"' % (s['font'], s['text'][:28]), ok, detail)
-        side.append(np.concatenate([exp_p, np.ones((h, 3)), got], 1))
+    passes = [('', url, r), ('published ', PAGE.as_uri() + '?published=1', pub)]
+    for tag, purl, res in passes:
+        png = out / ('sc3font_test%s.png' % ('_published' if tag else ''))
+        chrome(purl, ['--screenshot=' + str(png)])
+        rgb = np.asarray(Image.open(png).convert('RGB'), float)
+        cov = 1 - rgb.mean(2) / 255.0
+        compare(tag, res, rgb, cov, lang_dir, step, side)
     if side:
         wmax = max(t.shape[1] for t in side)
         sheet = np.concatenate([np.pad(t, ((0, 4), (0, wmax - t.shape[1])), constant_values=0) for t in side], 0)

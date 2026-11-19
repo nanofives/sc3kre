@@ -10,6 +10,9 @@ carries its own copy of the shared stylesheet between the `sc3ui.css begin` / `s
 
 sc3ui3 (round 2026-11-19b): sc3ui.css draws a few game bitmaps from docs/assets/sc3ui/ (url("sc3ui/<name>.png")). The
 importer opens away from docs/, so its copy carries them inline: every such url() becomes a data: URI here.
+gamefont (round 2026-11-19d): the same for the game's web fonts (url("fonts/<name>.woff2"), docs/assets/fonts/, built by
+re/tools/sc3ui/build_fonts.mjs), so the importer draws the game's text from any folder or the sample pack zip. The page's
+run-time builder (sc3font.js, from the player's game folder) is only the fallback when those faces fail to load.
 """
 import base64, os, re, shutil, sys
 
@@ -17,6 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
 CSS = os.path.join(ROOT, 'docs', 'assets', 'sc3ui.css')
 ART = os.path.join(ROOT, 'docs', 'assets', 'sc3ui')
+FONTS = os.path.join(ROOT, 'docs', 'assets', 'fonts')
 PAGE = os.path.join(HERE, 'classifier.html')
 BEGIN, END = '/* ==== sc3ui.css begin (copy of docs/assets/sc3ui.css, re/tools/bldimport/sync_css.py) ==== */', '/* ==== sc3ui.css end ==== */'
 # published next to index.html. sc4web.js: task sc4web (SC4 downloads in the page). sc3font.js: sc3ui3 (the game's
@@ -25,11 +29,19 @@ PUBLISHED = ('bldweb.js', 'sc4web.js', 'sc3font.js')
 
 
 def inline_art(css):
-    """url("sc3ui/x.png") -> url("data:image/png;base64,...") read from docs/assets/sc3ui/x.png"""
+    """url("sc3ui/x.png") -> url("data:image/png;base64,...") read from docs/assets/sc3ui/x.png, and
+    url("fonts/X.woff2") -> url("data:font/woff2;base64,...") read from docs/assets/fonts/X.woff2 (gamefont)"""
     def one(m):
         with open(os.path.join(ART, m.group(1)), 'rb') as fh:
             return 'url("data:image/png;base64,%s")' % base64.b64encode(fh.read()).decode('ascii')
-    return re.sub(r'url\("sc3ui/([A-Za-z0-9_]+\.png)"\)', one, css)
+    cache = {}
+    def font(m):
+        if m.group(1) not in cache:
+            with open(os.path.join(FONTS, m.group(1)), 'rb') as fh:
+                cache[m.group(1)] = 'url("data:font/woff2;base64,%s")' % base64.b64encode(fh.read()).decode('ascii')
+        return cache[m.group(1)]
+    css = re.sub(r'url\("sc3ui/([A-Za-z0-9_]+\.png)"\)', one, css)
+    return re.sub(r'url\("fonts/([A-Za-z0-9_]+\.woff2)"\)', font, css)
 
 
 def main():

@@ -2,17 +2,47 @@
    Round 2026-11-18f picked the colours. Round 2026-11-18g (sc3ui2) measured the rest at the game's native size
    (800x600, no UI scale): fonts scored glyph by glyph against the game's own bitmap fonts, the cloud texture
    matched by its statistics, every spacing counted in pixels. See re/analysis/UI_STYLE.md.
-   Round 2026-11-19b (sc3ui3): the close X, play / stop, the dropdown arrow, the slider and the volume steps are the
-   game's own bitmaps (owner call, docs/assets/sc3ui/, re/tools/sc3ui/uiart.py), scaled nearest-neighbour by
-   --ui-scale (image-rendering: pixelated: exact at 1, at 1.25 every fourth game pixel is drawn twice). Everything else
-   is CSS. No game fonts: the cloud tile is our own SVG noise and the fonts are free faces (the importer can load the
-   player's own game fonts at run time, sc3font.js).
-   One knob: --ui-scale. 1 = the game's own pixels. Pages use 1.25 (UI_STYLE.md, "Scale"). */
+   Round 2026-11-19b (sc3ui3): the close X, play / stop, the dropdown arrow, the slider, the volume steps, check boxes,
+   radios, scroll bars and OK are the game's own bitmaps (owner call, docs/assets/sc3ui/, re/tools/sc3ui/uiart.py),
+   scaled nearest-neighbour (image-rendering: pixelated).
+   Round 2026-11-19d (gamefont): the text is the game's own bitmap fonts, built once from its FBF files into
+   docs/assets/fonts/*.woff2 (owner call, re/tools/sc3ui/build_fonts.mjs, the same builder as the importer's
+   sc3font.js). The free fonts (Istok Web, Comic Relief) are only the fallback: a character the game font lacks, or
+   a browser that cannot load the files. Light theme only (owner, 2026-11-19).
+   One knob: --ui-scale, the wanted size of one game pixel in CSS px. --u is that size SNAPPED to a whole number of
+   device pixels (--ui-dpr below), so every game pixel of the fonts and bitmaps lands on whole screen pixels and
+   stays crisp. UI_STYLE.md "Game fonts and scale" has the measurements behind the page values. */
 @import url("https://fonts.googleapis.com/css2?family=Istok+Web:ital,wght@0,400;0,700;1,400&family=Comic+Relief:wght@400;700&display=swap");
+
+/* ---------------------------------------------------------------- the game's fonts (built from the FBF files)
+   One font pixel = 64 units of a 1024-unit em, so a 16 px em draws one font pixel per CSS px. size-adjust makes the
+   token sizes below (the free fonts' measured sizes) draw exactly one font pixel per --u: 12.5 x 128% = 16. Every
+   glyph is a COLR v1 colour glyph in the text colour (Chrome / Edge draw it exactly, coverage per pixel as in the
+   game) over plain outlines (other browsers). The faces declare the whole weight range: no synthetic bold. */
+/* MAIN9: labels, headings, lists, info bar (token size 12.5) */
+@font-face { font-family: "SC3 Main"; src: url("fonts/MAIN9.woff2") format("woff2"); font-weight: 1 1000; font-display: block; size-adjust: 128%;
+  ascent-override: 75%; descent-override: 25%; }
+/* running text: SYSTEM9 (the game's regular face) at 400 ... */
+@font-face { font-family: "SC3 Text"; src: url("fonts/SYSTEM9.woff2") format("woff2"); font-weight: 1 549; font-display: block; size-adjust: 128%; }
+/* ... and MAIN9 (its bold face, same 9 px caps) for <b> / <strong> */
+@font-face { font-family: "SC3 Text"; src: url("fonts/MAIN9.woff2") format("woff2"); font-weight: 550 1000; font-display: block; size-adjust: 128%; }
+/* SYSTEM9: table rows, dropdowns (token size 11.5) */
+@font-face { font-family: "SC3 System"; src: url("fonts/SYSTEM9.woff2") format("woff2"); font-weight: 1 1000; font-display: block; size-adjust: 139.130435%; }
+/* MAIN10: the building name (token size 13.5) */
+@font-face { font-family: "SC3 Name"; src: url("fonts/MAIN10.woff2") format("woff2"); font-weight: 1 1000; font-display: block; size-adjust: 118.518519%; }
+/* TITLE12: title bars (token size 16) */
+@font-face { font-family: "SC3 Title"; src: url("fonts/TITLE12.woff2") format("woff2"); font-weight: 1 1000; font-display: block; size-adjust: 100%; }
+/* TITLE9: pill buttons (token size 11) */
+@font-face { font-family: "SC3 Button"; src: url("fonts/TITLE9.woff2") format("woff2"); font-weight: 1 1000; font-display: block; size-adjust: 145.454546%; }
+/* SERIF17: the main menu (16 px = one game pixel per --u; no page uses it yet) */
+@font-face { font-family: "SC3 Serif"; src: url("fonts/SERIF17.woff2") format("woff2"); font-weight: 1 1000; font-display: block; size-adjust: 100%; }
 
 :root {
   --ui-scale: 1.25;
-  --u: calc(var(--ui-scale) * 1px);
+  /* device pixels per CSS px, from the screen (the nearest common value; browser zoom included) */
+  --ui-dpr: 1;
+  /* one game pixel: --ui-scale rounded to whole device pixels (at least one) */
+  --u: calc(max(1, round(var(--ui-scale) * var(--ui-dpr))) / var(--ui-dpr) * 1px);
 
   /* measured palette (UI_STYLE.md) */
   --ui-blue: #7b92ff; --ui-blue-line: #7b8aff; --ui-blue-dark: #7382ff; --ui-blue-deep: #636dc6;
@@ -31,53 +61,48 @@
   --ui-field: #ffffff; --ui-btn-face: var(--ui-lav-150); --ui-btn-hi: var(--ui-lav-50); --ui-plate: var(--ui-blue);
   --ui-on-plate: var(--ui-text); --ui-link: #2a3fc4; --ui-warn-bg: #fffbc2; --ui-warn-line: #8a7a00;
 
-  /* fonts, scored against the game's FBF glyphs (re/tools/sc3ui/fontscore.py, UI_STYLE.md "Fonts") */
+  /* fonts: the game's first (above), the free faces scored against the game's glyphs as fallback
+     (re/tools/sc3ui/fontscore.py, UI_STYLE.md "Free font picked per element") */
   --ui-font: "Istok Web", Verdana, Tahoma, Arial, sans-serif;
   --ui-title-font: "Comic Relief", "Comic Sans MS", "Chalkboard SE", cursive;
   --ui-mono: "Cascadia Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
   /* MAIN9: every label, heading, list row, info bar, ticker */
-  --ui-type-ui: 700 calc(12.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);  --ui-ls-ui: 0px;
-  /* the same face at 400 for running text (the game has no paragraphs; see UI_STYLE.md) */
-  --ui-type-prose: 400 calc(12.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);
-  /* SYSTEM9: the budget's table rows */
-  --ui-type-row: 400 calc(11.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);  --ui-ls-row: calc(-.34 * var(--u));
+  --ui-type-ui: 700 calc(12.5 * var(--u)) / calc(18 * var(--u)) "SC3 Main", var(--ui-font);  --ui-ls-ui: 0px;
+  /* running text (the game has no paragraphs): SYSTEM9, its regular face, with MAIN9 for bold */
+  --ui-type-prose: 400 calc(12.5 * var(--u)) / calc(18 * var(--u)) "SC3 Text", var(--ui-font);
+  /* SYSTEM9: the budget's table rows, the dropdown text */
+  --ui-type-row: 400 calc(11.5 * var(--u)) / calc(18 * var(--u)) "SC3 System", var(--ui-font);  --ui-ls-row: 0px;
   /* MAIN10: the query dialog's building name */
-  --ui-type-name: 700 calc(13.5 * var(--u)) / calc(18 * var(--u)) var(--ui-font);  --ui-ls-name: calc(-.45 * var(--u));
+  --ui-type-name: 700 calc(13.5 * var(--u)) / calc(18 * var(--u)) "SC3 Name", var(--ui-font);  --ui-ls-name: 0px;
   /* TITLE12: title bars */
-  --ui-type-title: 400 calc(16 * var(--u)) / calc(28 * var(--u)) var(--ui-title-font);  --ui-ls-title: calc(.43 * var(--u));
+  --ui-type-title: 400 calc(16 * var(--u)) / calc(28 * var(--u)) "SC3 Title", var(--ui-title-font);  --ui-ls-title: 0px;
   /* TITLE9: pill buttons */
-  --ui-type-btn: 700 calc(11 * var(--u)) / calc(19 * var(--u)) var(--ui-title-font);  --ui-ls-btn: calc(.83 * var(--u));
+  --ui-type-btn: 700 calc(11 * var(--u)) / calc(19 * var(--u)) "SC3 Button", var(--ui-title-font);  --ui-ls-btn: 0px;
 
   /* the window body: our own 256 px tile, feTurbulence tuned to the game's tile statistics (re/tools/sc3ui/cloudgen.py) */
   --ui-clouds: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.00586' numOctaves='5' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.3605 0 0 0 0.6650 0.3175 0 0 0 0.6912 0.0000 0 0 0 1.0000 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
   --ui-cloud-size: calc(256 * var(--u));
   color-scheme: light;
 }
-/* Dark variant: the game has none, so it is built from the game's own darker colours (UI_STYLE.md, Dark variant). */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --ui-page: #10142e; --ui-face: #1c2152; --ui-face2: #262c66; --ui-frame: #31347b; --ui-field: #10142e;
-    --ui-btn-face: #31347b; --ui-btn-hi: #4a599c; --ui-text: #dedfff; --ui-label: #adb6ff; --ui-info-text: #dedfff;
-    --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-groove-hi: #31347b; --ui-hi: #636dc6; --ui-edge: #05071a;
-    --ui-outline: #0a0d20; --ui-link: #adb6ff;
-    --ui-warn-bg: #2e2a0c; --ui-warn-line: #fffb00; --ui-on-plate: #10142e; --ui-lav-50: #4a599c; --ui-lav-500: #636dc6; --ui-lav-300: #262c66;
-    --ui-mark-ring: #4a599c; --ui-mark-lo: #31347b; --ui-mark-lo2: #262c66; --ui-btn-line: #0a0d20; --ui-btn-line-lo: #05071a;
-    --ui-btn-sh1: #05071a; --ui-btn-sh2: #05071a; --ui-btn-sh3: #0a0d20; --ui-btn-sh4: #10142e; --ui-btn-sh5: #1c2152;
-    --ui-clouds: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.00586' numOctaves='5' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.1316 0 0 0 0.0441 0.1170 0 0 0 0.0710 0.2632 0 0 0 0.1901 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --ui-page: #10142e; --ui-face: #1c2152; --ui-face2: #262c66; --ui-frame: #31347b; --ui-field: #10142e;
-  --ui-btn-face: #31347b; --ui-btn-hi: #4a599c; --ui-text: #dedfff; --ui-label: #adb6ff; --ui-info-text: #dedfff;
-  --ui-lav-400: #262c66; --ui-blue-line: #4a599c; --ui-groove-hi: #31347b; --ui-hi: #636dc6; --ui-edge: #05071a;
-  --ui-outline: #0a0d20; --ui-link: #adb6ff;
-  --ui-warn-bg: #2e2a0c; --ui-warn-line: #fffb00; --ui-on-plate: #10142e; --ui-lav-50: #4a599c; --ui-lav-500: #636dc6; --ui-lav-300: #262c66;
-  --ui-mark-ring: #4a599c; --ui-mark-lo: #31347b; --ui-mark-lo2: #262c66; --ui-btn-line: #0a0d20; --ui-btn-line-lo: #05071a;
-  --ui-btn-sh1: #05071a; --ui-btn-sh2: #05071a; --ui-btn-sh3: #0a0d20; --ui-btn-sh4: #10142e; --ui-btn-sh5: #1c2152;
-  --ui-clouds: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.00586' numOctaves='5' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.1316 0 0 0 0.0441 0.1170 0 0 0 0.0710 0.2632 0 0 0 0.1901 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
-  color-scheme: dark;
-}
+@media (min-resolution: 0.585dppx) { :root { --ui-dpr: 0.67; } }
+@media (min-resolution: 0.71dppx) { :root { --ui-dpr: 0.75; } }
+@media (min-resolution: 0.775dppx) { :root { --ui-dpr: 0.8; } }
+@media (min-resolution: 0.85dppx) { :root { --ui-dpr: 0.9; } }
+@media (min-resolution: 0.95dppx) { :root { --ui-dpr: 1; } }
+@media (min-resolution: 1.05dppx) { :root { --ui-dpr: 1.1; } }
+@media (min-resolution: 1.175dppx) { :root { --ui-dpr: 1.25; } }
+@media (min-resolution: 1.375dppx) { :root { --ui-dpr: 1.5; } }
+@media (min-resolution: 1.625dppx) { :root { --ui-dpr: 1.75; } }
+@media (min-resolution: 1.875dppx) { :root { --ui-dpr: 2; } }
+@media (min-resolution: 2.125dppx) { :root { --ui-dpr: 2.25; } }
+@media (min-resolution: 2.375dppx) { :root { --ui-dpr: 2.5; } }
+@media (min-resolution: 2.5625dppx) { :root { --ui-dpr: 2.625; } }
+@media (min-resolution: 2.6875dppx) { :root { --ui-dpr: 2.75; } }
+@media (min-resolution: 2.875dppx) { :root { --ui-dpr: 3; } }
+@media (min-resolution: 3.25dppx) { :root { --ui-dpr: 3.5; } }
+@media (min-resolution: 3.75dppx) { :root { --ui-dpr: 4; } }
+/* browsers without round(): the unsnapped size */
+@supports not (width: round(1px, 1px)) { :root { --u: calc(var(--ui-scale) * 1px); } }
 
 /* ---------------------------------------------------------------- base elements */
 *, *::before, *::after { box-sizing: border-box; }
@@ -87,15 +112,14 @@ body { margin: 0; color: var(--ui-text); font: var(--ui-type-prose); letter-spac
   overflow-x: hidden; }
 a { color: var(--ui-link); text-underline-offset: calc(2 * var(--u)); }
 a:hover { color: var(--ui-select); }
-:root[data-theme="dark"] a:hover { color: var(--ui-ticker); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) a:hover { color: var(--ui-ticker); } }
 h1, h2, h3 { color: var(--ui-text); }
 h3 { font: var(--ui-type-name); letter-spacing: var(--ui-ls-name); }
 b, strong { font-weight: 700; }
 img { max-width: 100%; }
 ::selection { background: var(--ui-select); color: var(--ui-select-text); }
 :focus-visible { outline: calc(2 * var(--u)) dotted var(--ui-select); outline-offset: calc(2 * var(--u)); }
-code, kbd, samp { font-family: var(--ui-mono); font-size: .88em; letter-spacing: 0; background: var(--ui-face2); color: var(--ui-text);
+/* gamefont: file names and code in SYSTEM9 (the game has no monospace face); --ui-mono stays for editors */
+code, kbd, samp { font-family: "SC3 System", var(--ui-font); font-size: calc(11.5 * var(--u)); letter-spacing: 0; background: var(--ui-face2); color: var(--ui-text);
   padding: 0 calc(4 * var(--u)); border: 1px solid var(--ui-blue-line); overflow-wrap: anywhere; }
 
 /* ---------------------------------------------------------------- pill button (query "Sustituir", budget "Gastos")
@@ -118,8 +142,6 @@ button:active:not(:disabled), .ui-btn:active, button[aria-pressed="true"], .ui-b
   box-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 0 var(--ui-btn-sh1), calc(2 * var(--u)) calc(2 * var(--u)) 0 0 var(--ui-btn-sh4),
     calc(3 * var(--u)) calc(3 * var(--u)) 0 0 var(--ui-btn-sh5);
   background: var(--ui-lav-300); color: var(--ui-text); }
-:root[data-theme="dark"] button[aria-pressed="true"] { background: var(--ui-blue); color: #10142e; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button[aria-pressed="true"] { background: var(--ui-blue); color: #10142e; } }
 button:disabled, .ui-btn[aria-disabled="true"] { cursor: default; color: var(--ui-label); opacity: .75;
   background: var(--ui-face2); box-shadow: none; border-color: var(--ui-label); }
 button:focus-visible, .ui-btn:focus-visible { outline: calc(2 * var(--u)) dotted var(--ui-select); outline-offset: calc(2 * var(--u)); }
@@ -144,7 +166,7 @@ textarea { font: var(--ui-type-prose); }
    16x16 arrow button (SYS.IXF 62b99d31) centred beside it, OUTSIDE the box. The groove is drawn with background
    layers so the arrow can sit outside it. Text SYSTEM9, navy, 3 px in. */
 select { appearance: none; -webkit-appearance: none; cursor: pointer; border: 0; image-rendering: pixelated; vertical-align: top;
-  min-height: calc(20 * var(--u)); padding: 0 calc(20 * var(--u)) calc(1 * var(--u)) calc(3 * var(--u));
+  min-height: calc(20 * var(--u)); padding: 0 calc(20 * var(--u)) calc(1 * var(--u)) calc(3 * var(--u)); line-height: calc(18 * var(--u));
   --ui-arrow: url("sc3ui/combo_arrow.png");
   background: var(--ui-arrow) right 0 top 50% / calc(16 * var(--u)) calc(16 * var(--u)) no-repeat,
     linear-gradient(var(--ui-field), var(--ui-field)) 1px 1px / calc(100% - 17 * var(--u) - 2px) calc(100% - 2px) no-repeat,
@@ -260,10 +282,11 @@ button.ui-ok { --ui-bmp: url("sc3ui/ok.png"); --ui-fw: 42; --ui-fh: 32; width: c
 /* list (S3 "Musicas posibles"): grooved, face, 18 px rows; selection solid blue, white text */
 .ui-list { background: var(--ui-face); border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line);
   padding: calc(3 * var(--u)) calc(6 * var(--u)) calc(3 * var(--u)) calc(4 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
-.ui-list > * { min-height: calc(18 * var(--u)); display: flex; align-items: center; }
+/* gamefont: the game draws a list row's MAIN9 cell 2 px under the row top (labels: 1 px, the "SC3 Main" metrics above) */
+.ui-list > * { min-height: calc(18 * var(--u)); display: flex; align-items: flex-start; padding-top: calc(2 * var(--u)); line-height: calc(16 * var(--u)); }
 .ui-list > .is-sel { background: var(--ui-select); color: var(--ui-select-text); }
 /* a list row's check box sits at the row's top, 4 px before its text (R3 "Updown Town", sc3ui3) */
-.ui-list > * > input[type=checkbox], .ui-list > * > input[type=radio] { align-self: flex-start; margin-top: 0; margin-right: calc(4 * var(--u)); }
+.ui-list > * > input[type=checkbox], .ui-list > * > input[type=radio] { align-self: flex-start; margin-top: calc(-2 * var(--u)); margin-right: calc(4 * var(--u)); }
 /* scroll bars (R3 "Musicas posibles", sc3ui3): the game's own 16x16 frames, SYS.IXF e2b99e01, on every scrolling box of
    every page. One arrow at each end (pressed frame while held, no hover change in the game), the track tiled, the thumb
    exact at the game's 16 px and, when longer, its two ends kept with the face stretched between them. Browsers without ::-webkit-scrollbar get the game's colours instead. */
@@ -292,7 +315,7 @@ button.ui-ok { --ui-bmp: url("sc3ui/ok.png"); --ui-fw: 42; --ui-fh: 32; width: c
 /* blue strip with dark text (S3 "Escuchar eleccion", 28 px, text 6 px in) and a page title bar inside a page */
 .ui-strip { display: flex; align-items: center; gap: calc(6 * var(--u)); min-height: calc(28 * var(--u));
   background: var(--ui-blue); border: 1px solid var(--ui-blue-line); color: var(--ui-on-plate);
-  padding: 0 calc(4 * var(--u)) 0 calc(6 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
+  padding: calc(2 * var(--u)) calc(4 * var(--u)) 0 calc(7 * var(--u)); font: var(--ui-type-ui); letter-spacing: var(--ui-ls-ui); }
 
 /* ---------------------------------------------------------------- chips (toolbar-style rounded squares) */
 .ui-chip { display: inline-flex; align-items: center; white-space: nowrap; min-height: calc(18 * var(--u)); padding: 0 calc(7 * var(--u));
@@ -321,7 +344,7 @@ button.ui-ok { --ui-bmp: url("sc3ui/ok.png"); --ui-fw: 42; --ui-fh: 32; width: c
 .ui-card img { display: block; border: 1px solid var(--ui-blue); }
 
 /* ---------------------------------------------------------------- log box (the ticker colours) */
-.ui-log, pre.ui-log { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: calc(11 * var(--u)) / calc(15 * var(--u)) var(--ui-mono); letter-spacing: 0;
+.ui-log, pre.ui-log { background: var(--ui-ticker-bg); color: var(--ui-ticker); font: var(--ui-type-row); line-height: calc(15 * var(--u)); letter-spacing: 0;
   padding: calc(4 * var(--u)) calc(6 * var(--u));
   border: 1px solid; border-color: var(--ui-blue-line) var(--ui-groove-hi) var(--ui-groove-hi) var(--ui-blue-line); white-space: pre-wrap; overflow: auto; }
 
