@@ -96,7 +96,7 @@ try {
     line('page status line says it cannot be converted', /^No building in .* can be converted: it holds no building models/.test(s4.status || ''), s4.status);
   }
   else if (!res.pass) { total = 1; line('page ' + action + ' ran', false, res.error || title); }
-  else if (!compare) { total = 1; if (res.meshes) console.log('  ' + JSON.stringify({ focus: res.focus, err: res.err, meshes: res.meshes, thumb: res.thumb })); console.log('  ' + res.rep.join('\n  ')); line(`page ${action} ran (${res.seconds.toFixed(1)} s, renderer ${res.worker})`, true); }
+  else if (!compare) { total = 1; if (res.meshes) console.log('  ' + JSON.stringify({ focus: res.focus, err: res.err, meshes: res.meshes, thumb: res.thumb, side: res.side, recs: res.recs, status: res.status })); console.log('  ' + res.rep.join('\n  ')); line(`page ${action} ran (${res.seconds.toFixed(1)} s, renderer ${res.worker})`, true); }
   else {
     const pyOut = path.join(golden, 'py', cs, 'out');
     const want = walk(pyOut);

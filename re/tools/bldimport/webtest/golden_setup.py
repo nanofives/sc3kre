@@ -63,6 +63,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--cases", default="testmodels,bld,kenney,styles")
     ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
+    ap.add_argument("--bld1999", help="folder of 1999 Building Architect .bld files for case bld1999 (sc3compat-a)")
+    ap.add_argument("--bldside", help="folder of .bld files + the bld_frames.ixf render_bld.ps1 wrote, for case bldside")
     a = ap.parse_args()
     cases = a.cases.split(",")
     src = os.path.join(a.out, "src")
@@ -91,6 +93,28 @@ def main():
                 e.setdefault("class", BF.suggest_class(b))
                 e.setdefault("name", b["name"])
             json.dump({"sc3models": 1, "models": models}, open(os.path.join(d, "models.json"), "w"), indent=1)
+        elif c == "bld1999":
+            # sc3compat-a: the 1999 BA's .bld files (model version 7, no id), no models.json: every entry comes from
+            # the file (auto art; categories that are not house / shop / factory start disabled)
+            if not a.bld1999:
+                raise SystemExit("case bld1999 needs --bld1999 <folder of 1999 .bld files>")
+            for f in sorted(os.listdir(a.bld1999)):
+                if f.lower().endswith(".bld"):
+                    shutil.copy2(os.path.join(a.bld1999, f), d)
+        elif c == "bldside":
+            # sc3compat-a: .bld files with the player's own BA render beside them (render_bld.ps1 -> bld_frames.ixf,
+            # raw renderer output: random groups, new instances). auto art = the side IXF; one entry forced to preview.
+            if not a.bldside:
+                raise SystemExit("case bldside needs --bldside <folder with .bld files and bld_frames.ixf>")
+            blds = sorted(f for f in os.listdir(a.bldside) if f.lower().endswith(".bld"))
+            for f in blds + ["bld_frames.ixf"]:
+                shutil.copy2(os.path.join(a.bldside, f), d)
+            sys.path.insert(0, os.path.dirname(HERE))
+            import bldfile as BF
+            b = BF.read_bld(os.path.join(d, blds[0]))
+            e = {"file": blds[0], "x_bld": {"art": "preview"}, "kind": "growable", "enabled": True,
+                 "class": BF.suggest_class(b) or 3300, "name": b["name"]}
+            json.dump({"sc3models": 1, "models": [e]}, open(os.path.join(d, "models.json"), "w"), indent=1)
         elif c == "kenney":
             models = []
             tex = os.path.join(d, "Textures")

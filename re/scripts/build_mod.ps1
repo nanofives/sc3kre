@@ -13,7 +13,7 @@
   (mods_launch.exe is retired 2026-10-25: launch with sc3wait.launch_game, direct Apps\SC3U.exe + SC3MODS_* env.)
 #>
 param(
-    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'sc3autosave', 'sc3landfill', 'sc3dataview', 'sc3restore', 'sc3mods', 'sc3winonly')]
+    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'sc3autosave', 'sc3landfill', 'sc3dataview', 'sc3restore', 'sc3mods', 'sc3winonly', 'bawinonly')]
     [string] $Mod,
     [Parameter(Mandatory)] [string] $Src,
     [Parameter(Mandatory)] [string] $Out,
@@ -48,6 +48,7 @@ if (-not $NoVersionInfo) {
         sc3perf = 'performance and stability fixes'; sc3netmod = 'roads, avenues and highways'
         sc3cartrips = 'car trips'; sc3undo = 'undo'; sc3autosave = 'autosave'; sc3landfill = 'landfill tool'
         sc3dataview = 'extra data views'; sc3restore = 'restore tool'; sc3mods = 'mod loader'; sc3winonly = 'test control: windowed only'
+        bawinonly = 'Building Architect windowed batch render (BaappW.exe)'
     }[$Mod]
     $d = Get-Date
     $rc = Join-Path $obj "$Mod.rc"
@@ -67,7 +68,7 @@ BEGIN
     BLOCK "040904b0"
     BEGIN
       VALUE "CompanyName", "sc3kre (github.com/nanofives/sc3kre)"
-      VALUE "FileDescription", "SimCity 3000 Unlimited mod: $what"
+      VALUE "FileDescription", "SimCity 3000 Unlimited $(if ($Mod -eq 'bawinonly') { 'tool' } else { 'mod' }): $what"
       VALUE "FileVersion", "$($d.ToString('yyyy.MM.dd'))"
       VALUE "InternalName", "$Mod"
       VALUE "LegalCopyright", "Copyright (c) 2026 nanofives, MIT License"
