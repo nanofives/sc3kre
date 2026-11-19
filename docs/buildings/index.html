@@ -72,6 +72,7 @@ footer a { color: var(--ui-info-text); }
   <li><a href="#classify">Classifying</a></li>
   <li><a href="#install">Installing</a></li>
   <li><a href="#bld">.bld files</a></li>
+  <li><a href="#sc4">SC4 buildings</a></li>
   <li><a href="#look">Stock look</a></li>
   <li><a href="#trouble">Troubleshooting</a></li>
 </ul></nav>
@@ -251,6 +252,32 @@ footer a { color: var(--ui-info-text); }
   <li><b>It is not</b>: the preview is used for every zoom. The first view is right. The other three are the same picture or its mirror image, so a building that looks different on each side shows the wrong side in three of the four view rotations. The page marks these as approximate views.</li>
 </ul>
 <p>If a <code>.bld</code> matters to you, add it once through the game's Building Architect so it lands in <code>BAT.DAT</code>, then install again.</p>
+</section>
+
+<section class="fam" id="sc4">
+<h2>SimCity 4 buildings</h2>
+<p>The importer also turns SimCity 4 buildings (the BAT houses you download for SimCity 4) into buildings that grow in SimCity 3000 Unlimited. It reads the download as you got it: the <code>.zip</code>, the LEX installer (<code>.jar</code>) inside it, or the folder with its <code>.dat</code> files. The conversion runs in your browser on your PC. Nothing is uploaded.</p>
+<p class="note"><b>SimCity 4 buildings are their authors' work.</b> Convert your own downloads for your own game. Never share the converted buildings, their pictures or the files the page makes from them without the author's permission. Many packs allow changes for your own use and forbid passing them on: read the readme or licence that came with the download.</p>
+<h3>How to convert</h3>
+<ol>
+  <li>Open the importer in Chrome or Edge and select <b>Open SC4 .zip</b>. Pick the downloaded <code>.zip</code>, or the <code>.jar</code> inside it.</li>
+  <li>Or select <b>Open folder</b> and pick a folder with SimCity 4 files (subfolders are read too). The page then saves <code>models.json</code> and <code>sc3build\ids.json</code> in that folder, so your choices and the building ids stay for the next time.</li>
+  <li>The grid shows one card per building, grouped by design, with the name, class and lot taken from the SimCity 4 data. Packs often hold the same house in several colours: one colour of each design is on, the others are off. Switch them on or off in the panel, as for any model.</li>
+  <li>Choose the game folder and select <b>Install into the game</b>, as in <a href="#install">Installing</a>. Remove works the same way.</li>
+</ol>
+<p>Opened from a <code>.zip</code>, the page has no folder to save your choices in. Select <b>Save models.json</b> to download them, and next time pick that <code>models.json</code> together with the <code>.zip</code>.</p>
+<h3>What converts, and the limits</h3>
+<p>A SimCity 4 building file holds no full 3D house. It holds four pictures of the house, one per view, painted onto a box around it. The page turns each picture to the SimCity 3000 camera and draws it with its light already in it (the look called <code>baked</code>).</p>
+<ul>
+  <li><b>Converts:</b> residential buildings, with their name, wealth, number of residents and size. The class follows from wealth and residents, the lot from the size: a house that fits in 16 m goes on a 1x1 lot.</li>
+  <li><b>Light painted in.</b> Each SimCity 4 picture is lit from the same side of the screen. In two of the four view rotations the converted houses are lit from the other side than their stock neighbours.</li>
+  <li><b>Roofs seen from higher up.</b> SimCity 4 looks down at 45 degrees, SimCity 3000 at 30. In each view one wall is stretched sideways and shows less detail.</li>
+  <li><b>No lot props.</b> The trees, fences, cars and lot textures of a SimCity 4 lot come from other packs and are not converted. The house stands centred on plain lawn, and the yard is left out.</li>
+  <li><b>Softer than a 3D model.</b> The pictures are redrawn, not rebuilt, so edges are softer than in the stock art. Where the SimCity 4 camera could not see (around porches and wings), the page fills in with pieces of the same picture.</li>
+  <li>Commercial, industrial and other buildings get no class and stay off. Give one a class in the panel to try it.</li>
+  <li><code>baked</code> brightens the SimCity 4 art to sit with the stock buildings. For SimCity 4's own brightness, set <code>"x_bldrender": {"style": "baked_raw"}</code> in the entry. It looks darker than the stock neighbours.</li>
+  <li>Parts the page cannot read (other model formats, several meshes in one view) skip that building with a line in the log. A download that holds only props or textures has no buildings to convert.</li>
+</ul>
 </section>
 
 <section class="fam" id="look">

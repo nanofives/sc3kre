@@ -243,6 +243,21 @@ function BLDWEB_LIB() {
       rim: { width: 0.30, dark: { 0: 0.10, 1: 0.30, 2: 0.50, 3: 0.62 } },
       grass: { 0: [120, 144, 110], 1: [106, 134, 93], 2: [102, 138, 84], 3: [100, 145, 78] }, grass_amp: 0.10 }};
   STYLES.stock_sharp = Object.assign({}, STYLES.stock, { zoom4: 'native' });
+  // task sc4web: bldrender's task sc4conv styles for art with its light painted in (SC4 BAT renders)
+  STYLES.baked = Object.assign({}, STYLES.stock, { light: 'sun', ambient: 1.0, diffuse: 0.0, shadow_keep: 0.0, sat: 1.0,
+    contrast: 1.0, grain: 0.0, tone: [0.75, 1.33] });
+  STYLES.baked_raw = Object.assign({}, STYLES.baked, { tone: null });
+  STYLES.baked_sharp = Object.assign({}, STYLES.baked, { zoom4: 'native' });
+  const PEEL_LAYERS = 4;
+  // np.power(float32, float32 0.75) on the Python tool's numpy is not correctly rounded: over every luminance a
+  // texel can give (641,191 float32 values, both matmul paths) it differs from fround(Math.pow) on these 67, as
+  // [input bits, numpy result bits] (task sc4web, measured with numpy 2.5 on this PC). Other inputs: fround(Math.pow).
+  const POW075_EXC = new Map([[1028467553, 1037621169], [1032253282, 1040526007], [1036284025, 1043365332], [1041560361, 1047605256], [1041569834, 1047616759], [1041966436, 1048095889], [1042746740, 1048800596], [1044645526, 1049898297], [1045236612, 1050231509], [1045608473, 1050439257], [1046610370, 1050992177], [1047968600, 1051727072], [1048453890, 1051985857], [1048643372, 1052122062], [1048756800, 1052241930], [1048762589, 1052248037], [1048771143, 1052257059], [1049012734, 1052510950], [1049387491, 1052901381], [1049960285, 1053490552], [1050521236, 1054059226], [1050535315, 1054073398], [1050985341, 1054523901], [1050997052, 1054535561], [1051029158, 1054567511], [1051320094, 1054855966], [1051453259, 1054987365], [1052875835, 1056367958], [1053561399, 1056991959], [1053823651, 1057115430], [1053840493, 1057123339], [1053974186, 1057186035], [1054199591, 1057291397], [1055076875, 1057697519], [1056392868, 1058295721], [1056809731, 1058482644], [1056813154, 1058484174], [1057534311, 1059055717], [1057678792, 1059182227], [1058470017, 1059866403], [1058915633, 1060245676], [1059066761, 1060373370], [1059183347, 1060471564], [1059534154, 1060765419], [1060195176, 1061312833], [1060514469, 1061574446], [1060535788, 1061591851], [1060687768, 1061715705], [1060702178, 1061727428], [1061226351, 1062151533], [1062021985, 1062786993], [1062325028, 1063026536], [1062574383, 1063222652], [1062784854, 1063387507], [1062794462, 1063395018], [1063193758, 1063706056], [1063627991, 1064041908], [1063822938, 1064191897], [1063844715, 1064208622], [1064096966, 1064401922], [1064278751, 1064540737], [1064307502, 1064562655], [1064499025, 1064708406], [1064754895, 1064902444], [1064755224, 1064902693], [1064764105, 1064909414], [1064798516, 1064935447]]);
+  const _f32 = new Float32Array(1), _f32u = new Uint32Array(_f32.buffer);
+  function powf(x, g) {
+    if (g === 0.75) { _f32[0] = x; const e = POW075_EXC.get(_f32u[0]); if (e !== undefined) { _f32u[0] = e; return _f32[0]; } }
+    return fr(Math.pow(x, g));
+  }
   const DEFAULT_STYLE = 'stock';
   const BA_LOOK = { zoom4: 'double', palette: null };
   const pz = (v, z) => {                  // _pz: {zoom: value}, highest key <= z, else the smallest key
@@ -309,13 +324,14 @@ function BLDWEB_LIB() {
     const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
     const sig = [137, 80, 78, 71, 13, 10, 26, 10];
     for (let k = 0; k < 8; k++) if (b[k] !== sig[k]) throw new BldError('not a PNG file');
-    let o = 8, W = 0, H = 0, depth = 0, ctype = 0, inter = 0, plte = null; const idat = [];
+    let o = 8, W = 0, H = 0, depth = 0, ctype = 0, inter = 0, plte = null, trns = null; const idat = [];
     while (o + 8 <= b.length) {
       const len = ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
       const typ = String.fromCharCode(b[o + 4], b[o + 5], b[o + 6], b[o + 7]);
       const d = b.subarray(o + 8, o + 8 + len);
       if (typ === 'IHDR') { W = ((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]) >>> 0; H = ((d[4] << 24) | (d[5] << 16) | (d[6] << 8) | d[7]) >>> 0; depth = d[8]; ctype = d[9]; inter = d[12]; }
       else if (typ === 'PLTE') plte = d;
+      else if (typ === 'tRNS') trns = d.slice();
       else if (typ === 'IDAT') idat.push(d);
       else if (typ === 'IEND') break;
       o += 12 + len;
@@ -371,7 +387,22 @@ function BLDWEB_LIB() {
       } else { r = hiByte(samples[k * ch]); g = hiByte(samples[k * ch + 1]); bl = hiByte(samples[k * ch + 2]); }
       rgb[3 * k] = r; rgb[3 * k + 1] = g; rgb[3 * k + 2] = bl;
     }
-    return { w: W, h: H, rgb };
+    // task sc4web: alpha as Image.open(p).convert("RGBA") gives it, when PIL reports an alpha band (LA, RGBA) or
+    // "transparency" (a tRNS chunk): palette alpha per index (255 past the table), a grey / RGB colour key (8-bit)
+    let a = null;
+    if (ctype === 4 || ctype === 6) {
+      a = new Uint8Array(W * H);
+      for (let k = 0; k < W * H; k++) a[k] = hiByte(samples[k * ch + ch - 1]);
+    } else if (trns && (ctype === 3 || depth === 8)) {
+      a = new Uint8Array(W * H).fill(255);
+      if (ctype === 3) { for (let k = 0; k < W * H; k++) { const i = samples[k]; if (i < trns.length) a[k] = trns[i]; } }
+      else if (ctype === 0 && trns.length >= 2) { const key = (trns[0] << 8) | trns[1]; for (let k = 0; k < W * H; k++) if (samples[k] === key) a[k] = 0; }
+      else if (ctype === 2 && trns.length >= 6) {
+        const kr = (trns[0] << 8) | trns[1], kg = (trns[2] << 8) | trns[3], kb = (trns[4] << 8) | trns[5];
+        for (let k = 0; k < W * H; k++) if (samples[3 * k] === kr && samples[3 * k + 1] === kg && samples[3 * k + 2] === kb) a[k] = 0;
+      }
+    }
+    return { w: W, h: H, rgb, a };
   }
   // JPEG and other formats: the browser's own decoder (PIL uses libjpeg-turbo too; not checked byte for byte)
   async function decodeOther(buf) {
@@ -717,9 +748,17 @@ function BLDWEB_LIB() {
             const im = await decodeImage(tb);
             const f = new Float32Array(im.w * im.h * 3);
             for (let q = 0; q < f.length; q++) f[q] = fr(im.rgb[q] / 255);
-            tex = { w: im.w, h: im.h, d: f }; texCache.set(tp, tex);
+            tex = { w: im.w, h: im.h, d: f };
+            // task sc4web (bldrender task sc4conv): texture alpha, kept only when some texel is below 128
+            if (im.a && im.a.some(x => x < 128)) {
+              const al = new Float32Array(im.w * im.h * 3);           // one channel, laid out like tex.d (texIndex)
+              for (let q = 0; q < im.w * im.h; q++) al[3 * q] = fr(im.a[q] / 255);
+              tex.alpha = { w: im.w, h: im.h, d: al };
+            }
+            texCache.set(tp, tex);
           }
           cur.tex = tex; cur.tex_file = name;
+          if (tex.alpha) cur.alpha = tex.alpha; else delete cur.alpha;
         }
       }
     }
@@ -728,7 +767,8 @@ function BLDWEB_LIB() {
   async function loadObj(folder, rel) {
     const data = await folder.get(rel);
     if (!data) throw new BldError(rel + ': not found');
-    const V = [], VT = [], tris = [], uvs = [], has = [], mid = [];
+    const V = [], VT = [], tris = [], uvs = [], has = [], mid = [], slots = [];
+    let curSlot = -1;
     const mats = new Map(), texCache = new Map();
     const matNames = ['_default'], matList = [{ kd: [0.8, 0.8, 0.8], tex: null, name: '_default' }];
     let cur = 0;
@@ -747,6 +787,10 @@ function BLDWEB_LIB() {
           matNames.push(name); matList.push(m);
         }
         cur = matNames.indexOf(name);
+      } else if (k === 'g' || k === 'o') {
+        // task sc4web (bldrender task sc4conv): faces in a group / object named sc3slot<r> are drawn in slot r only
+        const nm = p.slice(1).join(' ').toLowerCase();
+        curSlot = nm.startsWith('sc3slot') && nm.length >= 8 && '0123'.includes(nm[7]) ? +nm[7] : -1;
       } else if (k === 'f') {
         const idx = [];
         for (const t of p.slice(1)) {
@@ -761,7 +805,7 @@ function BLDWEB_LIB() {
           tris.push(tri.map(([a]) => { const v = V.at(a); if (!v) throw new BldError('face index out of range'); return v.slice(0, 3); }));
           const ok = tri.every(([, b]) => b !== null);
           uvs.push(ok ? tri.map(([, b]) => { const v = VT.at(b); if (!v) throw new BldError('uv index out of range'); return v; }) : [[0, 0], [0, 0], [0, 0]]);
-          has.push(ok); mid.push(cur);
+          has.push(ok); mid.push(cur); slots.push(curSlot);
         }
       }
     }
@@ -771,7 +815,15 @@ function BLDWEB_LIB() {
       for (let c = 0; c < 3; c++) tri[i * 9 + j * 3 + c] = tris[i][j][c];
       uv[i * 6 + j * 2] = uvs[i][j][0]; uv[i * 6 + j * 2 + 1] = uvs[i][j][1];
     }
-    return { n: N, tri, uv, has_uv: Uint8Array.from(has.map(Number)), mat: Int32Array.from(mid), mats: matList };
+    return { n: N, tri, uv, has_uv: Uint8Array.from(has.map(Number)), mat: Int32Array.from(mid), mats: matList, slot: Int8Array.from(slots) };
+  }
+  function slotMesh(mesh, r) {           // bldrender.slot_mesh: the faces drawn in rotation slot r
+    const s = mesh.slot;
+    if (!s || !s.some(x => x >= 0)) return mesh;
+    const keep = []; for (let i = 0; i < mesh.n; i++) if (s[i] < 0 || s[i] === r) keep.push(i);
+    const N = keep.length, tri = new Float64Array(N * 9), uv = new Float64Array(N * 6), hu = new Uint8Array(N), mt = new Int32Array(N), sl = new Int8Array(N);
+    keep.forEach((i, j) => { tri.set(mesh.tri.subarray(9 * i, 9 * i + 9), 9 * j); uv.set(mesh.uv.subarray(6 * i, 6 * i + 6), 6 * j); hu[j] = mesh.has_uv[i]; mt[j] = mesh.mat[i]; sl[j] = s[i]; });
+    return Object.assign({}, mesh, { n: N, tri, uv, has_uv: hu, mat: mt, slot: sl });
   }
   function place(mesh, n, cellM, scale, rotDeg) {
     const N = mesh.n, P = N * 3, sc = scale;
@@ -805,7 +857,7 @@ function BLDWEB_LIB() {
     }
     return out;
   }
-  function rasterize(sx, sy, dep, nt, w, h, withBary) {   // sx, sy, dep: Float64Array nt*3
+  function rasterize(sx, sy, dep, nt, w, h, withBary, zmin) {   // sx, sy, dep: Float64Array nt*3; zmin: depth peeling
     const zb = new Float64Array(w * h).fill(Infinity);
     const ib = withBary ? new Int32Array(w * h).fill(-1) : null;
     const bb = withBary ? new Float32Array(w * h * 3) : null;
@@ -828,6 +880,7 @@ function BLDWEB_LIB() {
           const d = w0 * d0 + w1 * d1 + w2 * d2;
           const q = row + i;
           if (!(d < zb[q])) continue;
+          if (zmin && !(d > zmin[q] + 1e-7)) continue;
           zb[q] = d;
           if (withBary) { ib[q] = k; bb[3 * q] = w0; bb[3 * q + 1] = w1; bb[3 * q + 2] = w2; }
         }
@@ -977,6 +1030,7 @@ function BLDWEB_LIB() {
   const LUMA = [fr(0.299), fr(0.587), fr(0.114)];
 
   function renderFrame(mesh, n, z, r, ss, ground, shadows, groundTex, st) {
+    mesh = slotMesh(mesh, r);
     const W = 8 << z;
     const [dx, dy, gtab] = CALIB[z];
     const gpx = pz(gtab, n);
@@ -1003,13 +1057,39 @@ function BLDWEB_LIB() {
     const Hh = top + B, Ww = n * W, SW = Ww * ss, SH = Hh * ss;
     const sx = new Float64Array(NP), sy = new Float64Array(NP);
     for (let k = 0; k < NP; k++) { sx[k] = (X[k] + dx) * ss; sy[k] = (Y[k] + top + dy) * ss; }
-    const { ib, bb } = rasterize(sx, sy, dep, nt, SW, SH, true);
+    const { ib, bb, zb } = rasterize(sx, sy, dep, nt, SW, SH, true);
+    // task sc4web (bldrender task sc4conv): a sample whose texel is transparent (alpha < 0.5) takes the next
+    // surface behind it, up to PEEL_LAYERS times
+    const alphaMats = mesh.mats.filter(m => m.alpha).length;
+    for (let layer = 0; layer < (alphaMats ? PEEL_LAYERS : 0); layer++) {
+      const hole = new Uint8Array(ib.length); let any = false;
+      for (let q = 0; q < ib.length; q++) {
+        const id = ib[q];
+        if (id < 0 || id >= nm) continue;
+        const al = mesh.mats[mesh.mat[id]].alpha;
+        if (!al || !mesh.has_uv[id]) continue;
+        const o = 6 * id, b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
+        const uu = (mesh.uv[o] * b0 + mesh.uv[o + 2] * b1) + mesh.uv[o + 4] * b2;
+        const vv = (mesh.uv[o + 1] * b0 + mesh.uv[o + 3] * b1) + mesh.uv[o + 5] * b2;
+        if (al.d[texIndex(al, uu, vv)] < 0.5) { hole[q] = 1; any = true; }
+      }
+      if (!any) break;
+      const zmin = new Float64Array(ib.length).fill(Infinity);
+      for (let q = 0; q < ib.length; q++) if (hole[q]) zmin[q] = zb[q];
+      const p2 = rasterize(sx, sy, dep, nt, SW, SH, true, zmin);
+      for (let q = 0; q < ib.length; q++) if (hole[q]) {
+        ib[q] = p2.ib[q]; zb[q] = p2.zb[q];
+        bb[3 * q] = p2.bb[3 * q]; bb[3 * q + 1] = p2.bb[3 * q + 1]; bb[3 * q + 2] = p2.bb[3 * q + 2];
+      }
+    }
     // covered samples in row-major order
     let M = 0; for (let q = 0; q < ib.length; q++) if (ib[q] >= 0) M++;
     const rgb = new Float32Array(SW * SH * 3);
     if (M) {
       const nrmT = faceNormals(t, nt), nrm0T = faceNormals(t0, nt);
-      const sm = shadows && nm > 0 ? shadowMap(t.subarray(0, nm * 9), nm) : null;
+      // the 'sun' light with diffuse 0 (the baked styles) is the ambient alone, so no shadow map is needed (light =
+      // ambient + 0 * nl with nl >= 0 is the value bldrender gets with its map)
+      const sm = shadows && nm > 0 && !(st.light !== 'axis' && st.diffuse === 0) ? shadowMap(t.subarray(0, nm * 9), nm) : null;
       const shadowSun = SUN;
       const sel = new Int32Array(M);
       { let m = 0; for (let q = 0; q < ib.length; q++) if (ib[q] >= 0) sel[m++] = q; }
@@ -1068,6 +1148,7 @@ function BLDWEB_LIB() {
         const one = nModel === 1;
         const sat = pz(st.sat, z), gr = pz(st.grain, z);
         const satK = fr(sat - 1.0), grK = fr(gr);
+        const tone = st.tone && st.tone.length ? [fr(st.tone[0]), fr(st.tone[1])] : null, lo4 = fr(1e-4);
         for (let m = 0; m < M; m++) {
           if (isG[m]) continue;
           const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
@@ -1079,6 +1160,13 @@ function BLDWEB_LIB() {
             const vv = (mesh.uv[o + 1] * b0 + mesh.uv[o + 3] * b1) + mesh.uv[o + 5] * b2;
             const ti = texIndex(mat.tex, uu, vv);
             a0 = mat.tex.d[ti]; a1 = mat.tex.d[ti + 1]; a2 = mat.tex.d[ti + 2];
+          }
+          if (tone) {                       // task sc4web (bldrender task sc4conv): luminance tone of pre-lit art, float32
+            const y = mm3f(a0, a1, a2, LUMA, one);
+            let y2 = fr(tone[1] * powf(y > 0 ? y : 0, tone[0])); y2 = y2 < 0 ? 0 : y2 > 1 ? 1 : y2;
+            const ratio = fr(y2 / Math.max(y, lo4));
+            const cl = x => x < 0 ? 0 : x > 1 ? 1 : x;
+            a0 = cl(fr(a0 * ratio)); a1 = cl(fr(a1 * ratio)); a2 = cl(fr(a2 * ratio));
           }
           if (sat !== 1.0) {
             const y = mm3f(a0, a1, a2, LUMA, one);
@@ -2244,8 +2332,8 @@ function BLDWEB_LIB() {
   const api_ = {
     BldError, version: '2026-11-18d',
     // pieces (exported for the tests)
-    fma, sha256, pyJson, decodePNG, encodePNG, decodeImage, pilMedianCut, paletteCut, pilResize, qfsCompress, qfsDecompress,
-    loadObj, place, renderModel, renderFrame, grassNorm, readBld, previewFrames, batFrames, recordFromImage, spanToImage,
+    fma, sha256, pyJson, pyJsonStr, cp1252Encode, rint, decodePNG, slotMesh, powf, encodePNG, decodeImage, pilMedianCut, paletteCut, pilResize, qfsCompress, qfsDecompress,
+    loadObj, place, renderModel, joinRel, dirOf, renderFrame, grassNorm, readBld, previewFrames, batFrames, recordFromImage, spanToImage,
     records, slots, classTable, stockBuildings, styleOf, STYLES,
     // the tool
     readModels, idsFor, plan, renderOne, renderJob, buildFiles, sources, applyFiles, install, restore, describe,

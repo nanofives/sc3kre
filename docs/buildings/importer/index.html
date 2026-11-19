@@ -340,6 +340,8 @@ details{margin-top:calc(7 * var(--u))}
 textarea#rules{height:calc(208 * var(--u));font:calc(10.5 * var(--u))/calc(14 * var(--u)) var(--ui-mono);letter-spacing:0;white-space:pre}
 .hint{color:var(--muted);font:var(--ui-type-row);letter-spacing:var(--ui-ls-row);margin:calc(3 * var(--u)) 0}
 label.hint{font:var(--ui-type-ui);letter-spacing:var(--ui-ls-ui)}
+.grp{grid-column:1/-1;font:var(--ui-type-name);letter-spacing:var(--ui-ls-name);color:var(--muted);margin-top:calc(4 * var(--u));border-bottom:1px solid var(--line)}
+.sc4note{background:var(--panel);border:1px solid var(--line);padding:calc(5 * var(--u)) calc(8 * var(--u));margin:calc(6 * var(--u)) 0;font:var(--ui-type-row);letter-spacing:var(--ui-ls-row)}
 .empty{padding:calc(30 * var(--u)) calc(8 * var(--u));text-align:center;color:var(--muted);grid-column:1/-1;border:1px dashed var(--line);background:var(--panel)}
 pre#selftest,pre#bldtest{display:none}
 .gamebox{background-color:var(--ui-page);background-image:var(--ui-clouds);background-size:var(--ui-cloud-size);border:1px solid;border-color:var(--ui-hi) var(--ui-edge) var(--ui-edge) var(--ui-hi);padding:calc(3 * var(--u)) calc(5 * var(--u)) calc(5 * var(--u));margin-bottom:calc(10 * var(--u))}
@@ -368,6 +370,7 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:calc(10.5 * var(--u))
 }
 </style>
 <script src="bldweb.js"></script>
+<script src="sc4web.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -379,12 +382,14 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:calc(10.5 * var(--u))
 <header>
   <h1>SC3 Model Classifier</h1>
   <button id="btnOpen" class="primary">Open folder</button>
+  <button id="btnSc4" title="A SimCity 4 download as you got it: the .zip, or the .jar installer inside it (LEX), or its .dat files">Open SC4 .zip</button>
   <button id="btnSave" disabled>Save models.json</button>
   <button id="btnTheme" title="Switch light / dark">Theme</button>
   <span id="status">Open a folder with OBJ, glTF, GLB or FBX models or Building Architect .bld files. An existing models.json is read back.</span>
 </header>
 <input type="file" id="fileFallback" webkitdirectory multiple hidden>
 <input type="file" id="gameFallback" webkitdirectory multiple hidden>
+<input type="file" id="sc4Files" accept=".zip,.jar,.dat,.sc4desc,.sc4lot,.sc4model,.json" multiple hidden>
 
 <div class="app">
   <section class="left">
@@ -407,6 +412,7 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:calc(10.5 * var(--u))
       <div id="results"></div>
       <details id="logBox"><summary>Log</summary><pre id="log"></pre></details>
     </div>
+    <div class="sc4note" id="sc4Note" hidden></div>
     <div class="tools">
       <input type="text" id="filter" placeholder="Filter by name or file">
       <button id="btnAll">Select all</button>
@@ -499,7 +505,8 @@ const S = {
   recs: [],          // model records in folder order
   orphans: [],       // entries in models.json whose file is not in the folder (saved unchanged)
   top: {},           // unknown top-level keys of models.json
-  dirHandle: null, folderName: '', sel: new Set(), focus: null, lastClick: null, hadJson: false, dirty: false
+  dirHandle: null, folderName: '', sel: new Set(), focus: null, lastClick: null, hadJson: false, dirty: false,
+  sc4: null          // task sc4web: { mem: Map rel -> bytes (the converted OBJ / MTL / PNG), report } when an SC4 download is open
 };
 const $ = id => document.getElementById(id);
 const grid = $('grid'), statusEl = $('status');
@@ -676,7 +683,9 @@ function bldObject(b, cell) {
 // ---------------------------------------------------------------- loading models
 let urlMap = new Map();    // lowercase basename -> blob url, for MTL / textures / .bin next to a model
 function modifier(url) {
-  if (/^(blob:|data:)/.test(url)) return url;
+  // task sc4web: pass through only the blob URLs this page made. A texture named in an MTL loaded from a blob URL
+  // resolves to "blob:file:///<name>" (no such blob): map it by its file name like any other path
+  if (/^data:/.test(url) || (/^blob:/.test(url) && [...urlMap.values()].includes(url))) return url;
   const base = decodeURIComponent(url.split(/[\\/]/).pop().split('?')[0]).toLowerCase();
   return urlMap.get(base) || url;
 }
@@ -725,6 +734,16 @@ async function makeRecord(file, entry) {
   if (/\.bld$/i.test(file.name)) return makeBldRecord(rec, file, entry);
   try {
     const obj = await loadObject(file);
+    if (entry && entry.x_sc4) {           // task sc4web: show one SC3 view of the four (sc3slot3 = SC4's front view)
+      obj.traverse(n => {
+        if (!n.isMesh) return;
+        n.visible = n.name === 'sc3slot3';
+        for (const m of [].concat(n.material)) { m.alphaTest = 0.5; m.side = THREE.DoubleSide; m.needsUpdate = true; }
+      });
+      // the thumbnail is drawn right after loading: wait for the textures (cut-out alpha) first, at most 3 s
+      const maps = []; obj.traverse(n => { if (n.isMesh) for (const m of [].concat(n.material)) if (m.map) maps.push(m.map); });
+      for (let t = 0; t < 150 && maps.some(x => !x.image); t++) await new Promise(r => setTimeout(r, 20));
+    }
     const box = new THREE.Box3().setFromObject(obj);
     if (box.isEmpty()) throw new Error('no geometry');
     const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
@@ -793,6 +812,12 @@ function hasWord(text, list) { return (list || []).find(w => text.includes(w.toL
 
 function suggest(rec) {
   if (rec.bld) return bldSuggest(rec.bld);
+  const x4 = rec.raw && rec.raw.x_sc4;
+  if (x4 && x4.auto) {                     // task sc4web: an SC4 building: the converter's values from the SC4 data
+    const a = x4.auto;
+    return { set: { kind: 'growable', class: a.class, lot: Array.isArray(a.lot) ? a.lot.slice() : null, height_m: rec.raw.height_m ?? rec.meta.height_m },
+      why: 'From the SimCity 4 data: ' + String(a.notes || '').replace(/\.$/, '') };
+  }
   const R = rules, m = measure(rec), cell = R.cell_m || 16, K = R.keywords || {};
   const text = (rec.file + ' ' + rec.meta.name).toLowerCase();
   const area = m.fx * m.fz, want = Math.max(1, Math.min(4, Math.ceil(Math.max(m.fx, m.fz) / cell - 0.15)));
@@ -908,6 +933,42 @@ async function openFiles(files, jsonFile) {
   const nf = recs.filter(r => r.fresh).length;
   setStatus(`${recs.length} models from ${S.folderName || 'folder'}` + (S.hadJson ? `, models.json read (${recs.length - nf} entries, ${nf} new, ${S.orphans.length} for missing files)` : ', no models.json yet: suggestions shown, save to create it'));
 }
+// ---------------------------------------------------------------- SC4 downloads (task sc4web)
+// sc4web.js converts the SC4 files on this PC (nothing is uploaded) into what sc4conv.py writes: OBJ + MTL + PNG +
+// models.json, kept in memory. The grid shows them as any models folder; Install renders them with bldweb.js.
+const W4 = window.SC4WEB;
+const SC4_RULE = 'SimCity 4 buildings are their authors\' work. Convert your own downloads for your own game, and never share the converted buildings without the author\'s permission.';
+async function openSc4(inputs, opt = {}) {
+  setStatus('Reading the SimCity 4 files...');
+  const sources = await W4.sourcesFrom(inputs);
+  if (!sources.length) { setStatus('No SimCity 4 files (.dat, .SC4Desc, .SC4Lot, .SC4Model) in ' + (opt.name || 'that') + '.'); return false; }
+  const t0 = performance.now();
+  const r = await W4.convert(sources, { old: opt.oldText || null, log,
+    progress: async (i, n, b) => { if (i % 8 === 0) { setStatus(`Converting SimCity 4 building ${i + 1} of ${n}: ${b.name}`); await new Promise(res => setTimeout(res, 0)); } } });
+  const all = [], models = [];
+  for (const [rel, bytes] of r.files) {
+    if (rel === 'models.json') continue;
+    const f = new File([bytes], rel); all.push(f);
+    if (/\.obj$/i.test(rel)) models.push(f);
+  }
+  S.sc4 = { mem: r.files, report: r.report };
+  S.dirHandle = opt.dirHandle || null; S.folderName = opt.name || 'SC4 download'; S.allFiles = null;
+  // the converter keeps the player's edits from the previous models.json: when it changed anything, save it
+  await openFiles({ all, models }, new File([r.text], 'models.json'));
+  S.dirty = !!S.dirHandle && r.text !== (opt.oldText || null);
+  const note = $('sc4Note'); note.hidden = false;
+  note.textContent = `SimCity 4 download ${S.folderName}: ${r.report.join('. ').replace(/\s+/g, ' ')}, converted on this PC in ${((performance.now() - t0) / 1000).toFixed(1)} s. One colour of each design is on, the others are off: switch them in the panel. ${SC4_RULE}`;
+  setStatus(`${S.recs.length} SimCity 4 buildings from ${S.folderName} (${S.recs.filter(x => x.meta.enabled).length} on). ` +
+    (S.dirHandle ? 'Your choices are saved as models.json in that folder.' : 'Save downloads your choices as models.json: pick it together with the .zip next time.'));
+  return true;
+}
+$('btnSc4').onclick = () => $('sc4Files').click();
+$('sc4Files').onchange = async ev => {
+  const files = [...ev.target.files]; ev.target.value = '';
+  const json = files.find(f => /\.json$/i.test(f.name));
+  try { await openSc4(W4.fileInputs(files), { name: files.filter(f => !/\.json$/i.test(f.name)).map(f => f.name).join(', '), oldText: json ? await json.text() : null }); }
+  catch (e) { console.error(e); setStatus('Could not convert: ' + (e.message || e)); }
+};
 async function pickFolder() {
   if (window.showDirectoryPicker) {
     try {
@@ -919,6 +980,11 @@ async function pickFolder() {
         if (MODEL_EXT.test(name)) models.push(f);
         if (name.toLowerCase() === 'models.json') json = f;
       }
+      if (!models.length) {                  // task sc4web: a SimCity 4 plugin folder (its files can be in subfolders)
+        const inputs = await W4.handleInputs(dir);
+        if (inputs.length && await openSc4(inputs, { dirHandle: dir, name: dir.name, oldText: json ? await json.text() : null })) return;
+      }
+      S.sc4 = null; $('sc4Note').hidden = true;
       S.dirHandle = dir; S.folderName = dir.name; S.allFiles = null;
       await openFiles({ all, models }, json);
       return;
@@ -932,6 +998,13 @@ $('fileFallback').onchange = async ev => {
   const list = [...ev.target.files].filter(f => (f.webkitRelativePath || f.name).split('/').length <= 2);
   const models = list.filter(f => MODEL_EXT.test(f.name));
   const json = list.find(f => f.name.toLowerCase() === 'models.json') || null;
+  if (!models.length) {                    // task sc4web: a SimCity 4 plugin folder
+    const inputs = W4.fileInputs(S.allFiles);
+    const name = (S.allFiles[0] && S.allFiles[0].webkitRelativePath || '').split('/')[0];
+    ev.target.value = '';
+    if (inputs.length && await openSc4(inputs, { name, oldText: json ? await json.text() : null })) return;
+  }
+  S.sc4 = null; $('sc4Note').hidden = true;
   S.dirHandle = null; S.folderName = (list[0] && list[0].webkitRelativePath || '').split('/')[0];
   await openFiles({ all: list, models }, json);
   setStatus(statusEl.textContent + '. This browser cannot write into the folder: Save downloads models.json, copy it next to the models.');
@@ -966,7 +1039,17 @@ function renderGrid() {
   grid.textContent = '';
   const list = S.recs.filter(r => !q || (r.file + ' ' + r.meta.name).toLowerCase().includes(q));
   if (!list.length) { grid.innerHTML = '<div class="empty">' + (S.recs.length ? 'No model matches the filter.' : 'No models yet. Use <b>Open folder</b>.') + '</div>'; return; }
+  let lastGroup = null;
   for (const rec of list) {
+    const x4 = rec.raw && rec.raw.x_sc4;
+    if (x4) {                               // task sc4web: SC4 colour variants grouped by design (one enabled per design)
+      if (x4.design !== lastGroup) {
+        const mates = list.filter(r => r.raw && r.raw.x_sc4 && r.raw.x_sc4.design === x4.design);
+        const g = document.createElement('div'); g.className = 'grp';
+        g.textContent = x4.design + ': ' + mates.length + (mates.length === 1 ? ' colour' : ' colours') + ', ' + mates.filter(r => r.meta.enabled).length + ' on';
+        grid.appendChild(g); lastGroup = x4.design;
+      }
+    }
     const m = rec.meta, z = zoneBadge(rec), w = warnings(rec);
     const d = document.createElement('div');
     d.className = 'card' + (S.sel.has(rec) ? ' sel' : '') + (S.focus === rec ? ' focus' : '');
@@ -975,7 +1058,7 @@ function renderGrid() {
     cb.onclick = ev => { ev.stopPropagation(); toggle(rec); };
     const img = document.createElement('img'); img.src = rec.thumb || ''; img.alt = '';
     const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = m.name; nm.title = m.name;
-    const fl = document.createElement('div'); fl.className = 'fl'; fl.textContent = rec.file;
+    const fl = document.createElement('div'); fl.className = 'fl'; fl.textContent = x4 ? (x4.colour || x4.design) + ', ' + x4.exemplar : rec.file; fl.title = rec.file;
     const bd = document.createElement('div'); bd.className = 'badges';
     const mk = (t, c, title) => { const s = document.createElement('span'); s.className = 'b ' + (c || ''); s.textContent = t; if (title) s.title = title; bd.appendChild(s); };
     mk(m.kind === 'growable' ? z : m.kind, z);
@@ -1182,6 +1265,10 @@ async function saveModelsJsonIfNeeded() {
   return true;
 }
 function modelsFolder() {                  // the importer's view of the models folder
+  if (S.sc4) {                              // task sc4web: converted files in memory (+ the picked folder for ids.json)
+    const mem = new Map(S.sc4.mem); mem.set('models.json', new TextEncoder().encode(toJSONText()));
+    return W4.overlayFS(mem, S.dirHandle ? BW.handleFS(S.dirHandle) : null);
+  }
   if (S.dirHandle) return BW.handleFS(S.dirHandle);
   const list = S.allFiles || [];
   const map = new Map(); const names = [];
@@ -1225,7 +1312,13 @@ async function installWith(folder, game, opt = {}) {
       onModel: (i, n, e) => { installWith.cur = { i, n }; setProgress((i - 1) / n, `Model ${i} of ${n}: ${e.file}`); },
       onFrames: (e, frames, info) => resultRow(`${e.name} (${e.id})`, `${e.file}: class ${e.class}, ${BW.CLASS_LABEL[e.class]}, lot ${e.lot}x${e.lot}, weight ${e.weight}. ${BW.describe(info)}`, frames),
     });
-    for (const line of r.rep) { log(line); if (line.startsWith('skip')) resultRow(line.replace(/^skip\s+/, ''), 'not installed', null, 'skip'); }
+    let off = 0;
+    for (const line of r.rep) {
+      log(line);
+      if (/: enabled is false$/.test(line)) { off++; continue; }      // switched off: one row for all of them, below
+      if (line.startsWith('skip')) resultRow(line.replace(/^skip\s+/, ''), 'not installed', null, 'skip');
+    }
+    if (off) resultRow(off + (off === 1 ? ' model is' : ' models are') + ' switched off', 'not installed (Enabled is off in the panel)', null, 'skip');
     setProgress(1, `Done in ${((performance.now() - t0) / 1000).toFixed(1)} s: ${r.rep[r.rep.length - 1]}`);
     return r;
   } finally { if (renderer) renderer.terminate(); installWith.cur = null; }
@@ -1238,15 +1331,15 @@ async function runBusy(fn) {
 }
 $('btnInstall').onclick = () => runBusy(async () => {
   if (!S.recs.length) { setStatus('Open the models folder first.'); return; }
-  if (!S.dirHandle) { setStatus('The models folder was opened read-only (this browser or the fallback picker): use the .zip route, or open it again with Open folder in Chrome or Edge.'); $('zipBox').open = true; return; }
-  if (!(await permitted(G.handle)) || !(await permitted(S.dirHandle))) { setStatus('The page needs write access to the game folder and the models folder.'); return; }
+  if (!S.dirHandle && !S.sc4) { setStatus('The models folder was opened read-only (this browser or the fallback picker): use the .zip route, or open it again with Open folder in Chrome or Edge.'); $('zipBox').open = true; return; }
+  if (!(await permitted(G.handle)) || (S.dirHandle && !(await permitted(S.dirHandle)))) { setStatus('The page needs write access to the game folder and the models folder.'); return; }
   const why = await checkGame(BW.handleFS(G.handle));
   if (why) { setStatus('Game folder: ' + why + '.'); return; }
   G.name = G.handle.name; refreshGameButtons();
   await saveModelsJsonIfNeeded();
   log('--- install into ' + G.handle.name + ' from ' + S.folderName + ' (' + new Date().toLocaleString() + ')');
   setStatus('Installing. Keep this page open.');
-  const r = await installWith(BW.handleFS(S.dirHandle), BW.handleFS(G.handle));
+  const r = await installWith(S.sc4 ? modelsFolder() : BW.handleFS(S.dirHandle), BW.handleFS(G.handle));
   const n = Object.keys(r.state.files).length;
   setStatus(`Installed into ${G.handle.name}: ${r.rep[r.rep.length - 1]}, ${n} game files written (backups in mods\\netmod\\bldimport). Start the game and zone land of these classes: the buildings grow over time.`);
 });
@@ -1278,7 +1371,7 @@ $('gameFallback').onchange = ev => runBusy(async () => {
     if (S.dirHandle) { if (!(await permitted(S.dirHandle))) return; await saveModelsJsonIfNeeded(); }
     log('--- install .zip for ' + gname);
     r = await installWith(folder, game);
-    if (!S.dirHandle && folder.written.size) {
+    if (!S.dirHandle && !S.sc4 && folder.written.size) {
       const ids = folder.written.get('sc3build/ids.json');
       if (ids) download('ids.json', ids, 'application/json');
     }
@@ -1331,7 +1424,7 @@ async function roundTrip() {
   res.savedText = saved;
   return res;
 }
-window.bc = { S, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW };
+window.bc = { S, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW, openSc4, modelsFolder };
 
 // ---------------------------------------------------------------- start
 buildForm(); showRules(); sizeView(); applyThemeToScene(); refreshPanel(); loop();
