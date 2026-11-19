@@ -81,6 +81,34 @@ try {
       console.log('  screenshots in ' + shots);
     }
     line('no horizontal page scroll at phone width (412 px)', !wide);
+    // the hook in the importer itself (classifier.html): Open SC3 pack on the same .zip, then its buildings in the grid
+    await send('Emulation.clearDeviceMetricsOverride');
+    const sp = man.packs.find(p => p.name === show);
+    await send('Page.navigate', { url: pathToFileURL(path.join(here, '..', 'classifier.html')).href });
+    const t1 = Date.now();
+    while (Date.now() - t1 < 60000 && !(await evalJs('!!(window.bc && window.bc.openPack && document.readyState === "complete")'))) await sleep(300);
+    const m = await send('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `(async () => {
+      const url = ${JSON.stringify(sp.base + encodeURIComponent(sp.zip || ''))};
+      const f = new File([await (await fetch(url)).arrayBuffer()], ${JSON.stringify(sp.zip || '')});
+      const rep = await window.bc.openPack(await window.bc.PK.openFiles([f]), f.name);
+      const v = document.getElementById('packView');
+      const out = { shown: !document.getElementById('packBox').hidden, counts: rep.counts, groups: v.querySelectorAll('details').length,
+        hint: document.getElementById('packHint').textContent, status: document.getElementById('status').textContent,
+        bldBtn: document.getElementById('btnPackBld').textContent };
+      document.getElementById('btnPackBld').click();
+      for (let t = 0; t < 100 && window.bc.S.recs.length < 1; t++) await new Promise(r => setTimeout(r, 100));
+      out.recs = window.bc.S.recs.map(r => r.file || (r.meta && r.meta.file) || '');
+      return JSON.stringify(out); })()` });
+    const hk = JSON.parse((m.result && m.result.result && m.result.result.value) || '{}');
+    total += 2;
+    line(`classifier.html: Open SC3 pack shows ${show} (${JSON.stringify(hk.counts)}, ${hk.groups} groups)`, hk.shown && hk.groups > 3 && /Choose the Game folder/.test(hk.hint || ''), hk.status);
+    line(`classifier.html: "${hk.bldBtn}" puts them in the grid (${(hk.recs || []).length})`, (hk.recs || []).length === (hk.counts && hk.counts.building), JSON.stringify(hk.recs));
+    if (shots) {
+      await evalJs("document.getElementById('packBox').scrollIntoView(); document.querySelectorAll('#packView details').forEach(d => d.open = false); 1");
+      await sleep(300);
+      const sm = await send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(shots, 'sc3pack_classifier.png'), Buffer.from(sm.result.data, 'base64'));
+    }
   }
   ws.close();
 } catch (e) { total = total || 1; line('pagetest', false, String(e.stack || e)); }
