@@ -7,7 +7,16 @@ hook on a private WM_APP message (the place_direct.py pattern), with exceptions:
 
   py -3.12 re/tools/civmod_lab.py hotkey 0x18 [--fd DIR]   the city view's own DefOnHotKey (SIMSPR 0x10049a80,
                                                             cISC3WinCityView vt+0x80): 0x18 = Police Station, the
-                                                            GetCommand path a civic button press takes
+                                                            GetCommand path a civic button press takes.
+                                                            (civtest) 0x3b opens Rewards and Opportunities, 0x12 arms
+                                                            Demolish. A modal dialog runs inside the call, so the job
+                                                            returns only after the dialog closes: start it in the
+                                                            background (timeout 60), dump, post the OK click
+  py -3.12 re/tools/civmod_lab.py command 0xC2FF057A    (civtest) the same GetCommand the hotkey makes (view +0x230
+                                                            vt+0xc, riid 0x6856f7), for a class id with no hotkey
+                                                            (library, museum, zoo, ...); the command is released, not
+                                                            executed: the factory builds the tool, so CIVVAR picks the key
+  py -3.12 re/tools/civmod_lab.py empty X0 Z0 X1 Z1 N      (civtest) N x N squares with no occupant in a cell box
   py -3.12 re/tools/civmod_lab.py tool                      the city view's current tool (+0x228): vtable, key +0x108
   py -3.12 re/tools/civmod_lab.py find GROUP:INST|TYPE [X0 Z0 X1 Z1]   occupants with that key (hex group:instance)
                                                             or type id, whole map or a cell box
@@ -61,6 +70,27 @@ function run(job) {
     var v = view();
     var r = vfn(v, 0x80, 'uint8', ['uint32', 'uint32', 'uint32'], 1)(v, job.id, 0, 0);
     return {job: job, ret: r};
+  }
+  if (job.kind === 'command') {
+    var v = view(), f = v.add(0x230).readPointer(), out = Memory.alloc(4);
+    out.writePointer(ptr(0));
+    var r = vfn(f, 0xc, 'uint8', ['uint32', 'uint32', 'pointer'], 1)(f, job.id >>> 0, 0x6856f7, out);
+    var cmd = out.readPointer();
+    if (!cmd.isNull()) vfn(cmd, 0x8, 'uint32', [], 1)(cmd);
+    return {job: job, ret: r, cmd: '' + cmd};
+  }
+  if (job.kind === 'empty') {
+    var c = city(), om = vfn(c, 0x11c, 'pointer', [])(c);
+    var at = vfn(om, 0x7c, 'uint8', ['uint32', 'uint32', 'pointer']);
+    var op = Memory.alloc(4), b = job.box, n = job.n, W = b[2] - b[0] + 1, H = b[3] - b[1] + 1, occ = [];
+    for (var z = 0; z < H; z++) for (var x = 0; x < W; x++) { op.writePointer(ptr(0)); occ.push(at(om, b[0] + x, b[1] + z, op) ? 1 : 0); }
+    var hits = [];
+    for (var z = 0; z + n <= H; z++) for (var x = 0; x + n <= W; x++) {
+      var ok = true;
+      for (var dz = 0; dz < n && ok; dz++) for (var dx = 0; dx < n && ok; dx++) if (occ[(z + dz) * W + x + dx]) ok = false;
+      if (ok) hits.push([b[0] + x, b[1] + z]);
+    }
+    return {job: job, squares: hits.slice(0, 200), count: hits.length};
   }
   if (job.kind === 'tool') {
     var v = view(), t = v.add(0x228).readPointer();
@@ -135,13 +165,17 @@ def frida_job(job, timeout=20.0):
 
 def main(argv):
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["hotkey", "tool", "find", "dump", "click", "move", "key", "unpause"])
+    ap.add_argument("cmd", choices=["hotkey", "command", "empty", "tool", "find", "dump", "click", "move", "key", "unpause"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--fd", default=os.environ.get("VDSCROLL_FD", "."))
     ap.add_argument("--right", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "hotkey":
         print(json.dumps(frida_job({"kind": "hotkey", "id": int(a.args[0], 0)})))
+    elif a.cmd == "command":
+        print(json.dumps(frida_job({"kind": "command", "id": int(a.args[0], 0)})))
+    elif a.cmd == "empty":
+        print(json.dumps(frida_job({"kind": "empty", "box": [int(v) for v in a.args[:4]], "n": int(a.args[4])}, timeout=120)))
     elif a.cmd == "tool":
         print(json.dumps(frida_job({"kind": "tool"})))
     elif a.cmd == "find":

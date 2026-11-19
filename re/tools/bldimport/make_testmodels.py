@@ -35,6 +35,12 @@ Writes the civic look / reward test models (bldimport kinds civic and reward, pl
   pavilion_3x3.obj        landmark "Test pavilion" (type 18000: the Mover fix)
   models.json             those four, plus entries bldimport must refuse: a police look 2x2 (the base is 3x3), a civic
                           look of an unknown base, a reward named with a ';'
+    py -3.12 re/tools/bldimport/make_testmodels.py --civtest <out folder>   (task civtest, 2026-11-19)
+
+Writes one civic look for every one of the 17 civic buttons (civic_<base>.obj: a block on the base's own lot, a colour
+per base, a white band and a roof sign), three rewards (reward_1x1 / reward_3x3 / reward_4x4: a stepped plaza with a
+gold spire, population 1000, so they unlock in any town) and a 3x3 growable plaza (plaza_3x3.obj, class 6300 = the
+3x3 commercial base the 1999 Maxis Plaza copied), models.json for all of them.
 """
 import json
 import math
@@ -503,7 +509,93 @@ def civmod(out):
     return 0
 
 
+# task civtest (2026-11-19): base -> lot of the stock building (CIVIC_REWARD.md 5 / bldimport civic_table)
+CIVTEST_BASES = [("police", 3), ("jail", 3), ("fire", 3), ("hospital", 3), ("school", 3), ("college", 3),
+                 ("library", 2), ("museum", 3), ("small_park", 1), ("big_park", 3), ("zoo", 4), ("baseball", 4),
+                 ("playground", 2), ("pond", 2), ("fountain", 1), ("bus_stop", 1), ("train_station", 2)]
+
+
+def civic_block(folder, name, n, kd, height):
+    """A block filling most of an n x n lot (cell = 16 m), colour kd, white band, a sign on the roof."""
+    o = Obj(name)
+    h = 8.0 * n - 0.4
+    o.mat("lot", (0.45, 0.45, 0.47))
+    o.box(-h, 0, -h, h, 0.3, h, mats={"ny": None})
+    w = h * 0.72
+    o.mat("walls", kd)
+    o.box(-w, 0.3, -w, w, height * 0.75, w * 0.4, mats={"ny": None})
+    o.mat("band", (0.97, 0.97, 0.97))
+    o.box(-w - 0.2, height * 0.38, -w - 0.2, w + 0.2, height * 0.46, w * 0.4 + 0.2, mats={"ny": None})
+    o.mat("roof", (0.25, 0.25, 0.27))
+    o.box(-w - 0.3, height * 0.75, -w - 0.3, w + 0.3, height * 0.8, w * 0.4 + 0.3, mats={"ny": None})
+    o.mat("sign", (0.98, 0.84, 0.10))
+    o.box(-w * 0.5, height * 0.8, -1.0, w * 0.5, height, 1.0, mats={"ny": None})
+    o.write(folder)
+
+
+def spire(folder, name, n):
+    """Reward: stepped plaza on an n x n lot, a gold spire."""
+    o = Obj(name)
+    h = 8.0 * n - 0.4
+    o.mat("plaza", (0.90, 0.89, 0.85))
+    o.box(-h, 0, -h, h, 0.3, h, mats={"ny": None})
+    o.box(-h * 0.6, 0.3, -h * 0.6, h * 0.6, 1.4, h * 0.6, mats={"ny": None})
+    o.mat("stone", (0.30, 0.20, 0.55))
+    s = 1.2 + 0.8 * n
+    top = 10.0 + 6.0 * n
+    o.box(-s, 1.4, -s, s, top, s, mats={"ny": None})
+    o.mat("gold", (0.92, 0.74, 0.20))
+    for a, b in (((-s, top, s), (s, top, s)), ((s, top, s), (s, top, -s)), ((s, top, -s), (-s, top, -s)),
+                 ((-s, top, -s), (-s, top, s))):
+        o.tri([a, b, (0, top + 2.5 * s, 0)])
+    o.write(folder)
+
+
+def plaza_3x3(folder, name="plaza_3x3"):
+    """Growable 3x3 commercial: a glass tower on a podium."""
+    o = Obj(name)
+    o.mat("lot", (0.55, 0.55, 0.56))
+    o.box(-23.6, 0, -23.6, 23.6, 0.3, 23.6, mats={"ny": None})
+    o.mat("podium", (0.80, 0.42, 0.20))
+    o.box(-20.0, 0.3, -20.0, 20.0, 7.0, 14.0, mats={"ny": None})
+    o.mat("glass", (0.25, 0.62, 0.70))
+    o.box(-9.0, 7.0, -12.0, 9.0, 42.0, 4.0, mats={"ny": None})
+    o.mat("roof", (0.92, 0.92, 0.92))
+    o.box(-9.4, 42.0, -12.4, 9.4, 43.0, 4.4, mats={"ny": None})
+    o.write(folder)
+
+
+def civtest(out):
+    """Task civtest: a look per civic button, rewards 1x1 / 3x3 / 4x4, a 3x3 growable."""
+    os.makedirs(out, exist_ok=True)
+    common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True, "weight": 1}
+    models = []
+    for k, (base, n) in enumerate(CIVTEST_BASES):
+        hue = k / len(CIVTEST_BASES)
+        import colorsys
+        kd = colorsys.hsv_to_rgb(hue, 0.75, 0.80)
+        civic_block(out, "civic_" + base, n, kd, 10.0 + 2.0 * n)
+        models.append(dict(common, file="civic_%s.obj" % base, name="Test %s look" % base.replace("_", " "),
+                           kind="civic", base=base, height_m=10.0 + 2.0 * n,
+                           description="Test look, bldimport civtest", notes="look 2 of the %s button" % base))
+    for n in (1, 3, 4):
+        spire(out, "reward_%dx%d" % (n, n), n)
+        models.append(dict(common, file="reward_%dx%d.obj" % (n, n), name="Test reward %dx%d" % (n, n),
+                           kind="reward", lot=[n, n], population=1000, year=0,
+                           height_m=round(10.0 + 6.0 * n + 2.5 * (1.2 + 0.8 * n), 1),
+                           description="Test reward %dx%d, bldimport civtest" % (n, n), notes="unlocks past 1,000 people"))
+    plaza_3x3(out)
+    models.append(dict(common, file="plaza_3x3.obj", name="Test plaza 3x3", kind="growable", **{"class": 6300},
+                       lot=[3, 3], height_m=43.0, notes="3x3 commercial growable", weight=20))
+    with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
+        json.dump({"sc3models": 1, "generator": "make_testmodels.py --civtest", "models": models}, fh, indent=2)
+    print("wrote civtest test models to", out, len(models), "models")
+    return 0
+
+
 def main(argv):
+    if len(argv) == 2 and argv[0] == "--civtest":
+        return civtest(argv[1])
     if len(argv) == 2 and argv[0] == "--civmod":
         return civmod(argv[1])
     if len(argv) == 2 and argv[0] == "--ports":
