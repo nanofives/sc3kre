@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preferencias replica</title>
+<!-- sc3ui2 (round 2026-11-18g): the game's Preferencias dialog rebuilt with docs/assets/sc3ui.css at --ui-scale 1,
+     to be diffed against a native 800x600 grab (re/tools/sc3ui/replica_diff.py). The dialog's own layout (where each
+     group box sits) is placed by hand from the measured rectangles; everything inside a box (bevels, fonts, row
+     pitch, padding, control sizes) comes from sc3ui.css. No game art. -->
+<link rel="stylesheet" href="../../../docs/assets/sc3ui.css">
+<style>
+:root { --ui-scale: 1; }
+html, body { margin: 0; background: #000; }
+#dlg { position: relative; width: 480px; height: 472px; }
+#dlg > .ui-group, #dlg > .ui-plate, #dlg > .ui-strip, #dlg > .ui-list, #dlg > .sbtn, #dlg > .abs { position: absolute; margin: 0; }
+.ind { padding-left: 4px; }
+.rows24 > .ui-opt { min-height: 24px; }
+.tight { padding-top: 0; }
+.tight .ui-opt { min-height: 17px; }
+.ui-plate.panel { padding: 0; display: block; }
+.vol { position: absolute; left: 22px; top: 6px; display: flex; gap: 1px; align-items: flex-end; }
+.vol i { display: block; width: 7px; background: #dee3ff; }
+.ui-plate.panel input[type=range] { position: absolute; left: 6px; width: 86px; }
+.scroll { position: absolute; left: 452px; top: 177px; width: 16px; height: 130px; background: var(--ui-blue); }
+.scroll::before { content: ""; position: absolute; left: 7px; top: 32px; bottom: 16px; width: 1px; background: #080c18; box-shadow: 1px 0 0 #fff; }
+.sbtn { position: absolute; width: 14px; height: 14px; min-height: 0; padding: 0; border-radius: 2px; margin: 0; font-size: 7px; letter-spacing: 0; }
+.ok { position: absolute; left: 431px; top: 433px; width: 42px; height: 33px; background: var(--ui-blue); }
+.ok button { position: absolute; left: 4px; top: 3px; width: 32px; height: 24px; padding: 0; border-radius: 12px; margin: 0; font: 700 16px/1 var(--ui-font); }
+</style>
+</head>
+<body>
+<div class="ui-window" id="dlg">
+  <div class="ui-titlebar">Preferencias<button class="ui-close" aria-label="Cerrar">&#x2715;</button></div>
+
+  <div class="ui-group" style="left:5px;top:41px;width:200px;height:300px">
+    <span class="ui-label">Efectos sonido</span>
+    <span class="ui-label">Tr&aacute;fico visible</span>
+    <div class="ind">
+      <label class="ui-opt"><input type="radio" name="t" checked>3 Aumentos</label>
+      <label class="ui-opt"><input type="radio" name="t">2 Aumentos</label>
+      <label class="ui-opt"><input type="radio" name="t">1 Aumentos</label>
+      <label class="ui-opt"><input type="radio" name="t">Desactivados</label>
+    </div>
+    <span class="ui-label">Sims visibles</span>
+    <div class="ind">
+      <label class="ui-opt"><input type="radio" name="s" checked>2 Aumentos</label>
+      <label class="ui-opt"><input type="radio" name="s">1 Aumentos</label>
+      <label class="ui-opt"><input type="radio" name="s">Desactivados</label>
+    </div>
+    <span class="ui-label">Otras animaciones</span>
+    <div class="ind">
+      <label class="ui-opt"><input type="radio" name="o" checked>Activados</label>
+      <label class="ui-opt"><input type="radio" name="o">Desactivados</label>
+    </div>
+    <span class="ui-label">Resoluci&oacute;n de pantalla</span>
+    <div class="ind"><select style="width:159px"><option>800x600 NVIDIA GeForce RTX</option></select></div>
+  </div>
+
+  <div class="ui-group" style="left:211px;top:41px;width:262px;height:300px">
+    <span class="ui-label">Sonido</span>
+    <div style="padding-left:2px" class="rows24">
+      <label class="ui-opt"><input type="checkbox" checked>M&uacute;sica</label>
+      <label class="ui-opt"><input type="checkbox" checked>Sonido Ambiente</label>
+      <label class="ui-opt"><input type="checkbox" checked>Efectos sonido</label>
+      <label class="ui-opt"><input type="checkbox">Activar sonidos 3D</label>
+    </div>
+    <span class="ui-label" style="margin-top:0">M&uacute;sicas posibles</span>
+  </div>
+  <div class="ui-plate panel" style="left:371px;top:45px;width:96px;height:110px">
+    <div class="vol"><i style="height:2px"></i><i style="height:3px"></i><i style="height:4px"></i><i style="height:5px"></i><i style="height:6px"></i><i style="height:7px"></i><i style="height:8px"></i></div>
+    <input type="range" value="100" style="top:17px"><input type="range" value="100" style="top:41px"><input type="range" value="100" style="top:65px">
+  </div>
+  <div class="ui-list" style="left:217px;top:177px;width:234px;height:130px">
+    <label><input type="checkbox" checked>Updown Town</label>
+    <label><input type="checkbox" checked>Night Life</label>
+    <label><input type="checkbox" checked>South Bridge</label>
+    <label><input type="checkbox" checked>Central Park Sunday</label>
+    <label><input type="checkbox" checked>Building</label>
+    <label><input type="checkbox" checked>Magic City</label>
+    <label><input type="checkbox" checked>Illumination</label>
+  </div>
+  <div class="scroll"><button class="sbtn" style="left:1px;top:1px">&#x25B2;</button><button class="sbtn" style="left:1px;top:115px">&#x25BC;</button></div>
+  <div class="ui-strip" style="left:217px;top:309px;width:250px;height:28px">Eschuchar elecci&oacute;n</div>
+  <button class="sbtn" style="left:415px;top:315px">&#x25B6;</button><button class="sbtn" style="left:440px;top:315px">&#x25A0;</button>
+
+  <div class="ui-group tight" style="left:5px;top:345px;width:468px;height:76px">
+    <span class="ui-label">Opciones generales:</span>
+    <div class="ind">
+      <label class="ui-opt"><input type="checkbox">Ver consejos al iniciar</label>
+      <label class="ui-opt"><input type="checkbox" checked>Ir a los desastres autom&aacute;tico</label>
+    </div>
+  </div>
+  <div class="ok"><button aria-label="Aceptar">&#x2713;</button></div>
+</div>
+</body>
+</html>
