@@ -3,6 +3,8 @@
 //   node pagetest.mjs --golden <dir from golden_setup.py> --game <tree> [--case kenney] [--chrome <exe>]
 //   node pagetest.mjs --golden <dir> --game <tree> --case sc4 --sc4zip <SC4 download .zip>   (task sc4web: the page
 //        opens the .zip itself, as Open SC4 .zip does, converts it and installs from memory)
+//   node pagetest.mjs --golden <dir> --game <tree> --case sc4empty --action open --sc4zip <lot-only SC4 .zip> --expect-empty "<name>,<name>"
+//        (task sc4pass2: a download without building models: no cards, Install off, the note names the buildings)
 //
 // Opens classifier.html?bldtest=<manifest> from disk in a headless Chrome of its own (temporary profile,
 // --allow-file-access-from-files so the test hook can fetch the folders), waits for the hook (webtest/pagetest.js)
@@ -81,7 +83,19 @@ try {
     for (const rel of res.deleted) fs.rmSync(path.join(tree, ...rel.split('/')), { force: true });
     console.log(`  applied: ${Object.keys(res.files).length} game files written, ${res.deleted.length} removed, ${Object.keys(res.models).length} models-folder files`);
   }
-  if (!res.pass) { total = 1; line('page ' + action + ' ran', false, res.error || title); }
+  const expectEmpty = arg('expect-empty');  // task sc4pass2: a lot-only SC4 zip: comma list of names the note must hold
+  if (res.pass && expectEmpty !== null) {
+    const s4 = res.sc4 || {}, names = expectEmpty.split(',').filter(Boolean);
+    total = 4;
+    console.log('  note: ' + (s4.note || '').slice(0, 400));
+    console.log('  status: ' + (s4.status || ''));
+    line(`page: no cards, nothing to install (${s4.cards} cards, buttons ${JSON.stringify(s4.buttons)})`, res.empty === true && s4.cards === 0 && s4.recs === 0 && !!s4.buttons && s4.buttons.btnInstall && s4.buttons.btnZipInstall && s4.buttons.btnSave);
+    line('page note says plainly that nothing converts', !!s4.noteShown && /No building converted: this download holds no building models/.test(s4.note || '') && /nothing can be installed from it/.test(s4.note || '') && !/One colour of each straight design/.test(s4.note || ''));
+    const miss = names.filter(n => !(s4.note || '').includes(n));
+    line(`page note names the missing buildings (${names.length} checked)`, !miss.length, miss.slice(0, 5).join(', '));
+    line('page status line says it cannot be converted', /^No building in .* can be converted: it holds no building models/.test(s4.status || ''), s4.status);
+  }
+  else if (!res.pass) { total = 1; line('page ' + action + ' ran', false, res.error || title); }
   else if (!compare) { total = 1; if (res.meshes) console.log('  ' + JSON.stringify({ focus: res.focus, err: res.err, meshes: res.meshes, thumb: res.thumb })); console.log('  ' + res.rep.join('\n  ')); line(`page ${action} ran (${res.seconds.toFixed(1)} s, renderer ${res.worker})`, true); }
   else {
     const pyOut = path.join(golden, 'py', cs, 'out');

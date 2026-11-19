@@ -117,32 +117,140 @@ def elevation(d):
     return math.degrees(math.asin(-d[1]))
 
 
+TILE_SNAP = 0.35          # task sc4pass2: largest distance of a tile offset from whole pixels that is accepted
+
+
+def compose_tiles(idx, g, meshes, label):
+    """Task sc4pass2 (2026-11-19f): one view drawn as several textured meshes (a tall building: the Global Office
+    Center's zoom-5 views are 12 / 14 meshes, one 256 x 256 texture each). The BAT cut ONE screen render into tiles
+    on a 256-pixel grid (measured on the tower: the tile offsets of a view differ by multiples of 256 to 0.15 px), and
+    every mesh is mapped by the same screen projection plus its tile's offset. So: fit the projection's linear part
+    jointly (each mesh centred on its own means: pixel = L p + t_i), round each tile's offset against the first
+    tile's to whole pixels, paste the tiles into one canvas (a texel replaces the canvas only where its alpha is
+    higher), and give every vertex its own pixel shifted by its tile's offset. The view is then one mesh with one
+    texture, as the one-mesh views are. Plain float arithmetic in a fixed order (sc4web.js composeTiles).
+    -> (P, UV, tris, bitmap {w, h, image, code}, first texture id, tile count)"""
+    pieces = []
+    for P, UV, tris, mat, _mname in meshes:
+        tid = mat['tex'][0]['id']
+        fk = (D.T_FSH, g, tid)
+        if not idx.has(fk):
+            raise ValueError('%s: texture %08X not found' % (label, tid))
+        bm = FS.read_fsh(idx.read(fk))[0]
+        q = [[float(uv[0]) * bm['w'], float(uv[1]) * bm['h']] for uv in UV]
+        pieces.append((P, q, tris, bm, tid))
+    G = [[0.0] * 3 for _ in range(3)]
+    R = [[0.0] * 2 for _ in range(3)]
+    means = []
+    for P, q, _t, _bm, _id in pieces:
+        n = len(P)
+        if not n:
+            raise ValueError('%s: a tile without vertices' % label)
+        mp = [0.0, 0.0, 0.0]
+        mq = [0.0, 0.0]
+        for k in range(n):
+            for c in range(3):
+                mp[c] = mp[c] + float(P[k][c])
+            for c in range(2):
+                mq[c] = mq[c] + q[k][c]
+        mp = [x / n for x in mp]
+        mq = [x / n for x in mq]
+        means.append((mp, mq))
+        for k in range(n):
+            dp = [float(P[k][c]) - mp[c] for c in range(3)]
+            dq = [q[k][c] - mq[c] for c in range(2)]
+            for i in range(3):
+                for j in range(3):
+                    G[i][j] = G[i][j] + dp[i] * dp[j]
+                for j in range(2):
+                    R[i][j] = R[i][j] + dp[i] * dq[j]
+    L = _solve(G, R)
+    ts = [[mq[j] - ((mp[0] * L[0][j] + mp[1] * L[1][j]) + mp[2] * L[2][j]) for j in range(2)] for mp, mq in means]
+    offs = []
+    for t in ts:
+        o = []
+        for j in range(2):
+            x = ts[0][j] - t[j]
+            r = math.floor(x + 0.5)
+            if abs(x - r) > TILE_SNAP:
+                raise ValueError('%s: tile offset %.2f px is not on the pixel grid' % (label, x))
+            o.append(int(r))
+        offs.append(o)
+    x0 = min(o[0] for o in offs)
+    y0 = min(o[1] for o in offs)
+    offs = [[o[0] - x0, o[1] - y0] for o in offs]
+    W = max(o[0] + pc[3]['w'] for o, pc in zip(offs, pieces))
+    H = max(o[1] + pc[3]['h'] for o, pc in zip(offs, pieces))
+    canvas = np.zeros((H, W, 4), dtype=np.uint8)
+    for o, (_P, _q, _t, bm, _id) in zip(offs, pieces):
+        reg = canvas[o[1]:o[1] + bm['h'], o[0]:o[0] + bm['w']]
+        m = bm['image'][:, :, 3] > reg[:, :, 3]
+        reg[m] = bm['image'][m]
+    Pall, UVall, tall = [], [], []
+    for o, (P, q, tris, _bm, _id) in zip(offs, pieces):
+        base = len(Pall)
+        tall += [tuple(base + i for i in t) for t in tris]
+        Pall += [[float(p[0]), float(p[1]), float(p[2])] for p in P]
+        UVall += [[(qq[0] + o[0]) / W, (qq[1] + o[1]) / H] for qq in q]
+    return Pall, UVall, tall, {'w': W, 'h': H, 'image': canvas, 'code': pieces[0][3]['code']}, pieces[0][4], len(pieces)
+
+
 def load_views(idx, b, zoom=4):
-    """-> list of 4 dicts {r, name, P (model frame), P_view, UV, tris, tex (RGBA uint8), tex_id, cam}"""
+    """-> list of 4 dicts {r, name, P (model frame), P_view, UV, tris, tex (RGBA uint8), tex_id, cam, tiles}"""
     t, g, base = b['model']
     out = []
     for r in range(4):
         key = (t, g, base + (zoom << 8) + (r << 4))
+        if not idx.has(key):
+            raise ValueError('%s view %d: S3D %08X not found' % (b['name'], r, key[2]))
         s = S3D(idx.read(key))
         meshes = s.meshes()
-        if len(meshes) != 1 or len(meshes[0][3]['tex']) != 1:
-            raise ValueError('%s view %d: %d meshes, only one textured mesh is read' % (b['name'], r, len(meshes)))
-        P, UV, tris, mat, mname = meshes[0]
-        tid = mat['tex'][0]['id']
-        fk = (D.T_FSH, g, tid)
-        if not idx.has(fk):
-            raise ValueError('%s view %d: texture %08X not found' % (b['name'], r, tid))
-        bm = FS.read_fsh(idx.read(fk))[0]
+        if not meshes or any(len(m[3]['tex']) != 1 for m in meshes):
+            raise ValueError('%s view %d: %d meshes, only meshes with one texture each are read'
+                             % (b['name'], r, len(meshes)))
+        if len(meshes) == 1:
+            P, UV, tris, mat, mname = meshes[0]
+            tid = mat['tex'][0]['id']
+            fk = (D.T_FSH, g, tid)
+            if not idx.has(fk):
+                raise ValueError('%s view %d: texture %08X not found' % (b['name'], r, tid))
+            bm = FS.read_fsh(idx.read(fk))[0]
+            tiles = 1
+        else:                                 # task sc4pass2: a view cut into tiles (tall buildings)
+            P, UV, tris, bm, tid, tiles = compose_tiles(idx, g, meshes, '%s view %d' % (b['name'], r))
+            mat, mname = meshes[0][3], meshes[0][4]
         A, err, d = fit_camera(P, UV, bm['w'], bm['h'])
         dm = to_model(d[None, :], r)[0]
         out.append({'r': r, 'name': VIEW_NAMES[r], 'P_view': np.array(P), 'P': to_model(P, r), 'A': A,
                     'tex_size': (bm['w'], bm['h']),
                     'UV': np.array(UV), 'tris': tris, 'tex': bm['image'], 'tex_id': tid, 'tex_code': bm['code'],
-                    'mesh_name': mname, 'mat': mat,
+                    'mesh_name': mname, 'mat': mat, 'tiles': tiles,
                     'cam': {'fit_err_px': err, 'forward_view': d.tolist(), 'forward_model': dm.tolist(),
                             'azimuth_model': azimuth(dm), 'elevation': elevation(d),
                             'px_per_m': math.sqrt((A[0, 0] * A[0, 0] + A[1, 0] * A[1, 0]) + A[2, 0] * A[2, 0])}})
     return out
+
+
+def model_state(idx, b, zoom=4):
+    """Task sc4pass2: can this building's model be converted? -> ('ok', None); ('missing', why) when the download
+    has no S3D view of it (a lot-only pack: the model is a separate download); ('blank', why) when every texel of
+    every view at that zoom is transparent (a placeholder, the I-M lots' blank.SC4Model: what shows in SC4 there is
+    lot props)."""
+    t, g, base = b['model']
+    keys = [(t, g, base + (zoom << 8) + (r << 4)) for r in range(4)]
+    miss = [k for k in keys if not idx.has(k)]
+    if miss:
+        return 'missing', 'no model in this download (S3D %08X-%08X-%08X)' % miss[0]
+    try:
+        for k in keys:
+            for _P, _UV, _tris, mat, _n in S3D(idx.read(k)).meshes():
+                for tx in mat['tex']:
+                    fk = (D.T_FSH, g, tx['id'])
+                    if idx.has(fk) and FS.read_fsh(idx.read(fk))[0]['image'][:, :, 3].max() > 0:
+                        return 'ok', None
+    except (ValueError, KeyError, IndexError, struct.error):
+        return 'ok', None                 # unreadable: load_views reports why, as before
+    return 'blank', 'a blank placeholder model (every texel transparent)'
 
 
 def match_view(views, slot):

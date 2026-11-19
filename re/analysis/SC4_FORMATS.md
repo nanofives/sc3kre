@@ -55,8 +55,8 @@ is the same RefPack SC3's own DAT files use (bldweb.js `qfsDecompress`).
 
 ## 3. Exemplars, cohorts, LText (`exemplar.py`, `catalog.py`)
 
-Type 0x6534284A (exemplar), 0x05342861 (cohort). Binary form only (`EQZB1###`, cohort `CQZB1###`); the text form
-`EQZT` is not in the pack and is not read.
+Type 0x6534284A (exemplar), 0x05342861 (cohort). Binary form `EQZB1###` (cohort `CQZB1###`) in this pack; the text
+form `EQZT1###` is read since round 2026-11-19f (section 8.1).
 
 | offset | size | field |
 |---|---|---|
@@ -216,3 +216,94 @@ stock buildings').
 What the rebuild cannot do: give the SC3 camera's 30-degree view of surfaces SC4 saw at 45 degrees (the roofs look
 steeper and shorter than drawn for SC3), show what the BAT render did not (the far side of a porch), or keep the SC4
 light direction consistent with SC3's axis light (BUILDING_ART.md 4.1).
+
+## 8. More packs (round 2026-11-19f, stream sc4pass2)
+
+Three more of the owner's downloads, local only: Global Office Center (a 251 m office tower, 6 DBPF files),
+DiegoDL Growable Pack 2019 (46 files, lots + descriptions only), I-M manufacturers lots (8 files, lots + a blank
+model). Counts below are from those files. Readers: the same modules, plus `views.compose_tiles` / `model_state`,
+`catalog.others`, `sc4conv.pack_notes` / `readme_deps`; the page runs the same steps (`sc4web.js`).
+
+### 8.1 Text exemplars (`exemplar.parse_text_exemplar`)
+
+Every exemplar of the DiegoDL pack (46 of 46) and the tower's two descriptor files (2 of 7 exemplars; its lot files
+are binary) are the text form. Latin-1 text, CR LF lines:
+
+```
+EQZT1###
+ParentCohort=Key:{0x00000000,0x00000000,0x00000000}
+PropCount=0x00000017
+0x27812810:{"Occupant Size"}=Float32:3:{55.068001,251.145996,38.369999}
+0x00000020:{"Exemplar Name"}=String:1:{"DiegoDL_555CaliforniaStreet"}
+0x27812832:{"Wealth"}=Uint8:0:{0x03}
+```
+
+`<id>:{"<name>"}=<Type>:<count>:{<values>}`. Types seen: Uint8, Uint32, Sint32, Sint64, Float32, Bool, String.
+Count 0 = one value, otherwise a list; a String is one quoted value with count 0 (tower) or 1 (DiegoDL). Integers
+are hex, floats decimal (read as float32, which is what the binary form stores), Bool `True` / `False`. The name in
+braces is the authoring tool's label and is not used (it differs between packs: "Pollution at center" / "at
+centre"). The reader gives the same dict as the binary reader; 60 of 60 exemplars of the three packs read the same in
+Python and in the page (`webtest/sc4_packs.mjs`).
+
+**One-value lists.** The I-M descriptor is binary but stores exemplar type, wealth, purpose (and most other single
+values) with key type 0x80 and count 1: `0x00000010 = [2]`. `catalog.sc` takes the value out of a one-element list for
+the exemplar type, wealth and purpose.
+
+### 8.2 A tall building's view is cut into tiles (`views.compose_tiles`)
+
+The tower's S3D views have 1 mesh at zooms 1-2, 2 at zoom 3, 3-4 at zoom 4 and **12 (S, N) or 14 (W, E) at zoom 5**,
+each mesh with its own 256 x 256 DXT3 texture (82 day textures over the 20 views). Each mesh is one or a few faces of
+the box (planar: a per-mesh camera fit is singular on 7 of 14). A joint fit, one linear projection for all meshes of
+a view plus a pixel offset per mesh, fits every vertex to 0.59 px or better, and the offsets of one view differ by
+multiples of 256 to within 0.15 px (view S: x 237.26 / -18.84, y 1384.03, 1128.18, 872.18, 616.08, 360.14, 104.12).
+So the BAT rendered one screen picture and cut it on a 256-pixel grid; the texels outside each mesh's triangles are
+transparent (at most 145 opaque texels outside, of 44,000 inside). The converter pastes the tiles into one canvas per
+view (512 x 1536 for S / N, 512 x 1792 for W / E) and re-maps the uv; from there the view is a one-mesh view. The
+fitted camera is the JMyers one: elevation 44.99-45.00 degrees, azimuth 22.5 off the axis, 6.97-6.99 px per metre.
+
+**Night textures:** 82 more FSH at instance + 0x8000 (`00038000` for `00030000`), the same sizes; no S3D mesh names
+them (the game swaps them at night). SC3 has no night, so they are not read.
+
+### 8.3 Ploppable and landmark versions (`catalog.others`, `sc4conv.pack_notes`)
+
+The tower comes as three lots of the same size (4 x 3 tiles):
+
+| lot | its building (type 0 row) | the tower |
+|---|---|---|
+| Global Office Center (growable, stage 8, zone types [6], purpose [3]) | text exemplar `Global Office Center`, model key `5AD0E817-3352A0BB-00030000`, wealth 3, purpose 3, capacity CO$$ 3500 + CO$$$ 3000 | the building's own model |
+| Global Office Center Jobs (stage 7, zone types empty) | binary exemplar `Global Office Center - Jobs`, occupant size 1 x 0 x 1, no model key, parent cohort `05342861-CA386E22-0A64ED55`, capacity {0x3130, 3150} | a lot prop (type 1 row) naming prop exemplar `9355BAB7` (type 0x1E, the same model key) |
+| Global Office Center Landmark (stage 7) | `JP Stevens Company Tower - Landmark` (its LText: "Global Office Center - Landmark"), no model, property 0x2781284F = [85, 75] | the same prop |
+
+So a building without a model key whose lot holds a prop with a converted building's model is reported as that
+building's "ploppable" (or "landmark", when the building has 0x2781284F) version, in `x_sc4.versions`. SC3 grows
+buildings only, so they are named, not converted.
+
+### 8.4 Lot-only packs (`views.model_state`)
+
+- **DiegoDL**: 23 building exemplars with model keys in 21 groups (`897D9EFB` ...; the two Bacata pairs share) that no file of the download holds
+  (no S3D, no FSH: the 46 files are 23 `.SC4Lot` + 23 `.SC4Desc`). `model_state` = `missing`. The readme
+  (`readme_2019_vanilla.html`) has a "Dependency Listing" `<ul>` of 20 links to the models on Simtropolis (BD Bacata's
+  one link covers its two buildings, ...): `readme_deps` quotes it.
+- **I-M**: one building exemplar `!I§§--1542 jobs` (purpose 7, manufacturing), model `713D210C`, which
+  `blank.SC4Model` holds as 20 one-mesh views whose 4 x 4 DXT1 textures are all transparent (alpha 0 on every texel):
+  `model_state` = `blank`. The 6 lots (9 x 8 tiles) use that building and show 1,105 lot props (97 distinct ids):
+  the visible factory is props.
+
+Neither converts; `sc4conv.py` prints the report and writes nothing (exit 3); the page shows the same lines.
+
+### 8.5 The BSC Common Dependencies Pack (V9e, report only)
+
+`SC4D LEX Legacy - BSC Common Dependencies Pack V9e.zip` (1.7 GB): one LEX installer jar (1,636,901,067 bytes,
+deflated in the zip) holding 168 `.dat` files under `installation/@1BSC`, `@2CSX`, `@3!Maxis Original`, 32 Java
+classes, readmes. Over the 168 files: 297,896 S3D, 492,103 FSH, 18,850 exemplars + 1,492 cohorts, 11,673 type
+0x88777601 (BAT XML descriptions), 4,295 LText. Prop exemplars (type 0x1E): 18,850 instance keys, 1,837 prop
+family ids (property 0x27812870).
+
+S3D shapes (every model, every zoom and rotation): 256,284 one mesh of 7 vertices (the box-and-picture of section 6),
+27,680 one mesh of another shape, 5,879 two meshes, 7,982 three or more. 66 entries are not `3DMD`, 3 have REGP
+entries, 2 fail the reader. FSH codes: 0x61 (DXT3) 271,839, 0x60 (DXT1) 219,785, 0x7D 47.
+
+Lot props resolved against it: the I-M lots' 97 distinct prop ids, 61 are BSC prop instances, 36 are in neither the
+download nor the BSC pack; the tower lots' 9 prop ids (`2AC20000` .. `2CB00000` and the tower's own prop), 0 are in
+the BSC pack. [UNCERTAIN: where the unresolved ids live; the SC4 game files were not read, no SC4 install here.]
+Feasibility: verify/sc4pass2/RESULTS.md section 4.
