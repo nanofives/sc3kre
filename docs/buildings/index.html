@@ -262,7 +262,7 @@ footer a { color: var(--ui-info-text); }
 <ol>
   <li>Open the importer in Chrome or Edge and select <b>Open SC4 .zip</b>. Pick the downloaded <code>.zip</code>, or the <code>.jar</code> inside it.</li>
   <li>Or select <b>Open folder</b> and pick a folder with SimCity 4 files (subfolders are read too). The page then saves <code>models.json</code> and <code>sc3build\ids.json</code> in that folder, so your choices and the building ids stay for the next time.</li>
-  <li>The grid shows one card per building, grouped by design, with the name, class and lot taken from the SimCity 4 data. Packs often hold the same house in several colours: one colour of each design is on, the others are off. Switch them on or off in the panel, as for any model.</li>
+  <li>The grid shows one card per building, grouped by design, with the name, class and lot taken from the SimCity 4 data. Packs often hold the same house in several colours: one colour of each design is on, the others are off. Houses the author set at 45 degrees (often on corner lots) are off in every colour and carry a <b>diagonal</b> badge: SimCity 3000 has no diagonal buildings, so they look turned among the stock houses. Switch them on or off in the panel, as for any model.</li>
   <li>Choose the game folder and select <b>Install into the game</b>, as in <a href="#install">Installing</a>. Remove works the same way.</li>
 </ol>
 <p>Opened from a <code>.zip</code>, the page has no folder to save your choices in. Select <b>Save models.json</b> to download them, and next time pick that <code>models.json</code> together with the <code>.zip</code>.</p>
@@ -274,6 +274,7 @@ footer a { color: var(--ui-info-text); }
   <li><b>Roofs seen from higher up.</b> SimCity 4 looks down at 45 degrees, SimCity 3000 at 30. In each view one wall is stretched sideways and shows less detail.</li>
   <li><b>No lot props.</b> The trees, fences, cars and lot textures of a SimCity 4 lot come from other packs and are not converted. The house stands centred on plain lawn, and the yard is left out.</li>
   <li><b>Softer than a 3D model.</b> The pictures are redrawn, not rebuilt, so edges are softer than in the stock art. Where the SimCity 4 camera could not see (around porches and wings), the page fills in with pieces of the same picture.</li>
+  <li><b>No diagonal houses.</b> The page tells a house set at 45 degrees from its SimCity 4 foundation model and leaves it off. Buildings without a foundation model are not checked.</li>
   <li>Commercial, industrial and other buildings get no class and stay off. Give one a class in the panel to try it.</li>
   <li><code>baked</code> brightens the SimCity 4 art to sit with the stock buildings. For SimCity 4's own brightness, set <code>"x_bldrender": {"style": "baked_raw"}</code> in the entry. It looks darker than the stock neighbours.</li>
   <li>Parts the page cannot read (other model formats, several meshes in one view) skip that building with a line in the log. A download that holds only props or textures has no buildings to convert.</li>

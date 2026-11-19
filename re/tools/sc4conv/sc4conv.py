@@ -25,6 +25,11 @@ What one SC4 building becomes (re/analysis/SC4_FORMATS.md 7, decision renders in
                capacity (class_for), lot from the footprint (lot_for), height_m from the occupant size, weight 1,
                x_bldrender.style = 'baked' (the light is painted into the SC4 texture) unless --style says otherwise,
                x_sc4 = where it came from. One colour per design is enabled (the k-th design its k-th colour, for variety) unless --all.
+
+Diagonal buildings (task sc4diag, 2026-11-19c): a house the SC4 author set at 45 degrees on its lot (its foundation
+model's outline runs at 45 degrees, views.foundation_diagonal) is written with enabled false and a note, also with
+--all, since SC3 has no diagonal buildings; a design whose picked colour is diagonal gets a non-diagonal colour
+instead when it has one (pick_colours). --diagonal keeps them as any other building.
 """
 import argparse
 import json
@@ -93,7 +98,27 @@ def stem_of(name):
     return re.sub(r'[^A-Za-z0-9]+', '_', name).strip('_')
 
 
-def write_building(idx, b, out, enabled, style, fill=True):
+def pick_colours(groups, is_diag):
+    """groups: [members] per design in first-seen order -> the member enabled per design (or None). The k-th
+    design its k-th colour; task sc4diag: when that one is diagonal, the k-th of its non-diagonal colours, and none
+    when every colour is diagonal."""
+    out = []
+    for k, members in enumerate(groups):
+        c = members[k % len(members)]
+        if is_diag(c):
+            ok = [m for m in members if not is_diag(m)]
+            c = ok[k % len(ok)] if ok else None
+        out.append(c)
+    return out
+
+
+def diag_note(dg):
+    return ('Diagonal, off by default: the SC4 author set this house at 45 degrees on its lot (its foundation %s'
+            ' runs at 45 degrees for %d%% of its outline), and SC3 has no diagonal buildings. '
+            % (dg['foundation'], int(round(dg['share_45'] * 100))))
+
+
+def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=False):
     vs = V.load_views(idx, b, ZOOM5)
     stem = stem_of(b['name'])
     obj = ['# %s, converted from SimCity 4 by sc4conv.py (local use only: see the pack licence)' % b['name'],
@@ -134,11 +159,12 @@ def write_building(idx, b, out, enabled, style, fill=True):
     design, colour = design_of(b['name'])
     title = (b['title'] or b['name']).splitlines()[0].strip().rstrip(',')
     sc4lots = sorted({'%dx%d' % tuple(sorted(l['size'])) for l in b['lots']})
+    diag = bool(dg and dg['diagonal'])
     entry = {
         'file': stem + '.obj', 'name': title, 'kind': 'growable', 'class': cls, 'lot': [n, n], 'weight': 1,
         'height_m': round(b['size_m'][1], 2), 'scale': 1.0, 'rotate_deg': 0, 'style': 'any',
-        'enabled': bool(enabled and cls is not None),
-        'notes': '%s. SC4 lots %s, the SC3 lot keeps the house (%.1f x %.1f m) and drops the yard.'
+        'enabled': bool(enabled and cls is not None and (keep_diag or not diag)),
+        'notes': (diag_note(dg) if diag else '') + '%s. SC4 lots %s, the SC3 lot keeps the house (%.1f x %.1f m) and drops the yard.'
                  % (why, ', '.join(sc4lots) or 'none', b['size_m'][0], b['size_m'][2]),
         'x_bldrender': {'style': style},
         'x_sc4': {'exemplar': b['name'], 'design': design, 'colour': colour,
@@ -147,6 +173,8 @@ def write_building(idx, b, out, enabled, style, fill=True):
                   'capacity': [['%04X' % g, c] for g, c in b['capacity']],
                   'family': ['%08X' % f for f in b['families']], 'size_m': [round(x, 3) for x in b['size_m']],
                   'lots': [{'size': l['size'], 'stage': l['stage'], 'name': l['name']} for l in b['lots']],
+                  'diagonal': diag,
+                  'foundation': ({'name': dg['foundation'], 'share_45': round(dg['share_45'], 2)} if dg else None),
                   'views': {'slot%d' % s: V.match_view(vs, s)['name'] for s in range(4)},
                   'camera': {v['name']: {'azimuth': round(v['cam']['azimuth_model'], 2),
                                          'elevation': round(v['cam']['elevation'], 2),
@@ -163,6 +191,8 @@ def main(argv):
     ap.add_argument('--style', default='baked', help='bldrender style written into x_bldrender (default baked)')
     ap.add_argument('--only', help='comma list of exemplar names or designs to convert')
     ap.add_argument('--list', action='store_true')
+    ap.add_argument('--diagonal', action='store_true',
+                    help='treat buildings set at 45 degrees as any other (default: written off, with a note)')
     ap.add_argument('--no-fill', action='store_true',
                     help='leave out the hidden back walls + floor of each view box (cut-outs then show the lot)')
     a = ap.parse_args(argv[1:])
@@ -172,10 +202,16 @@ def main(argv):
     if a.only:
         want = {x.strip().lower() for x in a.only.split(',')}
         bs = [b for b in bs if b['name'].lower() in want or design_of(b['name'])[0].lower() in want]
+    diag = {b['tgi']: V.foundation_diagonal(idx, b) for b in bs}
+    is_diag = (lambda b: False) if a.diagonal else (lambda b: bool(diag[b['tgi']] and diag[b['tgi']]['diagonal']))
     if a.list or not a.out:
         for b in bs:
-            print('  %-32s %-30s class %s lot %dx%d' % (b['name'], (b['title'] or '').splitlines()[0][:30],
-                                                       class_for(b)[0], lot_for(b), lot_for(b)))
+            dg = diag[b['tgi']]
+            print('  %-32s %-30s class %s lot %dx%d %s' % (b['name'], (b['title'] or '').splitlines()[0][:30],
+                                                          class_for(b)[0], lot_for(b), lot_for(b),
+                                                          'foundation not read' if dg is None else
+                                                          '%s 45-degree outline %.2f%s' % (dg['foundation'], dg['share_45'],
+                                                                                           ', DIAGONAL' if dg['diagonal'] else '')))
         return 0
     os.makedirs(a.out, exist_ok=True)
     mj = os.path.join(a.out, 'models.json')
@@ -188,13 +224,13 @@ def main(argv):
     for b in bs:
         fam.setdefault(tuple(b['families']) or design_of(b['name'])[0].lower(), []).append(b)
     pick = {}
-    for k, (d, members) in enumerate(fam.items()):
-        pick[d] = members[k % len(members)]['tgi']
+    for d, c in zip(fam, pick_colours(list(fam.values()), is_diag)):
+        pick[d] = c['tgi'] if c is not None else None
     for b in bs:
         design = tuple(b['families']) or design_of(b['name'])[0].lower()
         first = pick[design] == b['tgi']
         try:
-            e = write_building(idx, b, a.out, a.all or first, a.style, not a.no_fill)
+            e = write_building(idx, b, a.out, a.all or first, a.style, not a.no_fill, diag[b['tgi']], a.diagonal)
         except ValueError as ex:
             print('  skip %s: %s' % (b['name'], ex))
             continue
@@ -207,11 +243,13 @@ def main(argv):
                 if k in o and k in prev and o[k] != prev[k]:
                     e[k] = o[k]
         models.append(e)
-        print('  %-32s -> %-36s class %s lot %s %s' % (b['name'], e['file'], e['class'], e['lot'],
-                                                     'enabled' if e['enabled'] else ''))
+        print('  %-32s -> %-36s class %s lot %s %s%s' % (b['name'], e['file'], e['class'], e['lot'],
+                                                       'enabled' if e['enabled'] else '',
+                                                       ' diagonal' if e['x_sc4']['diagonal'] else ''))
     with open(mj, 'w', encoding='utf-8', newline='\n') as fh:
         json.dump({'sc3models': 1, 'models': models}, fh, indent=1)
-    print('%d models, %d enabled -> %s' % (len(models), sum(m['enabled'] for m in models), mj))
+    print('%d models, %d enabled, %d diagonal -> %s' % (len(models), sum(m['enabled'] for m in models),
+                                                       sum(m['x_sc4']['diagonal'] for m in models), mj))
     return 0
 
 

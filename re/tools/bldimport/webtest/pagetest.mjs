@@ -86,12 +86,14 @@ try {
   else {
     const pyOut = path.join(golden, 'py', cs, 'out');
     const want = walk(pyOut);
-    total = want.length + 4 + (res.sc4 ? 2 : 0);
+    total = want.length + 4 + (res.sc4 ? 3 : 0);
     if (res.sc4) {
       const s4 = res.sc4, pm = JSON.parse(fs.readFileSync(path.join(golden, 'src', cs, 'models.json'), 'utf8')).models;
       const designs = new Set(pm.map(m => m.x_sc4 && m.x_sc4.design)).size;
       console.log(`  page SC4: converted + grid in ${s4.seconds.toFixed(1)} s. ${s4.status}`);
       line(`page grid: ${s4.cards} SC4 cards, ${s4.enabled} on, ${s4.groups} design groups`, s4.recs === pm.length && s4.cards === pm.length && s4.enabled === pm.filter(m => m.enabled).length && s4.groups === designs && !s4.errors.length, s4.errors.join('; '));
+      const pd = pm.filter(m => m.x_sc4 && m.x_sc4.diagonal).map(m => m.file).sort();
+      line(`page marks the ${s4.diag} diagonal cards (badge + reason)`, JSON.stringify([...s4.diagFiles].sort()) === JSON.stringify(pd) && /45 degrees/.test(s4.diagTitle), s4.diagTitle.slice(0, 120));
       line('page shows the SC4 licence rule', /never share the converted buildings without the author's permission/.test(s4.note), s4.note.slice(0, 140));
     }
     console.log(`  page: ${res.seconds.toFixed(1)} s, renderer ${res.worker}, ${res.resultRows} result rows, "${res.progressShown}"`);

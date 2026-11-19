@@ -13,6 +13,11 @@
 //      rerun models.json (golden py\sc4\rerun)
 //   4. bldweb.buildFiles over the converted files in memory (the page's overlay folder) against
 //      `bldimport.py pack --out` of the Python output: every game file, sc3build\ids.json, --frames every frame
+//   task sc4diag (2026-11-19c), after 3:
+//   3a. diagonal buildings (set at 45 degrees in SC4, from the foundation model): every one written off with the note,
+//       no design left on a diagonal colour while it has a straight one, the counts printed per design
+//   3b. convert({ diagonal: true }) gives sc4conv.py --diagonal's models.json (golden py\sc4\diagonal)
+//   3c. pickColours on made-up designs that mix diagonal and straight colours = sc4conv.pick_colours (pick_cases.json)
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -52,7 +57,7 @@ const pyFiles = walk(pyConv).filter(f => !f.startsWith('sc3build/'));
 const pyModels = JSON.parse(fs.readFileSync(path.join(pyConv, 'models.json'), 'utf8')).models;
 const pyOut = path.join(golden, 'py', 'sc4', 'out');
 const outFiles = walk(pyOut);
-let total = pyModels.length + 2 + 1 + 1 + outFiles.length + 1 + (wantFrames ? 1 : 0), k = 0, bad = 0;
+let total = pyModels.length + 2 + 1 + 3 + 1 + outFiles.length + 1 + (wantFrames ? 1 : 0), k = 0, bad = 0;
 const line = (what, ok, extra = '') => { k++; bad += !ok; console.log(`[${k}/${total}] ${what} ${ok ? 'PASS' : 'FAIL'}${extra ? ' ' + extra : ''}`); };
 
 // 1. the .zip
@@ -93,6 +98,34 @@ const convF = await W.convert(await W.sourcesFrom(fileInputs(folderPath)), {});
   const r = await W.convert(await W.sourcesFrom(zipIn), { old });
   const want = fs.readFileSync(path.join(golden, 'py', 'sc4', 'rerun', 'models.json'));
   line('rerun keeps the page edits (models.json vs sc4conv.py rerun)', eqBytes(want, r.files.get('models.json')), `${want.length} bytes`);
+}
+
+// 3a-3c. diagonal buildings (task sc4diag)
+{
+  const ms = conv.models, bad = [];
+  const byDesign = new Map();
+  for (const m of ms) { const d = m.x_sc4.design; if (!byDesign.has(d)) byDesign.set(d, []); byDesign.get(d).push(m); }
+  for (const m of ms) {
+    if (m.x_sc4.diagonal && m.enabled) bad.push(m.file + ' diagonal but on');
+    if (m.x_sc4.diagonal && !/^Diagonal, off by default: /.test(m.notes)) bad.push(m.file + ' no note');
+    if (!m.x_sc4.diagonal && /^Diagonal/.test(m.notes)) bad.push(m.file + ' note on a straight building');
+  }
+  const rows = [];
+  for (const [d, list] of byDesign) {
+    const nd = list.filter(m => m.x_sc4.diagonal).length, on = list.filter(m => m.enabled).length;
+    if (nd < list.length && on !== 1) bad.push(d + ': ' + on + ' on, want 1 straight colour');
+    if (nd === list.length && on) bad.push(d + ': every colour diagonal but ' + on + ' on');
+    rows.push(`${d} ${nd}/${list.length}${nd ? ' diagonal' : ''}`);
+  }
+  console.log('  ' + rows.join(', '));
+  const nd = ms.filter(m => m.x_sc4.diagonal).length;
+  line(`diagonal buildings off with the note (${nd} of ${ms.length}, ${ms.filter(m => m.enabled).length} on)`, !bad.length && nd > 0, bad.slice(0, 5).join('; '));
+  const r = await W.convert(await W.sourcesFrom(zipIn), { diagonal: true });
+  const want = fs.readFileSync(path.join(golden, 'py', 'sc4', 'diagonal', 'models.json'));
+  line(`--diagonal route (models.json vs sc4conv.py --diagonal, ${r.models.filter(m => m.enabled).length} on)`, eqBytes(want, r.files.get('models.json')), `${want.length} bytes`);
+  const pc = JSON.parse(fs.readFileSync(path.join(golden, 'py', 'sc4', 'pick_cases.json'), 'utf8'));
+  const got = W.pickColours(pc.groups, m => m[1] === 1).map(c => c ? c[0] : null);
+  line(`colour pick on mixed designs (${pc.groups.length} designs: ${got.map(x => x || '-').join(' ')})`, JSON.stringify(got) === JSON.stringify(pc.picked), JSON.stringify(pc.picked));
 }
 
 // 4. render + pack from the converted files in memory

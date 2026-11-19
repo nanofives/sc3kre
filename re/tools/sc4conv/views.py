@@ -16,6 +16,7 @@ hold the model turned so that view-space (x, z) = model (x, z) turned r quarter 
 Model frame here = SC4 view 0 ('S'): x, y up, z, metres. Its camera is at azimuth +22.5 degrees from +z towards +x.
 """
 import math
+import struct
 import os
 import sys
 
@@ -191,3 +192,83 @@ def hidden_faces(v, floor_y=0.05):
     for k in range(len(quads)):
         tris += [(4 * k, 4 * k + 1, 4 * k + 2), (4 * k, 4 * k + 2, 4 * k + 3)]
     return to_model(P, v['r']), UV, tris
+
+
+# ---------------------------------------------------------------------------------------------------- task sc4diag
+# Diagonal (45 degree) buildings, round 2026-11-19c. SC4 lots turn a building in quarter turns only (lot object
+# word 2, rotation 0-3, SC4_FORMATS.md 3), so a house the BAT author set at 45 degrees is drawn turned inside its
+# axis-aligned box and no lot field says so. Its FOUNDATION model does: the building exemplar's 0x88FCD877 names a
+# foundation exemplar (type 0x11, group 0x361CF9D5) whose S3D mesh is real geometry (24-125 vertices, not the view
+# box), and on the JMyers pack its outline runs either along the box axes (12 designs) or at 45 degrees (6 designs):
+# share of the outline at 26.6-63.4 degrees 0.00-0.06 against 1.00 (verify/sc4diag/RESULTS.md).
+FND_GROUP = 0x361CF9D5
+DIAG_SHARE = 0.5          # a foundation whose outline runs at 45 degrees for at least half its length is diagonal
+
+
+def _cross(P, t):
+    a, b, c = P[t[0]], P[t[1]], P[t[2]]
+    u = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    v = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+    return (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+
+
+def outline_share_45(P, tris):
+    """Share of the length of a mesh's horizontal outline edges that runs diagonally. -> (share, length) or None.
+    Outline = an edge with one triangle, or more than two, or two that are not coplanar (a flat quad's own diagonal
+    is not outline). Horizontal = the ends differ by at most 0.05 m in height, length >= 0.05 m. Diagonal = the
+    shorter of |dx|, |dz| is at least half the longer (26.6-63.4 degrees from an axis). Plain float arithmetic,
+    edges in first-seen order (sc4web.js runs the same steps)."""
+    edges = {}
+    for ti, t in enumerate(tris):
+        for i in range(3):
+            a, b = tuple(P[t[i]]), tuple(P[t[(i + 1) % 3]])
+            k = (a, b) if a <= b else (b, a)
+            edges.setdefault(k, []).append(ti)
+    tot = diag = 0.0
+    for (a, b), ts in edges.items():
+        if len(ts) == 2:
+            n1, n2 = _cross(P, tris[ts[0]]), _cross(P, tris[ts[1]])
+            d = (n1[0] * n2[0] + n1[1] * n2[1]) + n1[2] * n2[2]
+            l1 = (n1[0] * n1[0] + n1[1] * n1[1]) + n1[2] * n1[2]
+            l2 = (n2[0] * n2[0] + n2[1] * n2[1]) + n2[2] * n2[2]
+            if d > 0 and d * d >= 0.998 * (l1 * l2):
+                continue
+        dx, dy, dz = abs(b[0] - a[0]), abs(b[1] - a[1]), abs(b[2] - a[2])
+        ln = math.sqrt(dx * dx + dz * dz)
+        if dy > 0.05 or ln < 0.05:
+            continue
+        tot += ln
+        if min(dx, dz) >= 0.5 * max(dx, dz):
+            diag += ln
+    return (diag / tot, tot) if tot > 0 else None
+
+
+def foundation_diagonal(idx, b, zoom=4):
+    """-> {'diagonal': bool, 'foundation': exemplar name, 'share_45': float} from the building's foundation model
+    (rotation 0 view at that zoom), or None when the building names no foundation or it cannot be read."""
+    inst = b.get('foundation')
+    if not isinstance(inst, int) or isinstance(inst, bool):
+        return None
+    k = (D.T_EXEMPLAR, FND_GROUP, inst & 0xFFFFFFFF)
+    if not idx.has(k):
+        return None
+    try:
+        ex = idx.exemplar(k)
+        rk = ex['props'].get(0x27812821)
+        rk = rk[1] if rk else None
+        if not isinstance(rk, list) or len(rk) < 3 or rk[0] != D.T_S3D:
+            return None
+        key = (rk[0], rk[1], rk[2] + (zoom << 8))
+        if not idx.has(key):
+            return None
+        P, tris = [], []
+        for mP, _uv, mt, _mat, _n in S3D(idx.read(key)).meshes():
+            tris += [tuple(len(P) + i for i in t) for t in mt]
+            P += [list(p) for p in mP]
+    except (ValueError, KeyError, IndexError, struct.error):
+        return None
+    r = outline_share_45(P, tris)
+    if r is None:
+        return None
+    name = ex['props'].get(0x20)
+    return {'diagonal': r[0] >= DIAG_SHARE, 'foundation': name[1] if name else '%08X' % k[2], 'share_45': r[0]}
