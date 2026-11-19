@@ -422,6 +422,10 @@ textarea#rules{height:calc(208 * var(--u));font:calc(10.5 * var(--u))/calc(14 * 
 .hint{color:var(--muted);font:var(--ui-type-row);letter-spacing:var(--ui-ls-row);margin:calc(3 * var(--u)) 0}
 label.hint{font:var(--ui-type-ui);letter-spacing:var(--ui-ls-ui)}
 .grp{grid-column:1/-1;font:var(--ui-type-name);letter-spacing:var(--ui-ls-name);color:var(--muted);margin-top:calc(4 * var(--u));border-bottom:1px solid var(--line)}
+.packbox{background:var(--panel);border:1px solid var(--line);padding:calc(5 * var(--u)) calc(8 * var(--u));margin:calc(6 * var(--u)) 0}
+.packbox .tools h2{margin:0}
+.packbox tr.sc3pack-missing td{color:var(--warn)}
+.packbox .ui-table td{overflow-wrap:anywhere}
 .sc4note{background:var(--panel);border:1px solid var(--line);padding:calc(5 * var(--u)) calc(8 * var(--u));margin:calc(6 * var(--u)) 0;font:var(--ui-type-row);letter-spacing:var(--ui-ls-row)}
 .empty{padding:calc(30 * var(--u)) calc(8 * var(--u));text-align:center;color:var(--muted);grid-column:1/-1;border:1px dashed var(--line);background:var(--panel)}
 pre#selftest,pre#bldtest{display:none}
@@ -453,6 +457,7 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:var(--ui-type-row);li
 <script src="bldweb.js"></script>
 <script src="sc4web.js"></script>
 <script src="sc3font.js"></script>
+<script src="sc3pack.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -465,11 +470,15 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:var(--ui-type-row);li
   <h1>SC3 Model Classifier</h1>
   <button id="btnOpen" class="primary">Open folder</button>
   <button id="btnSc4" title="A SimCity 4 download as you got it: the .zip, or the .jar installer inside it (LEX), or its .dat files">Open SC4 .zip</button>
+  <button id="btnPack" title="A SimCity 3000 building pack as you downloaded it (.zip): what is in it, which Building Architect parts each .bld needs, and those parts installed into Apps\BACustom">Open SC3 pack</button>
   <button id="btnSave" disabled>Save models.json</button>
   <span id="status">Open a folder with OBJ, glTF, GLB or FBX models or Building Architect .bld files. An existing models.json is read back.</span>
 </header>
 <input type="file" id="fileFallback" webkitdirectory multiple hidden>
 <input type="file" id="gameFallback" webkitdirectory multiple hidden>
+<input type="file" id="packZip" accept=".zip" hidden>
+<input type="file" id="packDir" webkitdirectory multiple hidden>
+<input type="file" id="packGame" webkitdirectory multiple hidden>
 <input type="file" id="sc4Files" accept=".zip,.jar,.dat,.sc4desc,.sc4lot,.sc4model,.json" multiple hidden>
 
 <div class="app">
@@ -494,6 +503,14 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:var(--ui-type-row);li
       <details id="logBox"><summary>Log</summary><pre id="log"></pre></details>
     </div>
     <div class="sc4note" id="sc4Note" hidden></div>
+    <div class="packbox" id="packBox" hidden>
+      <div class="tools"><h2 id="packTitle">SC3 pack</h2>
+        <button id="btnPackDir" title="The pack unpacked into a folder, instead of its .zip">Open a pack folder</button>
+        <button id="btnPackBld" hidden>Show its buildings here</button>
+        <button id="btnPackClose">Close</button></div>
+      <div class="hint" id="packHint"></div>
+      <div id="packView"></div>
+    </div>
     <div class="tools">
       <input type="text" id="filter" placeholder="Filter by name or file">
       <button id="btnAll">Select all</button>
@@ -1037,6 +1054,99 @@ $('sc4Files').onchange = async ev => {
   try { await openSc4(W4.fileInputs(files), { name: files.filter(f => !/\.json$/i.test(f.name)).map(f => f.name).join(', '), oldText: json ? await json.text() : null }); }
   catch (e) { console.error(e); setStatus('Could not convert: ' + (e.message || e)); }
 };
+// ---------------------------------------------------------------- SC3 building packs (task sc3compat-b, sc3pack.js)
+// A pack as downloaded (.zip, zip in zip, or a folder): its files sorted, the Building Architect parts every .bld needs
+// (embedded, game, this pack, missing), and the pack's parts installed into Apps\BACustom with backups
+// (mods\netmod\sc3pack). Read on this PC only. The .bld files can then be shown in the grid like any models folder.
+const PK = window.SC3PACK;
+const P3 = { ents: null, name: '' };
+async function packGameView() {            // the chosen game folder, when the page may read it
+  if (!G.handle) return null;
+  try { if ((await G.handle.queryPermission({ mode: 'read' })) !== 'granted' && (await G.handle.requestPermission({ mode: 'read' })) !== 'granted') return null; }
+  catch (e) { return null; }
+  return BW.handleFS(G.handle);
+}
+let packZipMode = null;
+async function drawPack(note) {
+  const game = await packGameView();
+  const rep = await PK.report(P3.ents, game);
+  $('packTitle').textContent = 'SC3 pack ' + P3.name;
+  const nb = rep.buildings.filter(b => !b.error).length;
+  $('btnPackBld').hidden = !nb; $('btnPackBld').textContent = 'Show its ' + nb + ' building' + (nb === 1 ? '' : 's') + ' here';
+  $('packHint').textContent = (note ? note + ' ' : '') + (game ? 'Parts checked against ' + G.handle.name + '\\Apps\\Res\\BA and Apps\\BACustom. Close the Building Architect before installing parts: it reads them when it starts.'
+    : 'Choose the Game folder to check the parts against the game and install them.');
+  PK.view(document, $('packView'), rep, { pack: P3.name, onInstall: (ow, kinds) => installPack(ow, kinds), onRemove: () => removePack() });
+  if (!game && rep.files.some(f => f.kind === 'part')) {   // no folder access: the same install through a .zip of the files
+    const b = document.createElement('button'); b.textContent = 'Read the game folder for an install .zip';
+    b.onclick = () => { packZipMode = 'install'; $('packGame').click(); };
+    $('packView').appendChild(b);
+  }
+  return rep;
+}
+async function openPack(ents, name) {
+  P3.ents = ents; P3.name = name;
+  $('packBox').hidden = false;
+  const rep = await drawPack();
+  setStatus(`SC3 pack ${name}: ` + Object.entries(rep.counts).map(([k, v]) => v + ' ' + k + (v === 1 ? '' : 's')).join(', ') + '.');
+  $('packBox').scrollIntoView({ block: 'start' });
+  return rep;
+}
+function packLog(res, what) {
+  log('--- ' + what + ' ' + P3.name);
+  for (const [p, w] of res.log) log(p + ': ' + w);
+  return res.log.filter(([, w]) => /^(installed|replaced|put back|removed)/.test(w)).length;
+}
+async function installPack(ow, kinds) {
+  if (!G.handle || !(await permitted(G.handle))) { setStatus('The page needs write access to the game folder: choose it with Game folder.'); return; }
+  await runBusy(async () => {
+    const res = await PK.install(BW.handleFS(G.handle), P3.ents, P3.name, ow, kinds);
+    const n = packLog(res, 'install parts of');
+    const left = res.log.filter(([, w]) => /^(conflict|skipped)/.test(w)).length;
+    await drawPack(`${n} part file${n === 1 ? '' : 's'} written into Apps\\BACustom` + (left ? `, ${left} left out (see the Log)` : '') + '.');
+  });
+}
+async function removePack() {
+  if (!G.handle || !(await permitted(G.handle))) { setStatus('The page needs write access to the game folder.'); return; }
+  await runBusy(async () => {
+    const res = await PK.remove(BW.handleFS(G.handle));
+    const n = packLog(res, 'remove parts');
+    await drawPack(n ? `${n} part file${n === 1 ? '' : 's'} put back or removed.` : 'No parts installed by this page in that game folder.');
+  });
+}
+function zipWrites(game, name) {
+  const entries = [...game.writes.values()].sort((a, b) => a[0] < b[0] ? -1 : 1), gone = [...game.removed.values()].sort();
+  if (gone.length) entries.push(['DELETE_THESE_FILES.txt', new TextEncoder().encode('Delete these files from the game folder:\r\n' + gone.map(x => x.replace(/\//g, '\\')).join('\r\n') + '\r\n')]);
+  download(name, BW.zipOf(entries), 'application/zip');
+  setStatus(`Downloaded a .zip with ${entries.length} files. Close the Building Architect, unpack it into the game folder and let it replace files` + (gone.length ? ', then delete the files in DELETE_THESE_FILES.txt.' : '.'));
+}
+$('packGame').onchange = ev => runBusy(async () => {
+  const files = [...ev.target.files]; ev.target.value = '';
+  const game = BW.listFS(files);
+  if (!(await game.exists('Apps/Sys/SYS.PAK'))) { setStatus('That folder has no Apps\\Sys\\SYS.PAK: choose the folder that holds Apps, Cities and Buildings.'); return; }
+  const rep = await PK.report(P3.ents, game);
+  PK.view(document, $('packView'), rep, { pack: P3.name,
+    onInstall: async (ow, kinds) => { packLog(await PK.install(game, P3.ents, P3.name, ow, kinds), 'install .zip of'); zipWrites(game, 'sc3-parts-install.zip'); },
+    onRemove: async () => { packLog(await PK.remove(game), 'removal .zip of'); zipWrites(game, 'sc3-parts-removal.zip'); } });
+  $('packHint').textContent = 'Game folder read from a file list (' + ((files[0] && files[0].webkitRelativePath || '').split('/')[0] || 'game') + '): Install and Remove download a .zip to unpack into it.';
+});
+const packOpen = async (fn, name) => { try { await openPack(await fn(), name); } catch (e) { console.error(e); setStatus('Could not read the pack: ' + (e.message || e)); } };
+$('btnPack').onclick = () => $('packZip').click();
+$('packZip').onchange = ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) packOpen(() => PK.openFiles([f]), f.name); };
+$('btnPackDir').onclick = async () => {
+  if (window.showDirectoryPicker) {
+    try { const d = await window.showDirectoryPicker({ id: 'sc3pack' }); return packOpen(() => PK.openHandle(d), d.name); }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  $('packDir').click();
+};
+$('packDir').onchange = ev => { const files = [...ev.target.files]; ev.target.value = ''; if (files.length) packOpen(() => PK.openFiles(files), (files[0].webkitRelativePath || '').split('/')[0]); };
+$('btnPackClose').onclick = () => { $('packBox').hidden = true; P3.ents = null; };
+$('btnPackBld').onclick = async () => {           // the pack's .bld files as a models folder (read only: Install uses the .zip route)
+  const all = P3.ents.filter(e => e.data && !e.error && /\.bld$/i.test(e.path)).map(e => new File([e.data], e.path.split('/').pop()));
+  S.sc4 = null; $('sc4Note').hidden = true;
+  S.dirHandle = null; S.folderName = P3.name; S.allFiles = all;
+  await openFiles({ all, models: all.slice() }, null);
+};
 async function pickFolder() {
   if (window.showDirectoryPicker) {
     try {
@@ -1499,7 +1609,7 @@ async function roundTrip() {
   res.savedText = saved;
   return res;
 }
-window.bc = { S, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW, openSc4, modelsFolder };
+window.bc = { S, openPack, PK, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW, openSc4, modelsFolder };
 
 // ---------------------------------------------------------------- start
 buildForm(); showRules(); sizeView(); applySceneColours(); refreshPanel(); loop();
