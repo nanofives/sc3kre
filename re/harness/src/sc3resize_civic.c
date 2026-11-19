@@ -24,7 +24,9 @@
  * CIVIC_REWARD.md proposed (0x1000b19d) sees one case of 17 (measured: the Police hotkey built the stock tool without
  * passing it). The call's rel32 now points at cv_call, which calls cv_pick(&key) and jumps on to 0x10009443 with the
  * stack untouched. Every press of a civic button (menu or hotkey) is a new GetCommand call (SIMUI 0x10016329, SIMSPR
- * 0x10049a80), so it passes here once: for a base with variants, presses cycle stock, variant 1, ..., stock.
+ * 0x10049a80), so it passes here once: for a base with variants, presses cycle stock, variant 1, ..., stock. Since
+ * CIVDLG (round 2026-11-19k, below) a press opens the list window instead and cv_pick builds the look picked there;
+ * the cycle is what SC3RESIZE_CIVDLG=0 gives back.
  * The variant exemplar is a copy of the base (same type id, coverage, price), so the stock tool, site check, price and
  * commit run unchanged. Installed only when the file lists at least one variant: no file = stock code.
  *
@@ -51,8 +53,9 @@
  *    types are declared whenever the loader runs, mods on or off (a city holding a placed reward of an undeclared type
  *    faulted at 0x1000b392 and the game exited on load, measured). Here only the guard: rw_unlock_test unlocks a type
  *    only when sc3mods_reward_types() lists it as declared, so an undeclared reward can never be placed.
- * Switches: sc3resize.ini [buildings] civicvariants= / newrewards= (default 1), env SC3RESIZE_CIVVAR /
- * SC3RESIZE_NEWREWARD (the "Activar mods" page writes the env ones). Read once at start: the hooks are code patches. */
+ * Switches: sc3resize.ini [buildings] civicvariants= / newrewards= / civiclist= (default 1), env SC3RESIZE_CIVVAR /
+ * SC3RESIZE_NEWREWARD / SC3RESIZE_CIVDLG (the "Activar mods" page writes the first two env ones). Read once at start:
+ * the hooks are code patches. */
 #define CV_GROUP    0xB1D10002   /* bldimport's plugin exemplar group (bldimport.py LM_GROUP) */
 #define CV_MAXB     17           /* the 17 plain civic commands */
 #define CV_MAXV     12
@@ -128,6 +131,12 @@ static void cv_load(void) {
     }
 }
 
+/* CIVDLG (child civdlg, round 2026-11-19k): the look chosen in the list window for the press in progress (cd_getcmd
+   sets it around the stock factory call, cv_pick applies it). -1 = no pick: the press cycles (CIVDLG off). */
+static int   g_civdlg = 1;
+static int   g_cd_force = -1;
+static DWORD g_cd_forcebase;
+
 /* the press: the key the factory is about to build. stdcall from cv_stub, game thread. */
 static void __stdcall cv_pick(DWORD *key) {
     int i;
@@ -136,7 +145,9 @@ static void __stdcall cv_pick(DWORD *key) {
         for (i = 0; i < g_cv_n; i++) {
             CV_BASE *b = &g_cv[i];
             if (b->base != key[2]) continue;
-            b->look = (b->look + 1) % (b->n + 1);
+            if (g_cd_force >= 0 && g_cd_forcebase == b->base) b->look = g_cd_force;   /* CIVDLG: the list's pick */
+            else if (g_civdlg) b->look = 0;    /* CIVDLG on but no pick (a press inside the open window): stock */
+            else b->look = (b->look + 1) % (b->n + 1);
             if (b->look > 0) { key[1] = b->grp[b->look - 1]; key[2] = b->inst[b->look - 1]; }
             logf("CIVVAR> button of base 0x%lX: look %d of %d, %s, key 0x%08lX 0x%08lX 0x%08lX", b->base, b->look + 1,
                  b->n + 1, b->look ? b->name[b->look - 1] : "stock", key[0], key[1], key[2]);
@@ -192,6 +203,223 @@ static int cv_label(BYTE *view, char *out, int cap) {
     return 0;
 }
 
+/* ================= CIVDLG (child civdlg, round 2026-11-19k; evidence re/analysis/CIVIC_REWARD.md section 6).
+ * Owner 2026-11-19: pressing a civic button that has imported looks opens a small list window in the game's own look:
+ * the original first, then the looks, each with name, price and picture. Picking one arms the stock tool with that
+ * key and closes the window. Esc or close = no tool. A button with no looks stays stock.
+ *
+ * The window IS the stock catalog dialog (landmarks / rewards / power plants), driven exactly as its own command does
+ * [CONFIRMED @ SIMUI 0x10011919, disassembly]: GZCOM create class 0xe3091435 iid 0xa308d9ad (iface = object+0x18),
+ * SetMode (iface vt+0xc, object+0x24), Init (vt+0x10: creates the window, whose create message builds the controls,
+ * sc3_ui_build_catalog_picker_window 0x10067620, then the list from the object's items, 0x10068603), the window
+ * (vt+0x14), cIGZWinMgr::DoModalWin(GetMainWindow(), win) (wm vt+0xc, vt+0x9c), WasOK (vt+0x18), GetSelected(&attrib)
+ * (vt+0x1c), DestroyWindow (wm vt+0x28), around a cISC3City::SimHiddenPause / Unpause (vt+0x21c / 0x220).
+ * Its items are the object's own list (object vtable 0x100ab514: +0x1c NewItem, +0x18 AddItem in insertion order
+ * while the sort property +0x14 is 0), each a property holder (vtable 0x100a27c8: +0x24 SetUint, +0x1c SetString)
+ * with the key in 0xba64f91e / 0xfa64f93a / 0xfa64f957, which is how mode 0xa2f7d03a fills it (0x10068603:95-131).
+ * The stock modes are filled by the advisors from a city message {0x2dc6d7f, mode} (0x1006950a); an unknown mode gets
+ * no advisor items, so ours are added between SetMode and Init and the list shows exactly them. On a selection the
+ * dialog (0x10069029) draws the attrib's picture (+0x38), its name (+0x4c) and the item strings 0x2ebe7cb (+0x44),
+ * 0x22f291ae (+0x48), 0x2ebe76b (+0x54) the way the advisors' items use them (SIMADV 0x1001c69c). OK, double click,
+ * Esc (key 0x1b) and the close box are the dialog's own (winproc 0x1006751b).
+ * The dialog is a stock SIMUI dialog window (class 0xa2a79fd0, FUN_1002c647), so DLGSCALE scales it like the rewards
+ * list. No SIMUI patch at all.
+ *
+ * Where: SIMGEOM's command factory, vtable 0x100291f4, slot +0x18 = sc3_geom_dispatch_command_handler 0x1000a896 (the
+ * factory's own handler, asked by its GetCommand 0x10015560 after its sub-factories; the only reference to
+ * 0x1000a896 in the DLL). The slot now points at cd_getcmd: for one of the 17 plain civic class ids whose base has
+ * looks it runs the window first; cancel -> *out = 0, false (both callers test it: SIMUI 0x10016329, SIMSPR
+ * 0x10049a80), a pick -> the stock handler runs with g_cd_force set and cv_pick builds that key. The stock catalog
+ * also runs modally inside a game command (its Execute, SIMUI vtable 0x100a2b48 +0x2c -> +0x38 = 0x10011919) called
+ * from the same two places one call later, so the modal loop runs in the same context as the stock lists.
+ * Switch: SC3RESIZE_CIVDLG=0 / sc3resize.ini [buildings] civiclist=0 -> the shipped press-to-cycle. Not a mods page
+ * row: the "Activar mods" page's two columns are full (see MODTOGGLE). */
+#define CD_MODE 0x3C1D1A10   /* our catalog mode id: not one of the stock six (0x22e92581 0x62e92553 0x62e925a2
+                                0xc2f291a9 0xe2e92527 0xa2f7d03a), so no advisor answers it */
+static const DWORD k_cd_cls[17][2] = {   /* plain civic command class id -> base instance (CIVIC_REWARD.md section 1) */
+    { 0x42ff052f, 0xd2 },   { 0x22ff053f, 0x1f41 }, { 0x22ff054c, 0xd3 },   { 0xe2ff0555, 0xd1 },   { 0xc2ff0563, 0x1f94 },
+    { 0xc2ff0571, 0xd6 },   { 0xc2ff057a, 0xf5 },   { 0x62ff0585, 0xd4 },   { 0x02ff05aa, 0xd },    { 0x82ff05b7, 0xd5 },
+    { 0x22ff05ca, 0xda },   { 0x62ff05d1, 0xd7 },   { 0xc2ff05e0, 0x234b }, { 0x22ff05ea, 0x234c }, { 0x22ff05f3, 0x234e },
+    { 0x02ff04fe, 0x1f96 }, { 0x22ff058f, 0xed } };
+static DWORD g_cd_handler;      /* SIMGEOM+0xa896 */
+static int   g_cd_busy;
+
+typedef DWORD (__cdecl *CD_F0)(void);
+
+/* "1,234" */
+static void cd_money(char *out, LONG v) {
+    char t[16];
+    int n, i, j = 0;
+    if (v < 0) { out[j++] = '-'; v = -v; }
+    n = wsprintfA(t, "%ld", v);
+    for (i = 0; i < n; i++) { out[j++] = t[i]; if ((n - i - 1) % 3 == 0 && i < n - 1) out[j++] = ','; }
+    out[j] = 0;
+}
+
+static void cd_setstr(void *item, DWORD prop, const char *text) {
+    BYTE s[0x20];
+    ho_str(s, text);
+    ho_v(item, 0x1c, 2, prop, (DWORD)s, 0, 0, 0);
+    ho_str_free(s);
+}
+
+/* The entry to select once the dialog has built its controls. They are built by the window's create message
+   (sc3_ui_build_catalog_picker_window, list +0x3c, picture +0x38), which arrives inside DoModalWin, not in Init:
+   measured, a selection call before DoModalWin read a NULL +0x38 (SIMUI+0x690EF). The builder selects an entry itself
+   only from the saved catalog preferences, which our mode has none of. Game thread (the frame heartbeat, which keeps
+   running in the modal loop). */
+static BYTE *g_cd_sel_obj;
+static void *g_cd_sel_win;
+static int   g_cd_sel_idx;
+static void cd_tick(void) {
+    BYTE *obj = g_cd_sel_obj, *S;
+    void *lb;
+    DWORD a[1];
+    if (!obj) return;
+    __try {
+        lb = *(void **)(obj + 0x3c);
+        if (!lb || !*(void **)(obj + 0x38) || !*(void **)(obj + 0x44) || !*(void **)(obj + 0x54) || !*(void **)(obj + 0x64)) return;
+        g_cd_sel_obj = NULL;
+        if (g_cd_sel_win) {   /* the title: the builder's create message set it to "" for a mode it does not know */
+            BYTE s[0x20];
+            ho_str(s, SC3TR(ho_spanish(), "resize.cd_title", "Elegir aspecto", "Choose a look"));
+            ho_v(g_cd_sel_win, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);                  /* SetCaption */
+            ho_str_free(s);
+            ho_v(g_cd_sel_win, 0x154, 0, 0, 0, 0, 0, 0);                          /* invalidate */
+        }
+        ho_v(lb, 0x28, 2, (DWORD)g_cd_sel_idx, 1, 0, 0, 0);                     /* select, as the builder does */
+        if (!obj[0x29] || *(int *)(obj + 0x2c) != g_cd_sel_idx) {               /* no notification: fill it directly */
+            S = (BYTE *)GetModuleHandleA("SIMUI.DLL");
+            a[0] = (DWORD)g_cd_sel_idx; rz_thiscall_ret(obj, S + 0x69029, a, 1);
+        }
+        logf("CIVDLG> entry %d selected (list %s)", g_cd_sel_idx, obj[0x29] ? "ok" : "NOT selected");
+    } __except (EXCEPTION_EXECUTE_HANDLER) { g_cd_sel_obj = NULL; logf("CIVDLG> fault 0x%08lX selecting the entry", GetExceptionCode()); }
+}
+
+/* the list window for one base: 0 = original, k = look k, -1 = closed / Esc / failed. Game thread, inside GetCommand. */
+static int cd_dialog(CV_BASE *b) {
+    BYTE *S = (BYTE *)GetModuleHandleA("SIMUI.DLL"), *obj;
+    void *city = NULL, *gz, *cat = NULL, *win = NULL, *wm, *cache, *layer, *bud = NULL, *mw;
+    DWORD key[3], *k;
+    int i, n = b->n + 1, res = -1, pre, paused = 0, ok = 0, es = ho_spanish();
+    char t[200], m[24];
+    if (!S) return -1;
+    __try {
+        city = (void *)((CD_F0)(S + 0x8e7da))();
+        if (!city) { logf("CIVDLG> no city: window not opened"); return -1; }
+        ho_v(city, 0x21c, 0, 0, 0, 0, 0, 0); paused = 1;                       /* SimHiddenPause, as 0x10011919 */
+        gz = (void *)((CD_F0)(S + 0x8489d))();
+        if (!gz || !(ho_v(gz, 0xc, 3, 0xe3091435, 0xa308d9ad, (DWORD)&cat, 0, 0) & 0xff) || !cat) {
+            logf("CIVDLG> catalog class 0xe3091435 not created"); goto out; }
+        obj = (BYTE *)cat - 0x18;
+        if (*(DWORD *)obj != (DWORD)S + 0xab514 || *(DWORD *)cat != (DWORD)S + 0xab4f4) {
+            logf("CIVDLG> catalog object vtables differ from shipped: window not opened"); goto rel; }
+        ho_v(cat, 0xc, 1, CD_MODE, 0, 0, 0, 0);                                 /* SetMode */
+        cache = (void *)((CD_F0)(S + 0x8e985))();                              /* occupant attrib cache */
+        layer = (void *)ho_v(city, 0x138, 0, 0, 0, 0, 0, 0);                    /* BuildingLayer */
+        if (layer && !IsBadReadPtr(layer, 0x34)) bud = *(void **)((BYTE *)layer + 0x30);
+        for (i = 0; i < n; i++) {
+            void *item, *att = NULL, *ag;
+            DWORD type = 0;
+            LONG price = -1;
+            key[0] = 0x207EDC0E; key[1] = i ? b->grp[i - 1] : 0x57E; key[2] = i ? b->inst[i - 1] : b->base;
+            if (cache && (ho_v(cache, 0x18, 2, (DWORD)key, (DWORD)&att, 0, 0, 0) & 0xff) && att) {
+                ag = (void *)ho_v(att, 0x4c, 0, 0, 0, 0, 0, 0);                  /* CityAgentType */
+                if (ag) type = ho_v(ag, 0x10, 0, 0, 0, 0, 0, 0);
+                ho_v(att, 8, 0, 0, 0, 0, 0, 0);
+            } else logf("CIVDLG> entry %d key 0x%08lX 0x%08lX: not in the attrib cache (the list shows no name)", i, key[1], key[2]);
+            if (bud && type) price = (LONG)ho_v(bud, 0x54, 1, type, 0, 0, 0, 0);   /* the build price by type (site check) */
+            item = (void *)ho_v(obj, 0x1c, 0, 0, 0, 0, 0, 0);                    /* NewItem */
+            if (!item) continue;
+            ho_v(item, 0x24, 2, 0xba64f91e, key[0], 0, 0, 0);
+            ho_v(item, 0x24, 2, 0xfa64f93a, key[1], 0, 0, 0);
+            ho_v(item, 0x24, 2, 0xfa64f957, key[2], 0, 0, 0);
+            if (price >= 0) {
+                cd_money(m, price);
+                wsprintfA(t, SC3TR(es, "resize.cd_price", "Precio: $%s", "Price: $%s"), m);
+                cd_setstr(item, 0x2ebe7cb, t);
+            }
+            wsprintfA(t, SC3TR(es, "resize.cd_lookn", "Aspecto %d de %d", "Look %d of %d"), i + 1, n);
+            cd_setstr(item, 0x22f291ae, t);
+            cd_setstr(item, 0x2ebe76b, i ? SC3TR(es, "resize.cd_desc_look", "Aspecto importado. Da el mismo servicio y cuesta lo mismo que el original.",
+                                                 "Imported look. Same service and same price as the original.")
+                                         : SC3TR(es, "resize.cd_desc_stock", "El edificio original del juego.", "The game's own building."));
+            ho_v(obj, 0x18, 1, (DWORD)item, 0, 0, 0, 0);                        /* AddItem */
+            logf("CIVDLG> entry %d: key 0x%08lX 0x%08lX type %lu price %ld", i, key[1], key[2], type, price);
+        }
+        if (!(ho_v(cat, 0x10, 0, 0, 0, 0, 0, 0) & 0xff)) { logf("CIVDLG> catalog Init failed: window not opened"); goto rel; }
+        win = (void *)ho_v(cat, 0x14, 0, 0, 0, 0, 0, 0);
+        if (!win) { logf("CIVDLG> catalog has no window"); goto rel; }
+        ho_v(win, 4, 0, 0, 0, 0, 0, 0);                                          /* AddRef, as 0x10011919 */
+        pre = b->look > 0 && b->look < n ? b->look : 0;                          /* the last pick is selected */
+        g_cd_sel_win = win; g_cd_sel_idx = pre; g_cd_sel_obj = obj;   /* by cd_tick: the controls exist only once the window is shown */
+        wm = (void *)((CD_F0)(S + 0x85091))();
+        mw = (void *)ho_v(wm, 0xc, 0, 0, 0, 0, 0, 0);                            /* GetMainWindow */
+        logf("CIVDLG> base 0x%lX: list window open, %d entries, entry %d selected", b->base, n, pre);
+        ho_v(wm, 0x9c, 2, (DWORD)mw, (DWORD)win, 0, 0, 0);                       /* DoModalWin(main, win) */
+        g_cd_sel_obj = NULL;
+        ok = ho_v(cat, 0x18, 0, 0, 0, 0, 0, 0) & 0xff;                           /* OK pressed with a selection */
+        if (ok) {
+            void *att = NULL;
+            ho_v(cat, 0x1c, 1, (DWORD)&att, 0, 0, 0, 0);
+            if (att) {
+                k = (DWORD *)ho_v(att, 0x14, 0, 0, 0, 0, 0, 0);                  /* Key */
+                for (i = 0; k && i < n; i++)
+                    if (k[1] == (i ? b->grp[i - 1] : 0x57E) && k[2] == (i ? b->inst[i - 1] : b->base)) { res = i; break; }
+                ho_v(att, 8, 0, 0, 0, 0, 0, 0);
+            }
+        }
+        if (res >= 0) logf("CIVDLG> base 0x%lX: picked entry %d of %d (%s)", b->base, res + 1, n, res ? b->name[res - 1] : "original");
+        else logf("CIVDLG> base 0x%lX: window closed without a pick (%s): no tool", b->base, ok ? "OK with no entry" : "Esc / close");
+        ho_v(wm, 0x28, 1, (DWORD)win, 0, 0, 0, 0);                               /* DestroyWindow */
+        ho_v(win, 8, 0, 0, 0, 0, 0, 0);
+    rel:
+        ho_v(cat, 8, 0, 0, 0, 0, 0, 0);
+    out:
+        ho_v(city, 0x220, 0, 0, 0, 0, 0, 0);                                     /* SimHiddenUnpause */
+        paused = 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_cd_sel_obj = NULL;
+        logf("CIVDLG> fault 0x%08lX in the list window: no tool", GetExceptionCode());
+        if (paused && city) __try { ho_v(city, 0x220, 0, 0, 0, 0, 0, 0); } __except (EXCEPTION_EXECUTE_HANDLER) { }
+        res = -1;
+    }
+    return res;
+}
+
+/* SIMGEOM factory vtable 0x100291f4 slot +0x18 (thiscall: class id, riid, void **out) */
+static BYTE __fastcall cd_getcmd(void *self, void *edx, DWORD cls, DWORD riid, void **out) {
+    DWORD a[3], r;
+    int i, j, pick;
+    (void)edx;
+    if (g_civdlg && !g_cd_busy && (!g_hwnd || GetWindowThreadProcessId(g_hwnd, NULL) == GetCurrentThreadId()))
+        for (i = 0; i < 17; i++) if (k_cd_cls[i][0] == cls) {
+            for (j = 0; j < g_cv_n; j++) if (g_cv[j].base == k_cd_cls[i][1]) break;
+            if (j == g_cv_n) break;                       /* no looks: stock */
+            g_cd_busy = 1;
+            pick = cd_dialog(&g_cv[j]);
+            g_cd_busy = 0;
+            if (pick < 0) { if (out) *out = NULL; return 0; }
+            g_cd_force = pick; g_cd_forcebase = g_cv[j].base;
+            break;
+        }
+    a[0] = cls; a[1] = riid; a[2] = (DWORD)out;
+    r = rz_thiscall_ret(self, (void *)g_cd_handler, a, 3);
+    g_cd_force = -1;
+    return (BYTE)r;
+}
+
+static void cd_install(BYTE *geom) {
+    DWORD *slot = (DWORD *)(geom + 0x2920c), old;
+    if (!g_civdlg) { logf("CIVDLG> off (SC3RESIZE_CIVDLG=0 or sc3resize.ini [buildings] civiclist=0): presses cycle the looks"); return; }
+    if (*slot != (DWORD)geom + 0xa896 || *(DWORD *)(geom + 0x29200) != (DWORD)geom + 0x15560) {
+        logf("CIVDLG> SIMGEOM factory vtable differs from shipped: off, presses cycle the looks"); g_civdlg = 0; return; }
+    g_cd_handler = (DWORD)geom + 0xa896;
+    if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) { logf("CIVDLG> SIMGEOM+0x2920c not writable: off"); g_civdlg = 0; return; }
+    InterlockedExchange((LONG volatile *)slot, (LONG)(DWORD)cd_getcmd);   /* no restore (task onramp) */
+    logf("CIVDLG> on: a civic button with looks opens the list window (stock catalog dialog, SIMGEOM+0x2920c)");
+}
+
 static void cv_install(void) {
     static const BYTE want[6] = { 0x57, 0x57, 0x8d, 0x45, 0xc4, 0x50 };   /* 0x1000b19d, then the call at +6 */
     HMODULE g = NULL;
@@ -224,7 +452,8 @@ static void cv_install(void) {
         for (j = 0; j < g_cv[i].n && n < 330; j++) n += wsprintfA(t + n, " 0x%lX:0x%lX \"%.24s\"", g_cv[i].grp[j], g_cv[i].inst[j], g_cv[i].name[j]);
         logf("CIVVAR> %s", t);
     }
-    logf("CIVVAR> on: %d civic button(s) with %d variant look(s), cycled per press (SIMGEOM+0xb1a3)", g_cv_n, nv);
+    logf("CIVVAR> on: %d civic button(s) with %d variant look(s) (SIMGEOM+0xb1a3)", g_cv_n, nv);
+    cd_install((BYTE *)g);   /* CIVDLG: the list window instead of the cycle */
 }
 
 /* ------------------------------------------------------------------------------------------- NEWREWARD */

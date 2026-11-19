@@ -41,6 +41,10 @@ Writes one civic look for every one of the 17 civic buttons (civic_<base>.obj: a
 per base, a white band and a roof sign), three rewards (reward_1x1 / reward_3x3 / reward_4x4: a stepped plaza with a
 gold spire, population 1000, so they unlock in any town) and a 3x3 growable plaza (plaza_3x3.obj, class 6300 = the
 3x3 commercial base the 1999 Maxis Plaza copied), models.json for all of them.
+    py -3.12 re/tools/bldimport/make_testmodels.py --civdlg <out folder>   (task civdlg, 2026-11-19)
+
+Writes the civic list window test set: three police looks (police_blue, police_green, police_red), one fire look and
+one school look. Every other civic button has none, so it must stay stock.
 """
 import json
 import math
@@ -593,7 +597,37 @@ def civtest(out):
     return 0
 
 
+def civdlg(out):
+    """Task civdlg: police with three looks (pick each in the list window), fire and school with one, every other
+    civic button with none (stays stock: the hospital is the check)."""
+    import colorsys
+    os.makedirs(out, exist_ok=True)
+    common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True, "weight": 1}
+    police_3x3(out, "police_blue")
+    civic_block(out, "police_green", 3, colorsys.hsv_to_rgb(0.33, 0.75, 0.80), 16.0)
+    civic_block(out, "police_red", 3, colorsys.hsv_to_rgb(0.0, 0.75, 0.80), 16.0)
+    civic_block(out, "fire_look", 3, colorsys.hsv_to_rgb(0.08, 0.85, 0.90), 16.0)
+    civic_block(out, "school_look", 3, colorsys.hsv_to_rgb(0.60, 0.70, 0.85), 16.0)
+    models = [
+        dict(common, file="police_blue.obj", name="Police blue", kind="civic", base="police", height_m=12.0,
+             description="Test look, bldimport civdlg", notes="police look 2"),
+        dict(common, file="police_green.obj", name="Police green", kind="civic", base="police", height_m=16.0,
+             description="Test look, bldimport civdlg", notes="police look 3"),
+        dict(common, file="police_red.obj", name="Police red", kind="civic", base="police", height_m=16.0,
+             description="Test look, bldimport civdlg", notes="police look 4"),
+        dict(common, file="fire_look.obj", name="Fire orange", kind="civic", base="fire", height_m=16.0,
+             description="Test look, bldimport civdlg", notes="fire look 2"),
+        dict(common, file="school_look.obj", name="School blue", kind="civic", base="school", height_m=16.0,
+             description="Test look, bldimport civdlg", notes="school look 2")]
+    with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
+        json.dump({"sc3models": 1, "generator": "make_testmodels.py --civdlg", "models": models}, fh, indent=2)
+    print("wrote civdlg test models to", out, len(models), "models")
+    return 0
+
+
 def main(argv):
+    if len(argv) == 2 and argv[0] == "--civdlg":
+        return civdlg(argv[1])
     if len(argv) == 2 and argv[0] == "--civtest":
         return civtest(argv[1])
     if len(argv) == 2 and argv[0] == "--civmod":

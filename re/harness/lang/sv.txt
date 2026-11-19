@@ -748,3 +748,15 @@ resize.mt_civvar=Offentliga byggnader: fler utseenden
 resize.mt_newreward=Nya belöningar
 # en: Simulation and buildings
 resize.mt_simbld=Simulering och byggnader
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Imported look. Same service and same price as the original.
+resize.cd_desc_look=Importerat utseende. Samma tjänst och samma pris som originalet.
+# en: The game's own building.
+resize.cd_desc_stock=Spelets ursprungliga byggnad.
+# en: Look %d of %d
+resize.cd_lookn=Utseende %d av %d
+# en: Price: $%s
+resize.cd_price=Pris: $%s
+# en: Choose a look
+resize.cd_title=Välj utseende

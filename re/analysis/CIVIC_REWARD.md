@@ -413,3 +413,79 @@ Measurements: `verify/civmod/RESULTS.md`.
 `38000..38999`. Measured: "Mover" in the "?" of a type 18000 landmark and of a type 38001 reward, both moved, one copy
 left; the picker refuses both ("solo uno por ciudad"); a civic look is picked by its own key.
 
+
+## 6. Built: the civic list window (civdlg, round 2026-11-19k)
+
+Owner 2026-11-19: a civic button that has imported looks opens a small list window in the game's own look (the
+original first, then the looks, each with name, price and picture); picking one arms the stock tool with that key;
+Esc or close arms nothing; a button with no looks stays stock. Code: `cd_*` in `re/harness/src/sc3resize_civic.c`
+(CIVDLG). Measurements: `verify/civdlg/RESULTS.md`.
+
+### 6.1 Reuse the stock catalog dialog, not a new SIMUI window
+
+The landmark / rewards / power plant / garbage lists are one GZCOM class, `0xe3091435` (iid `0xa308d9ad`, object
+`0x68` bytes, ctor `0x10067397`), driven by a game command (SIMUI vtable `0x100a2b48`, Execute +0x2c -> +0x38 =
+`0x10011919`) `[CONFIRMED @ SIMUI 0x10011919, disassembly]`:
+
+| step | call | |
+|---|---|---|
+| pause | `cISC3City::SimHiddenPause` city vt+0x21c (Unpause +0x220 at the end) | CV names |
+| create | GZCOM vt+0xc(`0xe3091435`, `0xa308d9ad`, &iface) | iface = object+0x18, vtable `0x100ab4f4` |
+| mode | iface vt+0xc(mode) -> object+0x24 | stock modes `0x22e92581` landmarks, `0x62e92553` rewards, `0x62e925a2` power, `0xc2f291a9` garbage, `0xe2e92527` business deals, `0xa2f7d03a` all buildings (cheat) |
+| init | iface vt+0x10 `0x1006749d`: creates the window (class `0xa2a79fd0`, `FUN_1002c647`), object+0x34 | |
+| modal | `cIGZWinMgr::DoModalWin(GetMainWindow(), win)` wm vt+0x9c, wm vt+0xc | the window's create message builds the controls inside this call |
+| result | iface vt+0x18 WasOK (object+0x28 OK pressed and +0x29 an entry selected), vt+0x1c GetSelected(&attrib) | |
+| close | wm vt+0x28 DestroyWindow, Release window and object | |
+
+Items: the object's own list (object vtable `0x100ab514`: +0x1c NewItem `0x1000c067`, +0x18 AddItem `0x1000c006`,
+insertion order while the sort property +0x14 is 0). An item is a property holder (vtable `0x100a27c8`: +0x24
+SetUint, +0x1c / +0x18 SetString, +0x30 GetUint, +0x28 GetString) with the key in `0xba64f91e` / `0xfa64f93a` /
+`0xfa64f957`. The stock modes' items come from the advisors, which answer a city message {`0x2dc6d7f`, mode}
+(`0x1006950a`); the cheat mode adds its own in `sc3_ui_catalog_build_picker` `0x10068603`. A mode nobody knows gets no
+advisor items, so items added between SetMode and Init are exactly the list. On a selection `0x10069029` draws the
+attrib's picture (object+0x38), its name (+0x4c, attrib GetName) and the item strings `0x2ebe7cb` -> +0x44 (left,
+y 260), `0x22f291ae` -> +0x48 (right, y 260), `0x2ebe76b` -> +0x54 (description block), as the advisors' items use
+them (SIMADV `0x1001c69c`, `0x10011590`). Esc (key `0x1b`), the close box (`0x42b7c353`), OK (`0xe2e80764`) and the
+double click are the dialog's own (winproc `0x1006751b`).
+
+Reuse wins on every point the owner named, with no SIMUI patch: the game's own look (it is the rewards window), the
+picture (the dialog's own building preview: it drew the imported looks, measured), interface scale (the dialog is a
+SIMUI dialog window, so DLGSCALE scales it: measured at 200%), Esc / close / OK / double click, and the remembered
+window position. A new SIMUI window would need all of that rebuilt by hand, plus the building preview, which no mod
+draws today.
+
+Two traps, measured:
+
+- **The controls do not exist before DoModalWin.** Init only creates the window object; the create message that runs
+  `sc3_ui_build_catalog_picker_window` `0x10067620` arrives inside DoModalWin. A selection call before it faulted
+  reading a NULL picture control (`SIMUI+0x690EF`). The builder selects an entry itself only from the saved catalog
+  preferences, per stock mode. So CIVDLG selects the entry (and sets the title) from the frame heartbeat once
+  object+0x3c / +0x38 / +0x64 exist.
+- **The title.** The builder sets the caption from the mode (empty for an unknown one) in the same create message, so
+  a caption set before DoModalWin is overwritten. Set from the heartbeat too.
+
+### 6.2 Where the press is caught
+
+SIMGEOM's command factory vtable is `0x100291f4`: +0xc `cRZGameCommandFactory::GetCommand` `0x10015560` asks its
+sub-factories, then its own handler at +0x18, `sc3_geom_dispatch_command_handler` `0x1000a896` (the dword at
+`0x1002920c`, the only reference to `0x1000a896` in the DLL). CIVDLG points that slot at `cd_getcmd`. For one of the
+17 plain civic class ids (table in section 1) whose base has looks it runs the window first:
+
+- **cancel** (Esc, close box, OK with no entry): `*out = 0`, return false. Both callers test the result: the menu
+  item click SIMUI `0x10016329` and the hotkey path SIMSPR `0x10049a80` skip Execute, so no tool is armed.
+- **a pick**: the stock handler runs with the pick set, and `cv_pick` on the shared constructor call `0x1000b1a3`
+  (section 5.1) builds that key. The stock tool, site check, price and commit run unchanged.
+
+The modal loop then runs inside GetCommand, one call before Execute in the same two callers: the stock lists run
+theirs inside Execute, so the context is the same. Measured through the real menu button (posted clicks on the civic
+flyout) and the hotkey path.
+
+### 6.3 Not done
+
+- **Press-to-cycle is not a mods page row.** The "Activar mods" page's two columns are full (both end where the notes
+  start, MODTOGGLE in sc3resize.c), so a row means a new layout. The cycle stays only as the off-switch:
+  `SC3RESIZE_CIVDLG=0` or `sc3resize.ini [buildings] civiclist=0` (measured: presses cycle as shipped).
+- **The model's own description line** (bldimport writes it as exemplar prop 0x7C) is not shown: the window shows a
+  fixed line per entry. The stock dialog takes that text from the advisor's records, not from the attrib.
+- **Price** is `budget vt+0x54(type id)` (the site check's build price, RELOCATE.md 1), the same for the original and
+  its looks (same type id). Clearing and levelling are added by the stock tool at the pointer, as always.
