@@ -72,6 +72,7 @@ footer a { color: var(--ui-info-text); }
   <li><a href="#model">Making a model</a></li>
   <li><a href="#classify">Classifying</a></li>
   <li><a href="#install">Installing</a></li>
+  <li><a href="#ports">Airports and seaports</a></li>
   <li><a href="#bld">.bld files</a></li>
   <li><a href="#render">Real .bld views</a></li>
   <li><a href="#packs">Simtropolis packs</a></li>
@@ -83,13 +84,13 @@ footer a { color: var(--ui-info-text); }
 
 <section class="fam" id="what">
 <h2>What the tool does</h2>
-<p>Each enabled model becomes a new growable building. The page draws it in the game's own camera at all five zoom levels and all four view rotations (20 pictures), on its own patch of lawn, and writes it into the game as a member of the building class you picked. From then on it grows on zoned lots of that class, like the stock buildings of the class, and takes its jobs, residents and pollution from a stock building of the same class and lot size.</p>
+<p>Each enabled model becomes a new growable building. The page draws it in the game's own camera at all five zoom levels and all four view rotations (20 pictures), on its own patch of lawn, and writes it into the game as a member of the building class you picked. From then on it grows on zoned lots of that class, like the stock buildings of the class, and takes its jobs, residents and pollution from a stock building of the same class and lot size. Airport and seaport buildings grow the same way in their own zones.</p>
 <p>Nothing stock is replaced. Your buildings join the stock ones in the same families, and the weight you give each one sets how often it is picked.</p>
 <figure><a href="img/houses_z4.jpg"><img src="img/houses_z4.jpg" alt="Sample pack houses grown next to stock houses in Sacramento at zoom 4" loading="lazy" width="1100" height="690"></a>
 <figcaption>Sacramento at zoom 4, after a few game-run minutes: Red Roof Houses, Gable Houses (dark green roofs) and Brick Houses grown among the stock houses. Every building here grew on its own, none was placed by hand.</figcaption></figure>
 <h3>What it does not do</h3>
 <ul>
-  <li>Ploppable buildings (landmarks, rewards), airports and seaports. Only zoned growables for now. The page lists the ploppable plugins of a pack (<code>.pin</code> and <code>.dat</code> files) but does not install them yet.</li>
+  <li>Ploppable buildings (landmarks, rewards). Only buildings that grow by themselves for now: in residential, commercial and industrial zones, and in airport and seaport zones (<a href="#ports">Airports and seaports</a>). The page lists the ploppable plugins of a pack (<code>.pin</code> and <code>.dat</code> files) but does not install them yet.</li>
   <li>Lots that are not square. A building sits on a 1x1, 2x2, 3x3 or 4x4 lot, as every stock growable does.</li>
   <li>Night lights and animation. The stock houses have none either.</li>
   <li>3D formats other than OBJ, the Building Architect's <code>.bld</code> and SimCity 4 buildings. Convert glTF, FBX or anything else to OBJ first (Blender does it).</li>
@@ -206,14 +207,14 @@ footer a { color: var(--ui-info-text); }
   <li>Select <b>Open folder</b> and pick the folder with your models. Each model shows as a card with a 3D view you can turn.</li>
   <li>Select a card (or several) and set the fields on the right:
     <ul>
-      <li><b>Kind</b>: <code>growable</code> for a zoned building.</li>
-      <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above).</li>
-      <li><b>Lot</b>: 1x1 to 4x4.</li>
-      <li><b>Weight</b>: how often it is picked against the other members of its family. Most stock buildings have weight 1, a few have 2 or 3. The sample pack uses 2.</li>
+      <li><b>Kind</b>: <code>growable</code> for a building of a residential, commercial or industrial zone, <code>airport</code> or <code>seaport</code> for one that grows in those zones (<a href="#ports">Airports and seaports</a>).</li>
+      <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above). Airport and seaport buildings have no class.</li>
+      <li><b>Lot</b>: 1x1 to 4x4. Airport buildings are 1x1 only, seaport buildings 1x1 or 2x2.</li>
+      <li><b>Weight</b>: how often it is picked against the other members of its family. Most stock buildings have weight 1, a few have 2 or 3. The sample pack uses 2. For an airport building the weight works differently, see <a href="#ports">Airports and seaports</a>.</li>
       <li><b>Scale</b> and <b>Rotate (deg)</b>: size and turn (in 90 degree steps) before the model is set on its lot.</li>
       <li><b>Name</b>: what the query box shows.</li>
     </ul></li>
-  <li><b>Suggest for all</b> fills kind, class, lot and height from each model's size, as a starting point.</li>
+  <li><b>Suggest for all</b> fills kind, class, lot and height from each model's size and name, as a starting point. A name with airport, hangar, terminal or runway in it suggests an airport building, one with seaport, harbour, harbor, dock, pier, shipyard or crane a seaport building.</li>
   <li>Clear <b>Enabled</b> to leave a model out without deleting it.</li>
   <li>Select <b>Save models.json</b>. The file goes into the models folder, and you can open the folder again later to carry on.</li>
 </ol>
@@ -243,7 +244,39 @@ footer a { color: var(--ui-info-text); }
 </ul>
 <h3>Ids and saved cities</h3>
 <p>Each model file gets an id from 38000 to 38999, kept in <code>sc3build\ids.json</code> in the models folder. Keep that file. A city saved with your buildings finds them again only if they keep the same ids. The sample pack ships its <code>ids.json</code>, so every player who installs it gets the same ids, 38000 to 38017.</p>
-<p>A city saved with imported buildings and opened without them does not crash. In our test with the same kind of files, each of those lots showed a stock building of the same type in its place.</p>
+<p>A city saved with imported buildings and opened without them does not crash. In our test with the same kind of files, each of those lots showed a stock building of the same type in its place. Airport and seaport lots get runway strips and pier pieces instead (<a href="#ports">Airports and seaports</a>).</p>
+</section>
+
+<section class="fam" id="ports">
+<h2>Airports and seaports</h2>
+<p>Your models can also grow in airport and seaport zones, among the stock terminals, hangars, cranes and warehouses. Set the kind to <code>airport</code> or <code>seaport</code> and install as usual. They take no class: the game gives them the stats of a stock airport or seaport building and counts them as airport or seaport buildings.</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>Airport</th><th>Seaport</th></tr></thead>
+<tbody>
+<tr><td>Lot</td><td>1x1 only</td><td>1x1 or 2x2</td></tr>
+<tr><td>Where it grows</td><td>on the airport's 1x1 filler lots, where the stock parked planes grow</td><td>on the dockyard lots served by the piers</td></tr>
+<tr><td>Stats from</td><td>Parked Airplane</td><td>Seaport Crane (1x1), Seaport Loading Bay (2x2)</td></tr>
+<tr><td>Weight</td><td>1 to 20. The airport ignores weights, so the page writes the building into the airport's list as many times as its weight: a weight of 5 is 5 copies</td><td>as for zoned buildings, against the other seaport buildings</td></tr>
+</tbody></table></div>
+<p>The runways, the tarmac, the control tower and the piers stay stock. Nothing you import replaces them.</p>
+<h3>What the page suggests and warns about</h3>
+<ul>
+  <li><b>Suggest for all</b> picks <code>airport</code> when the model's name has airport, hangar, terminal or runway in it, and <code>seaport</code> for seaport, harbour, harbor, dock, pier, shipyard or crane. It sets an airport building on 1x1, and a seaport building on 1x1 or 2x2 from its footprint, and says why on the card.</li>
+  <li>The card warns about an airport building on a lot other than 1x1, a seaport building larger than 2x2, and an airport weight above 20. Install leaves those models out until you fix them.</li>
+</ul>
+<h3>Our test</h3>
+<p>We cleared the airport and seaport lots of Sacramento (the runways, tower and piers stayed) and installed three test models: a fuel depot for the airport at weight 5, and a container stack (1x1) and a harbour warehouse (2x2) for the seaport at weight 10. By the first autosave, 2.5 game-run minutes at speed 4, 10 fuel depots, 15 container stacks and 14 warehouses had grown, next to regrown stock terminals, hangars and cranes. They draw at zoom 3 and 4 and in all four view rotations.</p>
+<p>A city where the airport and seaport are already built grows your buildings when those lots redevelop. We did not test a city that zones a new airport or seaport from scratch.</p>
+<h3>If you remove them</h3>
+<p>A saved city opened without your airport or seaport buildings does not crash, but their lots do not get a sensible stock building back. In our test every lot got a stock piece of the same type and size:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Your building</th><th>Its lot shows</th></tr></thead>
+<tbody>
+<tr><td>airport, 1x1</td><td>a straight landing strip (a runway piece)</td></tr>
+<tr><td>seaport, 1x1</td><td>a pier piece, on land</td></tr>
+<tr><td>seaport, 2x2</td><td>a Seaport Loading Bay</td></tr>
+</tbody></table></div>
+<p>The runway strips and pier pieces stay on those lots until you bulldoze them. No other lot changes. Install the package again with the same <code>ids.json</code> to get your buildings back instead.</p>
 </section>
 
 <section class="fam" id="bld">
@@ -353,13 +386,31 @@ footer a { color: var(--ui-info-text); }
   <li><b>Growable versions only.</b> A SimCity 4 download can hold the same building as a growable, a ploppable and a landmark. The page converts the growable and names the ploppable and landmark versions in its report. Those are not converted yet.</li>
   <li><b>Light painted in.</b> Each SimCity 4 picture is lit from the same side of the screen. In two of the four view rotations the converted houses are lit from the other side than their stock neighbours.</li>
   <li><b>Roofs seen from higher up.</b> SimCity 4 looks down at 45 degrees, SimCity 3000 at 30. In each view one wall is stretched sideways and shows less detail.</li>
-  <li><b>No lot props.</b> The trees, fences, cars and lot textures of a SimCity 4 lot come from other packs and are not converted. The building stands centred on plain lawn, and the yard is left out.</li>
+  <li><b>Lot props only with the dependency pack.</b> The fences, trees and cars of a SimCity 4 lot mostly come from other downloads. Give the page the BSC Common Dependencies Pack and it puts them on the lot with the building (<a href="#sc4props">Lot props</a>). Without it, the building stands centred on plain lawn and the yard is left out. Lot textures (driveways, paths) are not converted either way.</li>
   <li><b>Softer than a 3D model.</b> The pictures are redrawn, not rebuilt, so edges are softer than in the stock art. Where the SimCity 4 camera could not see (around porches and wings), the page fills in with pieces of the same picture.</li>
   <li><b>No diagonal houses.</b> The page tells a house set at 45 degrees from its SimCity 4 foundation model and leaves it off. Buildings without a foundation model are not checked.</li>
   <li>Night textures are not used. SimCity 3000 has no night view.</li>
   <li><code>baked</code> brightens the SimCity 4 art to sit with the stock buildings. For SimCity 4's own brightness, set <code>"x_bldrender": {"style": "baked_raw"}</code> in the entry. It looks darker than the stock neighbours.</li>
   <li>Parts the page cannot read (other model formats, a view made of meshes that are not tiles of one picture) skip that building with a line in the log.</li>
 </ul>
+<h3 id="sc4props">Lot props: fences, trees and cars</h3>
+<p>A SimCity 4 lot places props around the building: fences, trees, parked cars, flower beds. Most of them are not in the building's own download but in dependency packs. The page reads one of them, the BSC Common Dependencies Pack, a download for SimCity 4. Give it to the page and it draws the props into the building's pictures, so they stand on the lot in every view and zoom and move with the building.</p>
+<ol>
+  <li>Download the BSC Common Dependencies Pack. We tested version V9e, a 1.7 GB <code>.zip</code>. Keep it zipped.</li>
+  <li>Select <b>Open SC4 .zip</b> and pick the building download and the dependency <code>.zip</code> together (put both in one folder, hold Ctrl and click both). The page reads the large zip in pieces, never whole, and keeps what it found until you close the page.</li>
+  <li>The page's note on the download gets two more lines: how many prop rows were placed, on how many buildings, and how many were left out and why, then the ids of the props it found in no pack.</li>
+  <li>Install as usual. Each building with props placed installs with them.</li>
+</ol>
+<p>What is placed and what is left out:</p>
+<ul>
+  <li><b>Placed:</b> the props of the building's smallest SimCity 4 lot that the download or the dependency pack holds. Seasonal trees are taken in their summer version.</li>
+  <li><b>Left out at the edge:</b> a SimCity 3000 lot is 16 m per cell, often smaller than the SimCity 4 lot, so a prop whose centre falls outside it is left out. A fence that reaches up to 1 m past the edge is moved in.</li>
+  <li><b>Missing: SimCity 4's own props.</b> Many lots use props that come with SimCity 4 itself, such as its own shrubs and flowers. No download holds them and the page does not read a SimCity 4 install, so they stay missing. The page lists them by id in its note. We have not checked these ids against a SimCity 4 install: that they are SimCity 4's own comes from how the ids look.</li>
+  <li><b>No lot textures.</b> Driveways and paths are not drawn, so cars stand on SimCity 3000 lawn.</li>
+</ul>
+<p>In our test with a pack of 110 houses, 486 of its 5,190 prop rows were placed, on 72 of the buildings. 3,454 rows named 54 props found in no pack given. The two most used of those, in 1,380 and 804 rows, look by their ids like SimCity 4's own. We installed 6 of the houses twice, with and without props, and all 12 grew in Sacramento by the first autosave.</p>
+<h3>Switching the props off for one building</h3>
+<p>The props are on for every building that got at least one. To turn them off for one building, set <code>"on": false</code> under <code>"x_sc4"</code>, <code>"props"</code> in its entry in <code>models.json</code>, then open the download again with that <code>models.json</code> (picked together with the <code>.zip</code>, or in the same folder) and install. The page keeps your choice each time you open the download again. Set it back to <code>true</code> to get them back.</p>
 <h3>Packs that hold only lots</h3>
 <p>Some SimCity 4 downloads hold only lots and building descriptions, and the buildings themselves come from other downloads. Others place a blank stand-in building and show only lot props. The page converts nothing from these and keeps Install off. Its note says so and names every building that is missing. When the readme lists where to get them, the note shows those links too. Download the building packs it names and open those.</p>
 <p>A pack that converts some buildings and lacks others gets the same list for the missing ones. A download that holds only props or textures has no buildings to convert.</p>
@@ -402,7 +453,9 @@ footer a { color: var(--ui-info-text); }
 <h3>The render kit refuses my Building Architect</h3>
 <p>For now it knows only the GOG version's <code>Baapp.exe</code>. It prints the hash of yours: please report it on GitHub or Simtropolis.</p>
 <h3>I removed a model and my city looks different</h3>
-<p>Its lots now show a stock building of the same type. Install the model again (with the same <code>ids.json</code>) to get it back.</p>
+<p>Its lots now show a stock building of the same type. Install the model again (with the same <code>ids.json</code>) to get it back. For airport and seaport buildings that stock building is a runway strip or a pier piece, which stays until you bulldoze it (<a href="#ports">Airports and seaports</a>).</p>
+<h3>My SimCity 4 building has no fences or trees</h3>
+<p>Pick the BSC Common Dependencies Pack together with the download in <b>Open SC4 .zip</b> (<a href="#sc4props">Lot props</a>). Props that are SimCity 4's own stay missing, and the page's note lists them. If the props are there in the page but not in the game, check that <code>"on"</code> under <code>"props"</code> is <code>true</code> in <code>models.json</code> and install again.</p>
 <h3>The page cannot open my folder</h3>
 <p>Use Chrome or Edge. The page writes into folders through a browser feature (the File System Access API) that Firefox and Safari do not offer. In any browser, the .zip buttons under <b>No folder access</b> do the same job (see <a href="#install">Installing</a>).</p>
 <h3>Install says the game folder is wrong</h3>
