@@ -7,7 +7,8 @@
 //   bldrender.py  render_model / render_frame (numpy float64 / float32 steps kept in numpy's order and precision,
 //                 numpy-on-OpenBLAS's fused multiply-add matmul included, see fma() below)
 //   bldfile.py    read_bld, preview_frames, bat_frames
-//   bldimport.py  read_models, ids_for, plan, build_files, sources, apply (install), restore
+//   bldimport.py  read_models, ids_for, plan, build_files, sources, apply (install), restore, PORTS / port_table
+//                 (task airsea 2026-11-19: kinds airport / seaport, re/analysis/PORT_PICK.md)
 //   batgrow.py    IXF / TKB1 helpers, class_table, stock_buildings, bat_buildings
 //   sprite_patch.py, sprite_encode.py, qfs.py, qfs_encode.py (the transcribed GZResourceD compressor)
 //   Pillow 12.3.0 Quant.c median cut (palette_cut), Resample.c LANCZOS / BICUBIC + RGBa premultiply (.bld previews)
@@ -1564,6 +1565,13 @@ function BLDWEB_LIB() {
     8100: 'Industrial dirty, light', 8300: 'Industrial dirty, medium', 8500: 'Industrial dirty, dense',
     8700: 'Industrial clean, light', 8900: 'Industrial clean, medium', 9100: 'Industrial clean, dense', 9300: 'Farm' };
   const EXCLUDE_FAMILIES = new Set([1]);
+  // task airsea: bldimport.PORTS (kind -> the [ZoneDeveloperRules] rule whose families an entry joins)
+  const PORTS = {
+    airport: { rule: 0x2207D9EE, landuse: 12310, sizes: [1], filler: null, copies: true, label: 'Airport (airpark filler)' },
+    seaport: { rule: 0xE2D3FD92, landuse: 12330, sizes: [1, 2], filler: false, copies: false, label: 'Seaport (dockyard)' },
+  };
+  const PORT_MAX_COPIES = 20;
+  const portOf = kind => (typeof kind === 'string' && Object.prototype.hasOwnProperty.call(PORTS, kind)) ? PORTS[kind] : null;
   const reAll = (re, s) => { const out = []; re.lastIndex = 0; let m; while ((m = re.exec(s))) { out.push(m); if (m[0] === '') re.lastIndex++; } return out; };
   const KEY_RE = /Key:\s*(\d+),(\d+),(\d+),(\d+)/g;     // on latin1 strings of the payload bytes
   const familyLanduse = s => { const m = /LandUse:\s*(\d+)/.exec(s); return m ? parseInt(m[1], 10) : null; };
@@ -1622,6 +1630,55 @@ function BLDWEB_LIB() {
     }
     return out;
   }
+  function ruleFamilies(pak, fams) {     // bldimport.rule_families: rule CLSID -> [family] over [ZoneDeveloperRules]
+    void fams;
+    const lines = syspakMember(pak, 'sc3zonelayer.ini'), out = new Map(); let sec = null;
+    for (const ln of lines) {
+      const s = pyStrip(ln);
+      if (s.startsWith('[')) { sec = s.toLowerCase(); continue; }
+      if (sec !== '[zonedeveloperrules]' || !s.includes('=') || s.startsWith(';')) continue;
+      const eq = s.indexOf('='), left = s.slice(0, eq), right = s.slice(eq + 1);
+      const m = /^\s*\d+\s*,\s*0x([0-9a-f]+)\s*$/i.exec(left);
+      if (!m) continue;
+      const rule = parseInt(m[1], 16);
+      if (!out.has(rule)) out.set(rule, []);
+      const lst = out.get(rule);
+      for (const mm of reAll(/0x81f53d09\s*,\s*0x01f58d3d\s*,\s*(\d+)/gi, right)) { const f = parseInt(mm[1], 10); if (!lst.includes(f)) lst.push(f); }
+    }
+    return out;
+  }
+  async function portTable(game) {      // bldimport.port_table
+    if (game._ports) return game._ports;
+    const fams = familyRecords(await game.read(BUILDFAM));
+    const rules = ruleFamilies(await game.read('Apps/Sys/SYS.PAK'), fams);
+    const bld = await stockBuildings(game);
+    const out = new Map();
+    for (const [kind, pt] of Object.entries(PORTS)) {
+      const fl = (rules.get(pt.rule) || []).filter(f => fams.has(f) && familyLanduse(latin1(fams.get(f))) === pt.landuse);
+      if (!fl.length) throw new BldError(kind + ': rule 0x' + hex8(pt.rule) + ' has no family with LandUse ' + pt.landuse);
+      const bases = new Map();
+      for (const f of fl) {
+        for (const m of reAll(KEY_RE, latin1(fams.get(f)))) {
+          if (parseInt(m[1], 10) !== BLD_GROUP || parseInt(m[2], 10) !== BLD_TYPE) continue;
+          const bid = parseInt(m[3], 10);
+          if (!bld.has(bid)) continue;
+          const p = bld.get(bid)[1];
+          const fp = tkb1Get(p, 0x66), cs = tkb1Get(p, 0x67), fl_ = tkb1Get(p, 0xCA);
+          if (!pyTrue(fp && fp.length ? fp : null) || fp[0] !== fp[2] || !pt.sizes.includes(fp[0]) || bases.has(fp[0])) continue;
+          const flag = !!(fl_ && fl_.length && (fl_[0] & 0x100));
+          if (!(cs && cs.length) || cs[0] !== CS_TYPE || (pt.filler !== null && flag !== pt.filler)) continue;
+          if (!arrEq(tkb1Get(p, 0x65), [pt.landuse]) || tkb1Get(p, 0x6D) === null) continue;
+          bases.set(fp[0], [bid, bld.get(bid)[0]]);
+        }
+      }
+      const miss = pt.sizes.filter(n => !bases.has(n));
+      if (miss.length) throw new BldError(kind + ': no stock base building for lot ' + miss.map(n => n + 'x' + n).join(', ') + ' in families [' + fl.join(', ') + ']');
+      out.set(kind, { families: fl, bases: new Map([...bases].sort((a, b) => a[0] - b[0])), landuse: pt.landuse, copies: pt.copies, label: pt.label });
+    }
+    game._ports = out;
+    return out;
+  }
+  const targetOf = e => (portOf(e.kind) ? e.kind : e.class);   // bldimport.target_of
   async function classTable(game) {
     if (game._table) return game._table;
     const fams = familyRecords(await game.read(BUILDFAM));
@@ -1973,6 +2030,7 @@ function BLDWEB_LIB() {
     const models = await readModels(folder);
     const ids = await idsFor(folder, models);
     const table = game ? await classTable(game) : null;
+    const ports = game ? await portTable(game) : null;
     const out = [], rep = [];
     for (const m of models) {
       const f = 'file' in m ? m.file : '?';
@@ -1985,21 +2043,28 @@ function BLDWEB_LIB() {
         try { const bl = readBld(await folder.get(f), f).lot; if ('lot' in m && n !== bl) lotErr = 'lot ' + n + 'x' + n + ' in models.json, the .bld file is ' + bl + 'x' + bl; n = bl; }
         catch (e) { lotErr = 'not a readable .bld file (' + (e.message || e) + ')'; }
       }
-      const cls = 'class' in m ? m.class : null, w = 'weight' in m ? m.weight : 1;
+      let cls = 'class' in m ? m.class : null;
+      const w = 'weight' in m ? m.weight : 1;
+      const kind = 'kind' in m ? m.kind : 'growable', port = portOf(kind);
       if (!pyTrue('enabled' in m ? m.enabled : true)) why = 'enabled is false';
-      else if (('kind' in m ? m.kind : 'growable') !== 'growable') why = 'kind ' + JSON.stringify(m.kind) + ': only growable buildings this round';
+      else if (kind !== 'growable' && port === null) why = 'kind ' + JSON.stringify(kind) + ': only growable, airport and seaport buildings';
       else if (!exists) why = 'file not in the folder';
       else if (!(String(f).toLowerCase().endsWith('.obj') || isBld(f))) why = 'only .obj models and .bld files';
-      else if (cls === null && isBld(f)) why = 'no class: its category (' + ((m.x_bld || {}).category) + ') is not a house, shop or factory, set one in models.json';
+      else if (cls === null && isBld(f) && port === null) why = 'no class: its category (' + ((m.x_bld || {}).category) + ') is not a house, shop or factory, set one in models.json';
       else if (lotErr) why = lotErr;
       else if (!Number.isInteger(w) || !(1 <= w && w <= 1000)) why = 'weight ' + JSON.stringify(w) + ' is not a whole number from 1 to 1000';
-      else if (table && !(Number.isInteger(cls) && table.has(cls))) why = 'class ' + JSON.stringify(cls) + ' is not a growable class (' + [...table.keys()].join(', ') + ')';
-      else if (table && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
+      else if (port !== null && port.copies && w > PORT_MAX_COPIES) why = 'weight ' + w + ': an ' + kind + "'s weight is the number of copies in the airpark's list (the rule ignores Key weights), at most " + PORT_MAX_COPIES;
+      else if (port !== null && !port.sizes.includes(n)) why = kind + ' lot ' + n + 'x' + n + ': the ' + port.label.toLowerCase() + ' grows ' + port.sizes.map(s_ => s_ + 'x' + s_).join(' and ');
+      else if (port === null && table && !(Number.isInteger(cls) && table.has(cls))) why = 'class ' + JSON.stringify(cls) + ' is not a growable class (' + [...table.keys()].join(', ') + ')';
+      else if (port === null && table && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
       else if (cp1252Encode(name) === null) why = 'name ' + JSON.stringify(name) + " has characters the game's text files cannot hold (cp1252)";
       if (why) { rep.push('skip  [' + nid + '] ' + f + ': ' + why); continue; }
-      out.push({ id: nid, file: f, name, lot: n, class: cls, weight: w, model: m });
+      if (port !== null) cls = port.landuse;          // the base's LandUse; models.json "class" is not used
+      out.push({ id: nid, file: f, name, lot: n, class: cls, weight: w, model: m, kind: port !== null ? kind : 'growable' });
     }
-    return [out, rep, table];
+    let tg = table;
+    if (table) { tg = new Map(table); for (const [k, v] of ports) tg.set(k, v); }
+    return [out, rep, tg];
   }
 
   // The render of one entry -> { frames, info }. renderer: optional async (job) => frames for a Web Worker.
@@ -2074,11 +2139,11 @@ function BLDWEB_LIB() {
     let k0 = 0;
     for (const e of entries) {
       k0++;
-      const nid = e.id, n = e.lot, lu = e.class;
+      const nid = e.id, n = e.lot, lu = e.class, tg = table.get(targetOf(e));
       if (bld.has(nid)) throw new BldError('id ' + nid + ' already has a stock building exemplar');
       if (opt.onModel) opt.onModel(k0, entries.length, e);
       const { frames, info } = await renderOne(folder, e.model, n, game, Object.assign({}, opt, { log }));
-      const [base, bfile] = table.get(lu).bases.get(n);
+      const [base, bfile] = tg.bases.get(n);
       let ex = await baseExemplar(game, base, bfile);
       const [tab, tmpl] = await stockTableAndTemplate(game, ex);
       const nm = cp1252Encode(e.name);
@@ -2098,12 +2163,16 @@ function BLDWEB_LIB() {
         pix.push([GROUP, (nid * 65536 + k) >>> 0, 1, anchorPayload(L, T, w, h)]);
       }
       names.push([TEXT_GROUP, nid, TEXT_TYPE, u8cat([packU32s(nm.length), nm])]);
-      for (const f of table.get(lu).families) {
+      const copies = !!tg.copies;
+      for (const f of tg.families) {
         if (!lines.has(f)) lines.set(f, []);
-        lines.get(f).push('Key: 1406,545184782,' + nid + ',' + e.weight + '   ' + latin1(nm) + '\r\n');
+        if (copies) for (let q = 0; q < e.weight; q++) lines.get(f).push('Key: 1406,545184782,' + nid + ',1   ' + latin1(nm) + '\r\n');   // airpark: one line per copy
+        else lines.get(f).push('Key: 1406,545184782,' + nid + ',' + e.weight + '   ' + latin1(nm) + '\r\n');
       }
-      rep.push('grow  [' + nid + '] ' + e.file + ': "' + e.name + '", class ' + lu + ' (' + CLASS_LABEL[lu] + '), ' + n + 'x' + n + ', weight ' + e.weight +
-        ', stats of stock ' + base + ', families ' + table.get(lu).families.join(',') + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
+      const what = copies ? tg.label + ', ' + n + 'x' + n + ', ' + e.weight + (e.weight === 1 ? ' copy' : ' copies')
+        : (portOf(e.kind) ? tg.label : 'class ' + lu + ' (' + CLASS_LABEL[lu] + ')') + ', ' + n + 'x' + n + ', weight ' + e.weight;
+      rep.push('grow  [' + nid + '] ' + e.file + ': "' + e.name + '", ' + what +
+        ', stats of stock ' + base + ', families ' + tg.families.join(',') + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
       if (opt.onFrames) opt.onFrames(e, frames, info);
     }
     const files = new Map();
@@ -2379,7 +2448,7 @@ function BLDWEB_LIB() {
     // pieces (exported for the tests)
     fma, sha256, pyJson, pyJsonStr, cp1252Encode, rint, decodePNG, slotMesh, powf, encodePNG, decodeImage, pilMedianCut, paletteCut, pilResize, qfsCompress, qfsDecompress,
     loadObj, place, renderModel, joinRel, dirOf, renderFrame, grassNorm, readBld, previewFrames, batFrames, sideMatch, ixfBuildings, bldFrames, recordFromImage, spanToImage,
-    records, slots, classTable, stockBuildings, styleOf, STYLES,
+    records, slots, classTable, portTable, ruleFamilies, stockBuildings, styleOf, STYLES, PORTS, PORT_MAX_COPIES,
     // the tool
     readModels, idsFor, plan, renderOne, renderJob, buildFiles, sources, applyFiles, install, restore, describe,
     handleFS, filesFS, listFS, zipOf, makeWorkerRenderer, suggestClass, CLASS_LABEL, DEFAULT_CLASS, OVL, STATE_DIR, PIX_DAT, BUILD_DIR, GROUP,
