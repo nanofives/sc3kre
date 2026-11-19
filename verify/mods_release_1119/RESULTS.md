@@ -18,3 +18,5 @@ c2dfac6 (sc3compat-a merged 0cd786a, kit path fix c2dfac6).
   2026-11-19). 198 entries: 191 equal to the LAN manifest, overlay SYS.PAK differs by design, README.txt and the 5 kit
   files not in it. sc3mods_2026-11-19.zip, SHA-256 80AB6218C7509BDE78FCFFB4C4155BEA1294EFEFCEE06553DA3B0C89BDA32E20.
 - LAN not restaged: no mod or data file changed (the LAN stage carries no tools\ folder).
+
+GitHub: `sc3mods-2026-11-19`, target 02cea4d, asset downloaded back, SHA-256 matches. The 18b notes start with a "superseded" line.
