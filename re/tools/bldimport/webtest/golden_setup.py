@@ -46,6 +46,7 @@ BLD = [  # file, models.json extras
     ("Tutorial House.bld", {"class": 3300, "enabled": True}),             # category 0x217: class set by hand
     ("The Joneses.bld", {}),
 ]
+LANDMARK_DESC = "Typed in the page, Córdoba"   # plop2: case landmarkdesc (cp1252 0xF3 in the game's text record)
 KENNEY = [  # kit, file, name, class, lot, scale
     ("suburban", "building-type-a.obj", "Kenney house A", 3300, 1, 9.0),
     ("commercial", "building-a.obj", "Kenney shop A", 5100, 1, 12.0),
@@ -66,7 +67,7 @@ def main():
     ap.add_argument("--game", required=True)
     ap.add_argument("--kits", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks")
+    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks,landmarkdesc")
     ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
     ap.add_argument("--bld1999", help="folder of 1999 Building Architect .bld files for case bld1999 (sc3compat-a)")
     ap.add_argument("--bldside", help="folder of .bld files + the bld_frames.ixf render_bld.ps1 wrote, for case bldside")
@@ -97,15 +98,20 @@ def main():
             j["models"].append({"file": "obelisk_2x2.obj", "name": "Harbour obelisk", "kind": "landmark", "lot": [2, 2],
                                 "weight": 1, "scale": 1.0, "rotate_deg": 0, "enabled": True})
             json.dump(j, open(os.path.join(d, "models.json"), "w"), indent=1)
-        elif c == "landmarks":
+        elif c in ("landmarks", "landmarkdesc"):
             # task plop: kind landmark (make_testmodels.py --landmarks: obelisk 2x2 with a description, pavilion 3x3,
             # a refused 5x5 and a refused kind civic) + a .bld file as a landmark
+            # plop2 (2026-11-19): case landmarkdesc = the same models, entries in the order the page saves them (by file
+            # name), and the obelisk's description as typed in the page's Description box (pagetest.mjs --edit-desc
+            # blanks it, types it, installs from the page's own models.json and compares with this case's output)
             subprocess.run([sys.executable, MAKE, "--landmarks", d], check=True, capture_output=True)
             j = json.load(open(os.path.join(d, "models.json"), encoding="utf-8"))
-            j["models"][0]["description"] = "Test monument, bldimport"
+            j["models"][0]["description"] = "Test monument, bldimport" if c == "landmarks" else LANDMARK_DESC
             shutil.copy2(os.path.join(a.game, "Buildings", "Garvey Plaza.bld"), d)
             j["models"].append({"file": "Garvey Plaza.bld", "name": "Garvey Plaza landmark", "kind": "landmark",
                                 "weight": 1, "enabled": True, "x_bld": {"art": "preview"}})
+            if c == "landmarkdesc":
+                j["models"].sort(key=lambda e: e["file"].lower())
             json.dump(j, open(os.path.join(d, "models.json"), "w"), indent=1)
         elif c == "bld":
             models = []

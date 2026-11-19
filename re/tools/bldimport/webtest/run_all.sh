@@ -17,6 +17,9 @@
 # --landmarks + a .bld) and a landmark in case ports, the page installing case landmarks (pagetest.mjs landmarks), and
 # the pack reader installing the Maxis landmark packs (sc3pack_golden --plugin-pack <maxis_addons_2000>: .pin + .dat
 # into Apps/PlugIn, the 2000 art converted).
+# plop2 (2026-11-19i): golden case landmarkdesc and the page's Description box (pagetest.mjs --edit-desc: blanked, typed
+# in the panel, installed from the page's own models.json = bldimport.py); the SC4 tower's landmark / ploppable lots as
+# kind landmark entries and a rerun that keeps their description (sc4_packs.mjs, in the 6th argument's steps).
 # <pristine game tree>: a game folder with the road mod and no bldimport install (read only; install_golden.mjs
 # hard-links copies of it). Steps print "[N/M] name PASS|FAIL"; the tests' own lines follow each step.
 # The SC4 download stays on this PC (its licence): nothing of it is written outside <work dir>.
@@ -33,7 +36,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 work="$1"; game="$2"; kits="$3"; sc4zip="${4:-}"; sc4dir="${5:-}"; sc4packs="${6:-}"
 py="${PY:-$HOME/bin/py -3.12}"
 packs="${SC3PACK_PACKS:-$here/../../../../stage/st_packs}"
-steps=20; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
+steps=21; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
 # sc4props (2026-11-19g): SC4 lot props from the BSC Common Dependencies Pack, when the 6th argument's folder holds it
 # (and the JMyers .zip + folder are given): sc4_props_setup.py (sc4conv.py --deps) + sc4_props.mjs (sc4web.js streams
 # the 1.7 GB zip as the page does: slices and a stream, never read whole)
@@ -43,13 +46,14 @@ bsc=""; [ -n "$sc4packs" ] && [ -n "$sc4zip" ] && for f in "$sc4packs"/*Common\ 
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
 step() { n=$((n + 1)); local name="$1"; shift; if "$@"; then echo "[$n/$steps] $name PASS"; else echo "[$n/$steps] $name FAIL"; bad=$((bad + 1)); fi; }
-step "golden_setup (bldimport.py pack, 6 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
+step "golden_setup (bldimport.py pack, 7 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
 step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles,ports,landmarks --frames
 step "install_golden.mjs (install, re-install, restore)" node "$here/install_golden.mjs" --golden "$work" --game "$game" --case kenney
 step "zip_golden.mjs (.zip route)" node "$here/zip_golden.mjs" --golden "$work" --game "$game" --case kenney
 for c in kenney bld styles ports landmarks; do
   step "pagetest.mjs $c (the page in headless Chrome)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case "$c"
 done
+step "pagetest.mjs landmarkdesc (the Description box typed in the page, installed = bldimport.py)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case landmarkdesc --edit-desc "obelisk_2x2.obj=Typed in the page, Córdoba"
 step "bld_js_check.mjs (.bld reader, game's Buildings)" bash -c "$py '$here/../bldfile.py' js-expect --out '$work/bldexp.json' '$game/Buildings' >/dev/null && node '$here/../bld_js_check.mjs' '$work/bldexp.json' '$game'/Buildings/*.bld"
 step "bld_js_check.mjs --reader bldweb (.bld reader of the importer, game's Buildings)" node "$here/../bld_js_check.mjs" --reader bldweb "$work/bldexp.json" "$game"/Buildings/*.bld
 if [ -n "${BLD1999:-}" ]; then

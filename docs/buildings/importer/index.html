@@ -859,7 +859,8 @@ async function makeRecord(file, entry) {
   rec.meta = {
     name: e.name ?? prettyName(file.name), kind: e.kind ?? 'growable', class: e.class ?? null,
     lot: Array.isArray(e.lot) ? e.lot.slice() : null, weight: e.weight ?? 1, height_m: e.height_m ?? null,
-    scale: e.scale ?? 1, rotate_deg: e.rotate_deg ?? 0, style: e.style ?? 'any', enabled: e.enabled ?? true, notes: e.notes ?? ''
+    scale: e.scale ?? 1, rotate_deg: e.rotate_deg ?? 0, style: e.style ?? 'any', enabled: e.enabled ?? true, notes: e.notes ?? '',
+    description: typeof e.description === 'string' ? e.description : ''   // plop2: a landmark's line under the name
   };
   if (rec.base.y && rec.meta.height_m == null) rec.meta.height_m = round(rec.base.y * rec.meta.scale, 10);
   if (!entry) { const s = suggest(rec); Object.assign(rec.meta, s.set); rec.why = s.why; }
@@ -879,7 +880,8 @@ async function makeBldRecord(rec, file, entry) {
   rec.meta = {
     name: e.name ?? (rec.bld ? rec.bld.name : prettyName(file.name)), kind: e.kind ?? 'growable', class: e.class ?? null,
     lot: Array.isArray(e.lot) ? e.lot.slice() : [n, n], weight: e.weight ?? 1, height_m: e.height_m ?? null,
-    scale: e.scale ?? 1, rotate_deg: e.rotate_deg ?? 0, style: e.style ?? 'any', enabled: e.enabled ?? true, notes: e.notes ?? ''
+    scale: e.scale ?? 1, rotate_deg: e.rotate_deg ?? 0, style: e.style ?? 'any', enabled: e.enabled ?? true, notes: e.notes ?? '',
+    description: typeof e.description === 'string' ? e.description : ''   // plop2: a landmark's line under the name
   };
   if (!rec.raw) rec.raw = {};
   if (rec.bld && !rec.raw.x_bld) rec.raw.x_bld = { art: 'auto', architect: rec.bld.architect,
@@ -1021,6 +1023,7 @@ function warnings(rec) {
   if (m.kind === 'landmark') {
     const n = rec.bld ? rec.bld.lot : (m.lot ? m.lot[0] : 1);
     if (!LANDMARK_KIND.sizes.includes(n) || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`landmarks are ${LANDMARK_KIND.sizes.map(s => s + 'x' + s).join(', ')} only: bldimport skips this one`);
+    if (m.description && BW.cp1252Encode(m.description.trim()) === null) w.push("the description has characters the game's text files cannot hold (Windows-1252): bldimport skips this one");
   }
   if (m.kind === 'ploppable') w.push('civic and other ploppable buildings are not imported yet (landmarks are: kind landmark): bldimport skips this one');
   if (rec.bld) {
@@ -1038,8 +1041,13 @@ function warnings(rec) {
 // ---------------------------------------------------------------- models.json
 function entryOf(rec) {
   const m = rec.meta;
-  return { ...(rec.raw || {}), file: rec.file, name: m.name, kind: m.kind, class: m.class, lot: m.lot, weight: m.weight,
+  const o = { ...(rec.raw || {}), file: rec.file, name: m.name, kind: m.kind, class: m.class, lot: m.lot, weight: m.weight,
     height_m: m.height_m, scale: m.scale, rotate_deg: m.rotate_deg, style: m.style, enabled: m.enabled, notes: m.notes };
+  // plop2 (2026-11-19): "description" = the line under a landmark's name in the game's landmark dialog (bldimport.py /
+  // bldweb.js: prop 0x7C, else the name). Written only when set, so other entries keep their shape.
+  delete o.description;
+  if (m.description) o.description = m.description;
+  return o;
 }
 function toJSONText() {
   const out = { ...S.top, sc3models: 1, models: [...S.recs.map(entryOf), ...S.orphans] };
@@ -1378,6 +1386,10 @@ function buildForm() {
   el.style = Object.assign(document.createElement('input'), { type: 'text' }); row('Style', el.style);
   el.enabled = Object.assign(document.createElement('input'), { type: 'checkbox' }); row('Enabled', el.enabled);
   el.notes = document.createElement('textarea'); el.notes.rows = 2; row('Notes', el.notes);
+  // plop2: shown for landmarks only; empty = the game shows the name again on that line
+  el.description = Object.assign(document.createElement('input'), { type: 'text', maxLength: 120, placeholder: 'line under the name in the landmark menu' });
+  el.descRow = row('Description', el.description); el.descRow.hidden = true;
+  el.description.title = "The line under the landmark's name in the game's landmark menu (stock landmarks show the city they stand in). Empty: the name again.";
 
   const edit = (key, fn) => ev => { const recs = [...S.sel]; if (!recs.length) return; recs.forEach(r => fn(r, ev.target)); S.dirty = true; renderGrid(); refreshMeasure(); rebuildGround(); if (S.focus) applyWrap(S.focus); if (key === 'scale' || key === 'rotate_deg' || key === 'height_m') frame(); refreshPanel(key); };
   el.name.onchange = edit('name', (r, t) => { r.meta.name = t.value; });
@@ -1391,6 +1403,7 @@ function buildForm() {
   el.style.onchange = edit('style', (r, t) => { r.meta.style = t.value; });
   el.enabled.onchange = edit('enabled', (r, t) => { r.meta.enabled = t.checked; });
   el.notes.onchange = edit('notes', (r, t) => { r.meta.notes = t.value; });
+  el.description.onchange = edit('description', (r, t) => { r.meta.description = t.value.trim(); });
 }
 function common(recs, get) {
   const vals = new Set(recs.map(r => JSON.stringify(get(r))));
@@ -1420,7 +1433,9 @@ function refreshPanel(skip) {
   Object.values(el).forEach(e => e.disabled = dis);
   refreshMeasure();
   const sg = $('sugg');
-  if (dis) { sg.hidden = true; ['name','style','notes','weight','height_m','scale','rotate_deg'].forEach(k => { el[k].value = ''; }); return; }
+  if (dis) { sg.hidden = true; el.descRow.hidden = true; ['name','style','notes','weight','height_m','scale','rotate_deg','description'].forEach(k => { el[k].value = ''; }); return; }
+  el.descRow.hidden = !recs.every(r => r.meta.kind === 'landmark');
+  if (skip !== 'description') { const c = common(recs, r => r.meta.description); el.description.value = c.one ? c.v : ''; el.description.placeholder = c.one ? 'line under the name in the landmark menu' : '(mixed)'; }
   const set = (k, c, fmt = v => v) => { if (k === skip) return; el[k].value = c.one ? fmt(c.v) : ''; el[k].placeholder = c.one ? '' : '(mixed)'; };
   set('name', common(recs, r => r.meta.name)); set('style', common(recs, r => r.meta.style)); set('notes', common(recs, r => r.meta.notes));
   set('weight', common(recs, r => r.meta.weight)); set('height_m', common(recs, r => r.meta.height_m)); set('scale', common(recs, r => r.meta.scale));

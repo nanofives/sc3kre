@@ -43,6 +43,7 @@ import json
 import math
 import os
 import re
+import shutil
 import sys
 
 import numpy as np
@@ -464,7 +465,8 @@ def pack_notes(idx, bs, states, lots, deps):
                 if b is not None:
                     versions.setdefault(b['tgi'], []).append(
                         {'lot': lot['name'], 'kind': 'landmark' if bld['landmark'] else 'ploppable',
-                         'building': label_of(bld), 'jobs': bool(bld['jobs'])})
+                         'building': label_of(bld), 'jobs': bool(bld['jobs']), 'exemplar': bld['name'],
+                         'building_tgi': '%08X-%08X-%08X' % bld['tgi']})
     if not conv:
         lines.append('No building converted: this download holds no building models, only %s and %s'
                      % (nw(len(lots), 'lot', 'lots'), nw(len(bs) + len(oblds), 'building description', 'building descriptions')))
@@ -486,10 +488,70 @@ def pack_notes(idx, bs, states, lots, deps):
     for b in conv:
         vs = versions.get(b['tgi'])
         if vs:
-            lines.append('%s also comes as %s: SC3 grows buildings, so %s listed for later, not converted'
+            n = lot_for(b)
+            if n not in LANDMARK_LOTS:
+                tail = 'not converted: SC3 landmarks are 1x1 to 4x4 and this building needs %dx%d' % (n, n)
+            else:
+                on = [v['lot'] for v in vs if version_on(vs, v, n)]
+                off = [v['lot'] for v in vs if not version_on(vs, v, n)]
+                tail = ('converted as %s for the landmark menu (kind landmark), %s on'
+                        % ('SC3 landmarks' if len(vs) > 1 else 'an SC3 landmark', ', '.join(on) or 'none'))
+                if off:
+                    tail += ', %s off (the same building again, and SC3 landmarks have no jobs)' % ', '.join(off)
+            lines.append('%s also comes as %s: %s'
                          % (label_of(b), ', '.join('the %s lot %s (building %s)' % (v['kind'], v['lot'], v['building'])
-                                                   for v in vs), 'they are' if len(vs) > 1 else 'it is'))
+                                                   for v in vs), tail))
     return lines, missing, versions
+
+
+# ---------------------------------------------------------------------------------------------- task plop2
+# SC4 landmark / ploppable versions (round 2026-11-19i): a lot whose building has no model and shows a converted
+# building as a lot prop (the Global Office Center's "Landmark" and "Jobs" lots) becomes an SC3 landmark entry
+# (bldimport kind landmark: the game's landmark menu, a plugin in Apps\PlugIn\bldimport). Its OBJ is a byte copy of
+# the building's own <stem>.obj (same MTL and textures; bldimport keys ids by file, so each entry has its own file),
+# without the SC4 lot's props. On: the landmark lot; when a building has no landmark lot, its first ploppable lot.
+LANDMARK_LOTS = (1, 2, 3, 4)
+LANDMARK_DESC = 'From SimCity 4'
+LANDMARK_EDITABLE = EDITABLE + ('kind', 'description')
+
+
+def version_on(vs, v, n):
+    if n not in LANDMARK_LOTS:
+        return False
+    if v['kind'] == 'landmark':
+        return True
+    return not any(x['kind'] == 'landmark' for x in vs) and v is vs[0]
+
+
+def landmark_file(b, v, vs):
+    """<building stem>_<landmark|ploppable>.obj, numbered from the second lot of a kind."""
+    same = [x for x in vs if x['kind'] == v['kind']]
+    k = next(i for i, x in enumerate(same) if x is v)
+    return '%s_%s%s.obj' % (stem_of(b['name']), v['kind'], '' if k == 0 else str(k + 1))
+
+
+def landmark_entry(b, e, v, vs, style, keep_diag):
+    n = lot_for(b)
+    x = e['x_sc4']
+    diag = bool(x['diagonal'])
+    notes = ("SC4 %s lot %s (building %s) as an SC3 landmark: the landmark menu, one per city, stats of a stock"
+             " landmark of the lot. The model is %s without the SC4 lot's props."
+             % (v['kind'], v['lot'], v['building'], label_of(b)))
+    if n not in LANDMARK_LOTS:
+        notes += ' Off: SC3 landmarks are 1x1 to 4x4, this building needs %dx%d.' % (n, n)
+    elif not version_on(vs, v, n):
+        notes += ' Off by default: the same building as the landmark entry, and SC3 landmarks have no jobs.'
+    return {
+        'file': landmark_file(b, v, vs), 'name': v['building'], 'kind': 'landmark',
+        'class': None, 'lot': [n, n], 'weight': 1, 'height_m': e['height_m'], 'scale': 1.0, 'rotate_deg': 0,
+        'style': 'any', 'enabled': bool(version_on(vs, v, n) and (keep_diag or not diag)),
+        'description': LANDMARK_DESC, 'notes': notes,
+        'x_bldrender': {'style': style},
+        'x_sc4': {'exemplar': v['exemplar'], 'design': v['building'], 'colour': None, 'version': v['kind'],
+                  'sc4_lot': v['lot'], 'model_of': b['name'], 'building_tgi': v['building_tgi'],
+                  'model_key': x['model_key'], 'size_m': x['size_m'], 'diagonal': diag, 'foundation': x['foundation'],
+                  'views': x['views']},
+    }
 
 
 def main(argv):
@@ -591,6 +653,21 @@ def main(argv):
                 pr['on'] = bool(op.get('on')) and pr['placed'] > 0     # task sc4props: the player's switch
                 e['file'] = stem_of(b['name']) + ('_props.obj' if pr['on'] else '.obj')
         models.append(e)
+        vs = versions.get(b['tgi']) or []
+        for v in vs:                      # task plop2: the building's SC4 landmark / ploppable lots as SC3 landmarks
+            le = landmark_entry(b, e, v, vs, a.style, a.diagonal)
+            shutil.copyfile(os.path.join(a.out, stem_of(b['name']) + '.obj'), os.path.join(a.out, le['file']))
+            la = {k: le[k] for k in LANDMARK_EDITABLE}
+            le['x_sc4']['auto'] = la
+            o = old.get(le['x_sc4']['exemplar']) or old.get(le['file'])
+            if o:                         # the player's edits since the last run (description included)
+                prev = (o.get('x_sc4') or {}).get('auto') or {}
+                for k in LANDMARK_EDITABLE:
+                    if k in o and k in prev and o[k] != prev[k]:
+                        le[k] = o[k]
+            models.append(le)
+            print('  %-32s -> %-36s landmark lot %s %s' % (v['exemplar'][:32], le['file'], le['lot'],
+                                                          'enabled' if le['enabled'] else ''))
         print('  %-32s -> %-36s class %s lot %s %s%s' % (b['name'], e['file'], e['class'], e['lot'],
                                                        'enabled' if e['enabled'] else '',
                                                        ' diagonal' if e['x_sc4']['diagonal'] else ''))
