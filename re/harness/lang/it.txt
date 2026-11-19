@@ -748,3 +748,15 @@ resize.mt_civvar=Edifici civici: più aspetti
 resize.mt_newreward=Nuove ricompense
 # en: Simulation and buildings
 resize.mt_simbld=Simulazione ed edifici
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Imported look. Same service and same price as the original.
+resize.cd_desc_look=Aspetto importato. Stesso servizio e stesso prezzo dell'originale.
+# en: The game's own building.
+resize.cd_desc_stock=L'edificio originale del gioco.
+# en: Look %d of %d
+resize.cd_lookn=Aspetto %d di %d
+# en: Price: $%s
+resize.cd_price=Prezzo: $%s
+# en: Choose a look
+resize.cd_title=Scegli un aspetto

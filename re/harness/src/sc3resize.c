@@ -16493,6 +16493,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
             rz_patch_ddblt_surf(*(DWORD *)(f[7] + 4));
         rz_poll();
         sw_tick();   /* STATIONWARN: the red marker on poorly connected stations */
+        cd_tick();   /* CIVDLG: select the entry once the civic list window has built its controls */
         wx_tick();   /* WEATHER: re-request rain on a new city view */
         ft_tick();   /* FORESTTOOL: paint the 7th Paisaje button when its flyout opens */
         if (g_census_ms && GetTickCount() >= g_census_ms) { g_census_ms = 0; rz_census(); }
@@ -18993,8 +18994,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0;
               g_civvar = GetPrivateProfileIntA("buildings", "civicvariants", 1, bp) ? 1 : 0;     /* CIVVAR (civmod) */
+              g_civdlg = GetPrivateProfileIntA("buildings", "civiclist", 1, bp) ? 1 : 0;        /* CIVDLG (civdlg) */
               g_newreward = GetPrivateProfileIntA("buildings", "newrewards", 1, bp) ? 1 : 0; }   /* NEWREWARD (civmod) */
           if (GetEnvironmentVariableA("SC3RESIZE_CIVVAR", v, sizeof(v))) g_civvar = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_CIVDLG", v, sizeof(v))) g_civdlg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NEWREWARD", v, sizeof(v))) g_newreward = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);

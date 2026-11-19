@@ -519,6 +519,16 @@ resize.build_over_zones=Build over zones
 resize.buildings=Buildings
 # sc3resize.c
 resize.camera=Camera
+# sc3resize_civic.c
+resize.cd_desc_look=Imported look. Same service and same price as the original.
+# sc3resize_civic.c
+resize.cd_desc_stock=The game's own building.
+# sc3resize_civic.c
+resize.cd_lookn=Look %d of %d
+# sc3resize_civic.c
+resize.cd_price=Price: $%s
+# sc3resize_civic.c
+resize.cd_title=Choose a look
 # sc3resize.c
 resize.city_keeps_running_while=City keeps running while scrolling
 # sc3resize.c
