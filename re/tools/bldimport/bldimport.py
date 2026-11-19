@@ -46,6 +46,17 @@ used for them (the exemplar keeps the base's LandUse 12310 / 12330). The airpark
 pushes each family pair once and ignores the Key weight, so an airport entry's weight is written as that many Key
 lines of weight 1 (at most PORT_MAX_COPIES); the dockyard's (0x1002bfec) honours the weight like the RCI rules.
 
+Landmarks (task plop, 2026-11-19): `"kind": "landmark"` entries become new landmarks in the stock landmark dialog
+("Elige un Edificio Destacado"), placed with the game's own tool (re/analysis/PLOPPABLES.md). The dialog lists every
+occupant exemplar whose type IsA 18000 (SIMADV 0x10008ef2, CitySim.ini [AgentTypeHierarchy]), so a landmark is data
+only. It is written the way Maxis shipped its landmark packs, as a plugin the game loads by itself (SIMINIT
+cISC3PluginBuildingMgr, sc3plugin.py): Apps\PlugIn\bldimport\bldimport.pin + bldimport.dat, which holds the
+exemplar {0x207EDC0E, LM_GROUP, id} (stats of the first stock landmark of that lot, by id: LANDMARK below; prop 0x65 =
+18000 "Landmarks"), its name {0x2026960B, LM_TEXT_GROUP, id}, the line under the name in the dialog (prop 0x7C,
+{0x2026960B, LM_DESC_GROUP, id}: the entry's "description", else its name; a stock landmark's says where it stands),
+the frame table {0x6300, LM_CS_GROUP, id} and the 40 pixel / anchor records (GROUP, id << 16 | frame). No overlay file
+and no road mod are needed for a landmark: it works in a stock game. Lots 1x1 to 4x4, weight not used.
+
 Ids 38000-38999, kept per model file in <folder>\sc3build\ids.json so a saved city keeps finding its buildings.
 Needs the sc3mods road mod (sc3netmod) installed: the files go into mods\netmod\overlay like bat_growables.ps1's.
 Re-runnable: each run first puts back the files it wrote last time (state.json + backups), then installs again; a
@@ -93,6 +104,13 @@ PORTS = {
                 "label": "Seaport (dockyard)"},
 }
 PORT_MAX_COPIES = 20
+# task plop: a landmark joins the stock landmark dialog (every exemplar whose type IsA 18000); stats of the first stock
+# exemplar by id with a type in `types`, a square footprint of that size, a 0x6300 frame table and a name key
+LANDMARK = {"landuse": 18000, "types": (18000, 18999), "sizes": (1, 2, 3, 4), "label": "Landmark"}
+LM_GROUP, LM_CS_GROUP, LM_TEXT_GROUP, LM_DESC_GROUP = 0xB1D10002, 0xB1D10003, 0xB1D10004, 0xB1D10005
+PLUGIN_NAME = "bldimport"
+PLUGIN_DIR = "Apps/PlugIn/" + PLUGIN_NAME + "/"
+LM_PIN, LM_DAT = PLUGIN_DIR + PLUGIN_NAME + ".pin", PLUGIN_DIR + PLUGIN_NAME + ".dat"
 
 
 class ImportError_(Exception):
@@ -236,9 +254,53 @@ def port_table(game):
     return out
 
 
+def landmark_table(game):
+    """-> {"landmark": {"families": [], "bases" {size: (id, file)}, "landuse", "copies", "label"}} (task plop). Base per
+    size: the first stock exemplar by id of type 0x207EDC0E whose prop 0x65 is in LANDMARK["types"], with a square
+    footprint of that size, a 0x6300 frame table and a name key."""
+    bld = BG.stock_buildings(game)
+    lo, hi = LANDMARK["types"]
+    bases = {}
+    for bid in sorted(bld):
+        f, p = bld[bid]
+        lu, fp, cs = BG.tkb1_get(p, 0x65), BG.tkb1_get(p, 0x66), BG.tkb1_get(p, 0x67)
+        if not lu or not lo <= lu[0] <= hi or not fp or fp[0] != fp[2] or fp[0] not in LANDMARK["sizes"]:
+            continue
+        if fp[0] in bases or not cs or cs[0] != CS_TYPE or BG.tkb1_get(p, 0x6D) is None:
+            continue
+        bases[fp[0]] = (bid, f)
+    miss = [n for n in LANDMARK["sizes"] if n not in bases]
+    if miss:
+        raise ImportError_("landmark: no stock base landmark for lot %s" % ", ".join("%dx%d" % (n, n) for n in miss))
+    return {"landmark": {"families": [], "bases": dict(sorted(bases.items())), "landuse": LANDMARK["landuse"],
+                         "copies": False, "label": LANDMARK["label"]}}
+
+
 def target_of(e):
-    """Key of an entry's target in plan()'s table: the lot class (growable) or the kind (airport / seaport)."""
-    return e["kind"] if e["kind"] in PORTS else e["class"]
+    """Key of an entry's target in plan()'s table: the lot class (growable) or the kind (airport / seaport / landmark)."""
+    return e["kind"] if e["kind"] in PORTS or e["kind"] == "landmark" else e["class"]
+
+
+def tkb1_set_u32(buf, prop, v):
+    """Set a one-value type-3 prop (task plop: prop 0x65 of a landmark copy)."""
+    b = bytearray(buf)
+    for p, t, n, off, ln in BG.tkb1_props(buf):
+        if p == prop:
+            if t != 3 or n != 1:
+                raise ImportError_("prop 0x%x is not one number" % prop)
+            struct.pack_into("<I", b, off, v)
+            return bytes(b)
+    raise ImportError_("prop 0x%x not present" % prop)
+
+
+def plugin_pin(keys):
+    """The .pin of the landmark plugin, in the Maxis landmark packs' layout (sc3plugin.py). keys: [(id, name bytes)]."""
+    nm = PLUGIN_NAME.encode()
+    out = (b"[Admin]\r\nEnabled=ON\r\n\r\n[DBSegments]\r\n0x00000001=0x80C381D7;%PluginDirectory%" + nm + b"\\" + nm +
+           b".dat\r\n\r\n[SpriteSegments]\r\n" + nm + b"=addon-enabled\r\n\r\n[OccupantKeys]\r\n")
+    for nid, name in keys:
+        out += b"0x%08X,0x%08X,0x%08X=%d %s\r\n" % (BLD_TYPE, LM_GROUP, nid, nid, name)
+    return out
 
 
 def opts(m):
@@ -401,15 +463,16 @@ def plan(folder, game, log=print):
         w = m.get("weight", 1)
         kind = m.get("kind", "growable")
         port = PORTS.get(kind) if isinstance(kind, str) else None
+        lm = kind == "landmark"
         if not m.get("enabled", True):
             why = "enabled is false"
-        elif kind != "growable" and port is None:
-            why = "kind %r: only growable, airport and seaport buildings" % (kind,)
+        elif kind != "growable" and port is None and not lm:
+            why = "kind %r: only growable, airport, seaport and landmark buildings" % (kind,)
         elif not os.path.isfile(os.path.join(folder, f)):
             why = "file not in the folder"
         elif not (f.lower().endswith(".obj") or is_bld(f)):
             why = "only .obj models and .bld files"
-        elif cls is None and is_bld(f) and port is None:
+        elif cls is None and is_bld(f) and port is None and not lm:
             why = "no class: its category (%s) is not a house, shop or factory, set one in models.json" % (
                 (m.get("x_bld") or {}).get("category"))
         elif lot_err:
@@ -419,12 +482,14 @@ def plan(folder, game, log=print):
         elif port is not None and port["copies"] and w > PORT_MAX_COPIES:
             why = ("weight %d: an %s's weight is the number of copies in the airpark's list (the rule ignores Key "
                    "weights), at most %d" % (w, kind, PORT_MAX_COPIES))
+        elif lm and n not in LANDMARK["sizes"]:
+            why = "landmark lot %dx%d: landmarks are %s" % (n, n, ", ".join("%dx%d" % (s, s) for s in LANDMARK["sizes"]))
         elif port is not None and n not in port["sizes"]:
             why = "%s lot %dx%d: the %s grows %s" % (kind, n, n, port["label"].lower(), " and ".join(
                 "%dx%d" % (s, s) for s in port["sizes"]))
-        elif port is None and table is not None and cls not in table:
+        elif port is None and not lm and table is not None and cls not in table:
             why = "class %r is not a growable class (%s)" % (cls, ", ".join(map(str, sorted(table))))
-        elif port is None and table is not None and n not in table[cls]["bases"]:
+        elif port is None and not lm and table is not None and n not in table[cls]["bases"]:
             why = "class %d has no %dx%d lot (it has %s)" % (cls, n, n, ", ".join(
                 "%dx%d" % (s, s) for s in table[cls]["bases"]))
         else:
@@ -432,16 +497,29 @@ def plan(folder, game, log=print):
                 name.encode("cp1252")
             except UnicodeEncodeError:
                 why = "name %r has characters the game's text files cannot hold (cp1252)" % name
+        desc = None
+        if not why and lm:
+            desc = m.get("description")
+            desc = desc.strip() if isinstance(desc, str) and desc.strip() else name
+            try:
+                desc.encode("cp1252")
+            except UnicodeEncodeError:
+                why = "description %r has characters the game's text files cannot hold (cp1252)" % desc
         if why:
             rep.append("skip  [%s] %s: %s" % (nid, f, why))
             continue
         if port is not None:
             cls = port["landuse"]                       # the base's LandUse; models.json "class" is not used
+        if lm:
+            cls = LANDMARK["landuse"]
         out.append({"id": nid, "file": f, "name": name, "lot": n, "class": cls, "weight": w, "model": m,
-                    "kind": kind if port is not None else "growable"})
+                    "kind": kind if (port is not None or lm) else "growable"})
+        if lm:
+            out[-1]["desc"] = desc
     if table is not None:
         table = dict(table)
         table.update(ports)
+        table.update(landmark_table(game))
     return out, rep, table
 
 
@@ -537,14 +615,19 @@ def build_files(folder, game, src, log=print, force_render=False):
             return src[rel]
         return game.read(rel) if game.exists(rel) else None
 
-    for rel in (OVL + OCC_KOREA, OVL + CS_KOREA):
-        if cur(rel) is None:
-            raise ImportError_("%s not found: the road mod (sc3netmod, mods\\netmod) must be installed" % rel)
-    langs = [n for n in game.listdir(OVL + "Apps/Res/Text") if cur(OVL + "Apps/Res/Text/%s/%s" % (n, NAMES))]
-    if not langs:
-        raise ImportError_("no mods\\netmod\\overlay\\Apps\\Res\\Text\\<language>\\%s found" % NAMES)
     entries, rep, table = plan(folder, game, log)
+    # the overlay (road mod) only for growables / ports, or to put back what an earlier run wrote there (task plop)
+    need_ovl = any(e["kind"] != "landmark" for e in entries) or any(r.startswith(OVL) for r in src)
+    langs = []
+    if need_ovl:
+        for rel in (OVL + OCC_KOREA, OVL + CS_KOREA):
+            if cur(rel) is None:
+                raise ImportError_("%s not found: the road mod (sc3netmod, mods\\netmod) must be installed" % rel)
+        langs = [n for n in game.listdir(OVL + "Apps/Res/Text") if cur(OVL + "Apps/Res/Text/%s/%s" % (n, NAMES))]
+        if not langs:
+            raise ImportError_("no mods\\netmod\\overlay\\Apps\\Res\\Text\\<language>\\%s found" % NAMES)
     occ, cs, pix, names, lines = [], [], [], [], {}
+    lm_recs, lm_keys = [], []
     bld = BG.stock_buildings(game)
     for e in entries:
         nid, n, lu = e["id"], e["lot"], e["class"]
@@ -556,20 +639,38 @@ def build_files(folder, game, src, log=print, force_render=False):
         ex = BG.base_exemplar(game, base, bfile)
         tab, tmpl = stock_table_and_template(game, ex)
         nm = e["name"].encode("cp1252")
-        ex = BG.tkb1_set_key(ex, 0x67, (CS_TYPE, GROUP, nid))
-        ex = BG.tkb1_set_key(ex, 0x6D, (TEXT_TYPE, TEXT_GROUP, nid))
+        lm = e["kind"] == "landmark"
+        ex = BG.tkb1_set_key(ex, 0x67, (CS_TYPE, LM_CS_GROUP if lm else GROUP, nid))
+        ex = BG.tkb1_set_key(ex, 0x6D, (TEXT_TYPE, LM_TEXT_GROUP if lm else TEXT_GROUP, nid))
         ex = BG.tkb1_set_text(ex, 0x64, nm)
+        if lm:
+            ex = tkb1_set_u32(ex, 0x65, LANDMARK["landuse"])
+            ex = BG.tkb1_set_key(ex, 0x7C, (TEXT_TYPE, LM_DESC_GROUP, nid))
         BG.tkb1_props(ex)
-        occ.append((BLD_GROUP, nid, BLD_TYPE, ex))
-        cs.append((GROUP, nid, CS_TYPE, frame_table(tab, nid)))
+        if lm:
+            lm_recs.append((LM_GROUP, nid, BLD_TYPE, ex))
+            lm_recs.append((LM_TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
+            dsc = e["desc"].encode("cp1252")
+            lm_recs.append((LM_DESC_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(dsc)) + dsc))
+            lm_recs.append((LM_CS_GROUP, nid, CS_TYPE, frame_table(tab, nid)))
+            lm_keys.append((nid, nm))
+        else:
+            occ.append((BLD_GROUP, nid, BLD_TYPE, ex))
+            cs.append((GROUP, nid, CS_TYPE, frame_table(tab, nid)))
+        epix = lm_recs if lm else pix
         nudged = 0
         for k in range(FRAMES):
             z, r = (k % 20) // 4, k % 4
             im, (L, T) = frames[(z, r)]
             p0, (w, h), nd = record_from_image(tmpl, im)
             nudged += nd
-            pix.append((GROUP, (nid << 16) | k, 0, p0))
-            pix.append((GROUP, (nid << 16) | k, 1, anchor_payload(L, T, w, h)))
+            epix.append((GROUP, (nid << 16) | k, 0, p0))
+            epix.append((GROUP, (nid << 16) | k, 1, anchor_payload(L, T, w, h)))
+        if lm:
+            rep.append("plop  [%d] %s: \"%s\", %s, %dx%d, stats of stock %d, in %s, %s%s" % (
+                nid, e["file"], e["name"], tg["label"], n, n, base, LM_PIN, describe(info),
+                ", %d magenta px nudged" % nudged if nudged else ""))
+            continue
         names.append((TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
         copies = tg.get("copies", False)
         for f in tg["families"]:
@@ -586,7 +687,10 @@ def build_files(folder, game, src, log=print, force_render=False):
             ", %d magenta px nudged" % nudged if nudged else ""))
     files = {}
     keep = set(e["id"] for e in entries)
-    if entries or src:
+    if lm_recs:
+        files[LM_PIN] = plugin_pin(lm_keys)
+        files[LM_DAT] = BG.new_container(lm_recs)
+    if need_ovl and (entries or src):
         files[OVL + OCC_KOREA] = upsert(cur(OVL + OCC_KOREA), occ) if occ else cur(OVL + OCC_KOREA)
         files[OVL + CS_KOREA] = upsert(cur(OVL + CS_KOREA), cs) if cs else cur(OVL + CS_KOREA)
         if pix:

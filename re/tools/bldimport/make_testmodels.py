@@ -17,6 +17,14 @@ Writes the airport / seaport test models instead (bldimport kinds airport / seap
   warehouse_2x2.obj       2x2 seaport: a teal shed with a white roof stripe, a yellow gantry and containers
   models.json             kinds airport / seaport / seaport, plus two entries bldimport must refuse (airport_2x2.obj,
                           fuel_depot_25.obj: an airport 2x2 and an airport with weight 25)
+
+    py -3.12 re/tools/bldimport/make_testmodels.py --landmarks <out folder>  (task plop, 2026-11-19)
+
+Writes the landmark test models (bldimport kind landmark, a plugin in Apps\PlugInldimport):
+  obelisk_2x2.obj/.mtl    2x2 monument: a red and gold obelisk on a stepped white plaza with four lamp posts
+  pavilion_3x3.obj/.mtl   3x3 pavilion: a teal dome on a round colonnade, a fountain basin in front
+  models.json             kind landmark 2x2 and 3x3, plus two entries bldimport must refuse (landmark_5x5.obj: a
+                          5x5 landmark; civic_1x1.obj: kind civic, not imported)
 """
 import json
 import math
@@ -360,9 +368,86 @@ def ports(out):
     return 0
 
 
+def obelisk_2x2(folder, name="obelisk_2x2"):
+    o = Obj(name)
+    o.mat("plaza", (0.90, 0.89, 0.85))
+    o.box(-15.6, 0, -15.6, 15.6, 0.3, 15.6, mats={"ny": None})
+    o.box(-9.0, 0.3, -9.0, 9.0, 1.2, 9.0, mats={"ny": None})
+    o.box(-5.5, 1.2, -5.5, 5.5, 2.2, 5.5, mats={"ny": None})
+    o.mat("stone", (0.70, 0.18, 0.14))
+    o.box(-2.4, 2.2, -2.4, 2.4, 24.0, 2.4, mats={"ny": None})
+    o.mat("gold", (0.92, 0.74, 0.20))
+    o.box(-2.6, 2.2, -2.6, 2.6, 4.0, 2.6, mats={"ny": None})
+    o.tri([(-2.4, 24.0, 2.4), (2.4, 24.0, 2.4), (0, 28.5, 0)])
+    o.tri([(2.4, 24.0, 2.4), (2.4, 24.0, -2.4), (0, 28.5, 0)])
+    o.tri([(2.4, 24.0, -2.4), (-2.4, 24.0, -2.4), (0, 28.5, 0)])
+    o.tri([(-2.4, 24.0, -2.4), (-2.4, 24.0, 2.4), (0, 28.5, 0)])
+    o.mat("lamp", (0.20, 0.20, 0.22))
+    for x, z in ((-12.0, -12.0), (12.0, -12.0), (-12.0, 12.0), (12.0, 12.0)):
+        o.box(x - 0.3, 0.3, z - 0.3, x + 0.3, 5.0, z + 0.3, mats={"ny": None})
+    o.mat("light", (0.98, 0.94, 0.70))
+    for x, z in ((-12.0, -12.0), (12.0, -12.0), (-12.0, 12.0), (12.0, 12.0)):
+        o.box(x - 0.7, 5.0, z - 0.7, x + 0.7, 6.0, z + 0.7, mats={"ny": None})
+    o.write(folder)
+
+
+def pavilion_3x3(folder, name="pavilion_3x3"):
+    o = Obj(name)
+    o.mat("plaza", (0.84, 0.82, 0.76))
+    o.box(-23.6, 0, -23.6, 23.6, 0.3, 23.6, mats={"ny": None})
+    o.mat("base", (0.94, 0.93, 0.90))
+    cylinder(o, 0, -3.0, 15.0, 0.3, 1.5, sides=24, mat_side="base", mat_top="base")
+    o.mat("column", (0.97, 0.96, 0.93))
+    for k in range(12):
+        a = 2 * math.pi * k / 12
+        cylinder(o, 13.0 * math.cos(a), -3.0 + 13.0 * math.sin(a), 0.8, 1.5, 11.0, sides=8, mat_side="column")
+    cylinder(o, 0, -3.0, 14.2, 11.0, 12.4, sides=24, mat_side="base", mat_top="base")
+    o.mat("dome", (0.18, 0.56, 0.54))
+    rings = 6
+    for j in range(rings):
+        a0, a1 = math.pi / 2 * j / rings, math.pi / 2 * (j + 1) / rings
+        r0, r1 = 13.0 * math.cos(a0), 13.0 * math.cos(a1)
+        y0, y1 = 12.4 + 10.0 * math.sin(a0), 12.4 + 10.0 * math.sin(a1)
+        for k in range(24):
+            b0, b1 = 2 * math.pi * k / 24, 2 * math.pi * (k + 1) / 24
+            p00 = (r0 * math.cos(b0), y0, -3.0 + r0 * math.sin(b0))
+            p01 = (r0 * math.cos(b1), y0, -3.0 + r0 * math.sin(b1))
+            p10 = (r1 * math.cos(b0), y1, -3.0 + r1 * math.sin(b0))
+            p11 = (r1 * math.cos(b1), y1, -3.0 + r1 * math.sin(b1))
+            o.quad([p01, p00, p10, p11])
+    o.mat("water", (0.30, 0.52, 0.80))
+    cylinder(o, 0, 17.0, 4.5, 0.3, 0.9, sides=16, mat_side="base", mat_top="water")
+    o.write(folder)
+
+
+def landmarks(out):
+    """Task plop: the landmark test models + their models.json."""
+    os.makedirs(out, exist_ok=True)
+    obelisk_2x2(out)
+    pavilion_3x3(out)
+    pavilion_3x3(out, "landmark_5x5")
+    obelisk_2x2(out, "civic_1x1")
+    common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True, "weight": 1}
+    models = {"sc3models": 1, "generator": "make_testmodels.py --landmarks", "models": [
+        dict(common, file="obelisk_2x2.obj", name="Test obelisk", kind="landmark", lot=[2, 2], height_m=28.5,
+             notes="landmark 2x2, stats of Coit Tower 9507"),
+        dict(common, file="pavilion_3x3.obj", name="Test pavilion", kind="landmark", lot=[3, 3], height_m=22.4,
+             notes="landmark 3x3, stats of Arc de Triomphe 9528"),
+        dict(common, file="landmark_5x5.obj", name="Refused: landmark 5x5", kind="landmark", lot=[5, 5],
+             height_m=22.4, notes="landmarks are 1x1 to 4x4 in this tool: bldimport skips this entry"),
+        dict(common, file="civic_1x1.obj", name="Refused: civic", kind="civic", lot=[1, 1], height_m=28.5,
+             notes="civic buildings are not imported: skipped")]}
+    with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
+        json.dump(models, fh, indent=2)
+    print("wrote landmark test models to", out)
+    return 0
+
+
 def main(argv):
     if len(argv) == 2 and argv[0] == "--ports":
         return ports(argv[1])
+    if len(argv) == 2 and argv[0] == "--landmarks":
+        return landmarks(argv[1])
     if len(argv) != 1:
         print(__doc__)
         return 2

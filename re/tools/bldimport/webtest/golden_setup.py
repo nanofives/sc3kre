@@ -12,7 +12,10 @@ Writes into <dir>:
   py\<case>\log.txt      the tool's report
 golden.mjs runs bldweb.js over src\<case> against the same game and compares every byte.
 
-Case ports (task airsea, 2026-11-19): make_testmodels.py --ports plus a .bld file, kinds airport / seaport.
+Case ports (task airsea, 2026-11-19): make_testmodels.py --ports plus a .bld file, kinds airport / seaport; task plop
+adds one landmark (obelisk_2x2) so the case also writes the plugin next to the overlay files.
+Case landmarks (task plop, 2026-11-19): make_testmodels.py --landmarks plus a .bld file, kind landmark only (the plugin
+in Apps/PlugIn/bldimport, no overlay file), one entry with a description.
 
 Case sc4 (task sc4web, needs --sc4 <SC4 plugin folder>): src\sc4\ is sc4conv.py's output for that folder (the
 models folder the Python route installs from), packed like the others. Also py\sc4\rerun_old.json (that models.json
@@ -63,7 +66,7 @@ def main():
     ap.add_argument("--game", required=True)
     ap.add_argument("--kits", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports")
+    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks")
     ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
     ap.add_argument("--bld1999", help="folder of 1999 Building Architect .bld files for case bld1999 (sc3compat-a)")
     ap.add_argument("--bldside", help="folder of .bld files + the bld_frames.ixf render_bld.ps1 wrote, for case bldside")
@@ -84,6 +87,25 @@ def main():
             shutil.copy2(os.path.join(a.game, "Buildings", "North Shore Cannery.bld"), d)
             j["models"].append({"file": "North Shore Cannery.bld", "name": "Cannery dock", "kind": "seaport",
                                 "weight": 3, "enabled": True, "x_bld": {"art": "preview"}})
+            # task plop: one landmark among the port buildings (overlay files + the plugin in one install)
+            tmp = os.path.join(a.out, "tmp_landmarks")
+            shutil.rmtree(tmp, ignore_errors=True)
+            subprocess.run([sys.executable, MAKE, "--landmarks", tmp], check=True, capture_output=True)
+            for f in ("obelisk_2x2.obj", "obelisk_2x2.mtl"):
+                shutil.copy2(os.path.join(tmp, f), d)
+            shutil.rmtree(tmp, ignore_errors=True)
+            j["models"].append({"file": "obelisk_2x2.obj", "name": "Harbour obelisk", "kind": "landmark", "lot": [2, 2],
+                                "weight": 1, "scale": 1.0, "rotate_deg": 0, "enabled": True})
+            json.dump(j, open(os.path.join(d, "models.json"), "w"), indent=1)
+        elif c == "landmarks":
+            # task plop: kind landmark (make_testmodels.py --landmarks: obelisk 2x2 with a description, pavilion 3x3,
+            # a refused 5x5 and a refused kind civic) + a .bld file as a landmark
+            subprocess.run([sys.executable, MAKE, "--landmarks", d], check=True, capture_output=True)
+            j = json.load(open(os.path.join(d, "models.json"), encoding="utf-8"))
+            j["models"][0]["description"] = "Test monument, bldimport"
+            shutil.copy2(os.path.join(a.game, "Buildings", "Garvey Plaza.bld"), d)
+            j["models"].append({"file": "Garvey Plaza.bld", "name": "Garvey Plaza landmark", "kind": "landmark",
+                                "weight": 1, "enabled": True, "x_bld": {"art": "preview"}})
             json.dump(j, open(os.path.join(d, "models.json"), "w"), indent=1)
         elif c == "bld":
             models = []

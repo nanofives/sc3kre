@@ -13,6 +13,10 @@
 # sc4pass2 (2026-11-19f): the 6th argument (stage\st_packs\sc4: Global Office Center, DiegoDL, I-M zips) adds the
 # tower and the lot-only packs: sc4_packs_setup.py + sc4_packs.mjs, and the page on a lot-only zip.
 #
+# plop (2026-11-19h): golden case landmarks (kind landmark: the plugin Apps/PlugIn/bldimport, make_testmodels.py
+# --landmarks + a .bld) and a landmark in case ports, the page installing case landmarks (pagetest.mjs landmarks), and
+# the pack reader installing the Maxis landmark packs (sc3pack_golden --plugin-pack <maxis_addons_2000>: .pin + .dat
+# into Apps/PlugIn, the 2000 art converted).
 # <pristine game tree>: a game folder with the road mod and no bldimport install (read only; install_golden.mjs
 # hard-links copies of it). Steps print "[N/M] name PASS|FAIL"; the tests' own lines follow each step.
 # The SC4 download stays on this PC (its licence): nothing of it is written outside <work dir>.
@@ -29,7 +33,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 work="$1"; game="$2"; kits="$3"; sc4zip="${4:-}"; sc4dir="${5:-}"; sc4packs="${6:-}"
 py="${PY:-$HOME/bin/py -3.12}"
 packs="${SC3PACK_PACKS:-$here/../../../../stage/st_packs}"
-steps=19; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
+steps=20; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
 # sc4props (2026-11-19g): SC4 lot props from the BSC Common Dependencies Pack, when the 6th argument's folder holds it
 # (and the JMyers .zip + folder are given): sc4_props_setup.py (sc4conv.py --deps) + sc4_props.mjs (sc4web.js streams
 # the 1.7 GB zip as the page does: slices and a stream, never read whole)
@@ -39,11 +43,11 @@ bsc=""; [ -n "$sc4packs" ] && [ -n "$sc4zip" ] && for f in "$sc4packs"/*Common\ 
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
 step() { n=$((n + 1)); local name="$1"; shift; if "$@"; then echo "[$n/$steps] $name PASS"; else echo "[$n/$steps] $name FAIL"; bad=$((bad + 1)); fi; }
-step "golden_setup (bldimport.py pack, 5 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
-step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles,ports --frames
+step "golden_setup (bldimport.py pack, 6 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
+step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles,ports,landmarks --frames
 step "install_golden.mjs (install, re-install, restore)" node "$here/install_golden.mjs" --golden "$work" --game "$game" --case kenney
 step "zip_golden.mjs (.zip route)" node "$here/zip_golden.mjs" --golden "$work" --game "$game" --case kenney
-for c in kenney bld styles ports; do
+for c in kenney bld styles ports landmarks; do
   step "pagetest.mjs $c (the page in headless Chrome)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case "$c"
 done
 step "bld_js_check.mjs (.bld reader, game's Buildings)" bash -c "$py '$here/../bldfile.py' js-expect --out '$work/bldexp.json' '$game/Buildings' >/dev/null && node '$here/../bld_js_check.mjs' '$work/bldexp.json' '$game'/Buildings/*.bld"
@@ -67,7 +71,7 @@ step "build_fonts.mjs --check (docs/assets/fonts = a fresh build from the game's
 step "fonts_inline.mjs (importer: inline game fonts, light look under OS dark mode)" node "$here/fonts_inline.mjs"
 tp="$packs/testpacks"
 step "sc3pack_testpacks.py (3 local test packs)" $py "$here/sc3pack_testpacks.py" --game "$game" --batpatch "$packs/maxis_batpatch_1999" --addons "$packs/maxis_addons_2000" --out "$tp"
-step "sc3pack_golden.py (sc3pack.py reports, install, remove)" $py "$here/sc3pack_golden.py" --game "$game" --out "$work/sc3pack" --install-pack "$tp/bld_parts.zip" "$tp/plain_bld.zip" "$tp/bld_parts.zip" "$tp/nested.zip" "$packs/maxis_addons_2000" "$packs/maxis_batpatch_1999" "$game/Buildings"
+step "sc3pack_golden.py (sc3pack.py reports, install, remove)" $py "$here/sc3pack_golden.py" --game "$game" --out "$work/sc3pack" --install-pack "$tp/bld_parts.zip" --plugin-pack "$packs/maxis_addons_2000" "$tp/plain_bld.zip" "$tp/bld_parts.zip" "$tp/nested.zip" "$packs/maxis_addons_2000" "$packs/maxis_batpatch_1999" "$game/Buildings"
 step "sc3pack_golden.mjs (sc3pack.js vs sc3pack.py: reports, install on a file list + a real folder)" node "$here/sc3pack_golden.mjs" --golden "$work/sc3pack" --game "$game"
 step "sc3pack_pagetest.mjs (the pack reader in headless Chrome)" node "$here/sc3pack_pagetest.mjs" --golden "$work/sc3pack" --game "$game"
 if [ -n "$sc4zip" ]; then
