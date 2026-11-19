@@ -6,7 +6,8 @@
 // gives it (a .zip as one File, a folder as a webkitdirectory File list), and its report with the game (a listFS
 // view, as the page gets from a folder pick) and without one must be byte-identical to the Python JSON. Then the
 // install run (install, install again with overwrite + a picked kind, remove) on a listFS view of the pristine game:
-// every snapshot (log + sha256 of every file under Apps/BACustom and mods/netmod/sc3pack) = the Python one.
+// every snapshot (log + sha256 of every file under Apps/BACustom, Apps/PlugIn and mods/netmod/sc3pack) = the Python one.
+// Task plop: plus the plugin run of install.json (plugin_snapshots: install, install again, remove) on both views.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -34,7 +35,7 @@ const lazyFile = (root, rel, top) => {
 };
 const packs = JSON.parse(fs.readFileSync(path.join(golden, 'packs.json'), 'utf8'));
 const inst = JSON.parse(fs.readFileSync(path.join(golden, 'install.json'), 'utf8'));
-const total = packs.length * 2 + inst.snapshots.length * 2 + 1;
+const total = packs.length * 2 + inst.snapshots.length * 2 + 1 + (inst.plugin_snapshots ? inst.plugin_snapshots.length * 2 : 0);
 let k = 0, bad = 0;
 const line = (what, ok, extra = '') => { k++; bad += !ok; console.log(`[${k}/${total}] ${what} ${ok ? 'PASS' : 'FAIL'}${extra ? ' ' + extra : ''}`); };
 function firstDiff(a, b) {
@@ -60,7 +61,7 @@ for (let n = 0; n < packs.length; n++) {
 }
 async function snapshot(g, res) {
   const files = {};
-  for (const root of ['Apps/BACustom', 'mods/netmod/sc3pack']) {
+  for (const root of ['Apps/BACustom', 'Apps/PlugIn', 'mods/netmod/sc3pack']) {
     const rels = [];
     const rec = async rel => { for (const n of (await g.listdir(rel)).slice().sort((a, b) => { const x = a.toLowerCase(), y = b.toLowerCase(); return x < y ? -1 : x > y ? 1 : a < b ? -1 : a > b ? 1 : 0; })) { const r = rel + '/' + n; if (await g.exists(r)) rels.push(r); else await rec(r); } };
     await rec(root);
@@ -97,6 +98,20 @@ hs.push(await snapshot(hg, await P.remove(hg)));
 for (let s = 0; s < hs.length; s++) {
   const got = P.dumps(hs[s]), want = P.dumps(inst.snapshots[s]);
   line(`real folder (handleFS), ${steps[s]}: log + files = sc3pack.py`, got === want, got === want ? '' : firstDiff(got, want));
+}
+if (inst.plugin_snapshots) {          // task plop: .pin + .dat plugins into Apps/PlugIn, the 2000 art converted
+  const pe = await open(inst.plugin_pack);
+  const psteps = ['before', 'install', 'install again', 'remove'];
+  for (const [label, g] of [['file list (listFS)', game], ['real folder (handleFS)', hg]]) {
+    const ps = [await snapshot(g, { log: [] })];
+    ps.push(await snapshot(g, await P.install(g, pe, inst.plugin_name)));
+    ps.push(await snapshot(g, await P.install(g, pe, inst.plugin_name)));
+    ps.push(await snapshot(g, await P.remove(g)));
+    for (let s = 0; s < ps.length; s++) {
+      const got = P.dumps(ps[s]), want = P.dumps(inst.plugin_snapshots[s]);
+      line(`plugin run ${label}, ${psteps[s]}: log + files = sc3pack.py`, got === want, got === want ? `(${ps[s].log.length} log lines, ${Object.keys(ps[s].files).length} files)` : firstDiff(got, want));
+    }
+  }
 }
 const linked = walk(path.join(gJ, 'Apps', 'Res', 'BA')).every(r => fs.statSync(path.join(gJ, 'Apps', 'Res', 'BA', ...r.split('/'))).nlink > 1);
 // a folder pack opened from a folder handle (Chrome showDirectoryPicker) = the File list route

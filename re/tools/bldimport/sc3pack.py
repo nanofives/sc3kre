@@ -10,8 +10,10 @@ is what webtest/sc3pack_golden.mjs checks.
               part       a Building Architect part: .tga / .bmp images and prop .met files with a valid header,
                          kind (paint / detail / prop) from a Paints / Details / Props folder, else a .met naming the
                          image (prop), else the record 0xE3F87B0D of a .bld in the pack (version 8 only), else unknown
-              plugin     the Maxis add-on style: a .pin (ini with [DBSegments]) and the IXF .dat it names; identified
-                         only (their occupants are ploppables, a later round)
+              plugin     the Maxis add-on style: a .pin (ini with [DBSegments]) and the IXF .dat it names (Maxis'
+                         landmark packs). Task plop (2026-11-19): install writes the .pin and its .dat files where SC3U
+                         loads them by itself, Apps/PlugIn/<the .pin's folder>/ (re/analysis/PLOPPABLES.md), with the
+                         2000 art converted (sc3plugin.convert_dat: SC3U does not draw it as shipped)
               readme     .txt .doc .rtf .htm .html .pdf .nfo .wri .md, or a name with "readme"
               other      everything else, with a note (installer file, program, archive that could not be read ...)
   depends   per .bld: every texture name its model uses (record 0xE3F87B0C texture list), resolved as the BA renderer
@@ -21,6 +23,8 @@ is what webtest/sc3pack_golden.mjs checks.
   install   the pack's parts into Apps/BACustom/<Paints|Details|Props>, never over a different file of the same
             name unless that name is passed in `overwrite`; backups and state as bldimport.py
             (mods/netmod/sc3pack/state.json + backup/), link-safe (temp + rename). `remove` puts them back.
+            Plugins (task plop): every .pin whose [DBSegments] files are all in the pack and under %PluginDirectory%,
+            into Apps/PlugIn/ at the paths the .pin names, the same conflict / overwrite / backup rules
 
   py -3.12 re/tools/bldimport/sc3pack.py report <pack.zip|folder> [--game <tree>] [--json out.json]
   py -3.12 re/tools/bldimport/sc3pack.py install <pack> --game <tree> [--overwrite "Mariners 02.tga" ...] [--kind path=detail]
@@ -51,6 +55,7 @@ INSTALLER_EXT = (".cab", ".hdr", ".ins", ".lid", ".tag", ".inx", ".ex_", ".dl_",
 STATE_DIR = "mods/netmod/sc3pack"
 MAX_DEPTH = 3
 ZIP_BAD = "not a readable .zip"
+PLUGIN_ROOT = "Apps/PlugIn/"             # task plop: FS->PlugInDirectory() + "PlugIn\\" (SIMINIT 0x1000583e)
 
 
 class PackError(Exception):
@@ -129,6 +134,32 @@ def open_pack(src):
 
 def u32(b, o):
     return struct.unpack_from("<I", b, o)[0]
+
+
+def art_1999(b, idx):
+    """Task plop: pixel records in the 2000 add-on format (format 1, dword1 0x8000, LZO1X: sc3plugin.py)."""
+    n = 0
+    for (g, i, t), (off, sz) in idx.items():
+        if t == 0 and sz >= 0x18 and (u32(b, off) >> 8) & 0xFF == 1 and u32(b, off + 4) == 0x8000:
+            n += 1
+    return n
+
+
+def plugin_targets(pin_path, ini):
+    """Task plop: -> ({"pin": rel, "dats": [rel]}, None) or (None, why): where install puts a .pin and its files."""
+    dats = []
+    for k, v in ini.get("dbsegments", []):
+        path = v.split(";", 1)[1].strip() if ";" in v else ""
+        if not path.lower().startswith("%plugindirectory%"):
+            return None, "a [DBSegments] file is not under %PluginDirectory%: " + v
+        rel = path[len("%plugindirectory%"):].replace("\\", "/").strip("/")
+        if not rel or any(x in ("", ".", "..") for x in rel.split("/")):
+            return None, "a [DBSegments] path is not a plain file path: " + v
+        dats.append(PLUGIN_ROOT + rel)
+    if not dats:
+        return None, "no [DBSegments] file"
+    d = dats[0].rsplit("/", 1)[0]
+    return {"pin": d + "/" + base(pin_path), "dats": dats}, None
 
 
 def ixf_index(b):
@@ -359,7 +390,7 @@ def sort_pack(entries):
             for (g, i, t) in idx:
                 types["0x%08X" % t] = types.get("0x%08X" % t, 0) + 1
             row["plugin"] = {"type": "dat", "records": len(idx), "types": types,
-                             "keys": sorted(idx, key=lambda k: (k[2], k[0], k[1]))}
+                             "keys": sorted(idx, key=lambda k: (k[2], k[0], k[1])), "art_1999": art_1999(b, idx)}
         elif ex == ".met" and met_names(b) is not None:
             row["kind"] = "part"
             row["met"] = met_names(b)
@@ -579,9 +610,14 @@ def report(entries, game=None, kinds=None):
             else:
                 ok = False
             keys.append({"key": k, "label": v, "in_dat": ok})
+        tg, why = plugin_targets(f["path"], ini)
+        if tg is not None and not all(s["found"] for s in segs):
+            tg, why = None, "a [DBSegments] file is not in the pack"
+        art = sum(dats[base(s["found"]).lower()]["plugin"]["art_1999"] for s in segs if s["found"])
         plugins.append({"pin": f["path"], "enabled": dict((k.lower(), v) for k, v in ini.get("admin", [])).get("enabled"),
                         "segments": segs, "occupants": keys,
-                        "sprites": [k for k, v in ini.get("spritesegments", [])]})
+                        "sprites": [k for k, v in ini.get("spritesegments", [])],
+                        "install": tg, "not_installable": why, "art_1999": art})
     for f in files:
         if f["kind"] == "plugin" and f["plugin"]["type"] == "dat" and f["path"] not in used:
             plugins.append({"dat": f["path"], "pin": None})
@@ -656,6 +692,39 @@ def install(game, entries, pack, overwrite=(), kinds=None):
         st["files"][tgt] = ent
         game.write_new(tgt, b)
         log.append([f["path"], "replaced " + tgt if now is not None else "installed " + tgt])
+    # task plop: plugins (.pin + its .dat files, the 2000 art converted)
+    for p in rep["plugins"]:
+        if not p.get("pin"):
+            continue
+        if p["install"] is None:
+            log.append([p["pin"], "skipped: " + p["not_installable"]])
+            continue
+        todo = [(p["pin"], p["install"]["pin"], data[p["pin"]])]
+        for sg, tgt in zip(p["segments"], p["install"]["dats"]):
+            b = data[sg["found"]]
+            idx = ixf_index(b)
+            if art_1999(b, idx):
+                import sc3plugin
+                b = sc3plugin.convert_dat(b)[0]
+            todo.append((sg["found"], tgt, b))
+        for srcp, tgt, b in todo:
+            nm = base(tgt).lower()
+            now = game.read(tgt) if game.exists(tgt) else None
+            if now == b:
+                log.append([srcp, "already installed"])
+                continue
+            if now is not None and nm not in ow:
+                log.append([srcp, "conflict: a different " + base(tgt) + " is in " + tgt.rsplit("/", 1)[0]])
+                continue
+            ent = st["files"].get(tgt)
+            if ent is None:
+                if now is not None:
+                    game.write_new(STATE_DIR + "/backup/" + tgt, now)
+                ent = {"existed": now is not None}
+            ent.update(written=sha(b), pack=pack, source=srcp)
+            st["files"][tgt] = ent
+            game.write_new(tgt, b)
+            log.append([srcp, "replaced " + tgt if now is not None else "installed " + tgt])
     _save_state(game, st)
     return {"log": log, "state": st}
 
@@ -753,9 +822,12 @@ def print_report(rep):
                 print("    %-8s %-30s %s %s" % (r["status"], r["name"], r.get("pack_state", ""), r.get("where", "")))
     for p in rep["plugins"]:
         if p.get("pin"):
-            print("plugin %s: %s, %d occupants (%d in the .dat)" % (
+            print("plugin %s: %s, %d occupants (%d in the .dat), %s" % (
                 p["pin"], ", ".join(s["file"] + ("" if s["found"] else " (not in the pack)") for s in p["segments"]),
-                len(p["occupants"]), sum(o["in_dat"] for o in p["occupants"])))
+                len(p["occupants"]), sum(o["in_dat"] for o in p["occupants"]),
+                "install: " + p["install"]["pin"] + (", %d 2000-format pictures converted" % p["art_1999"]
+                                                     if p["art_1999"] else "")
+                if p["install"] else "not installable: " + p["not_installable"]))
         else:
             print("plugin .dat without a .pin: %s" % p["dat"])
 

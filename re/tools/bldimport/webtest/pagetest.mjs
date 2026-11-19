@@ -124,7 +124,9 @@ try {
     const st = res.files['mods/netmod/bldimport/state.json'];
     line('state.json written', !!st);
     const backups = Object.keys(res.files).filter(p => p.startsWith('mods/netmod/bldimport/backup/'));
-    line(`backups of the ${want.length - 1} files that existed (${backups.length})`, backups.length === want.length - 1);
+    // task plop: count the output files the game already had (the B1D10001 DAT and the landmark plugin are new files)
+    const existed = want.filter(r => fs.existsSync(path.join(tree, ...r.split('/')))).length;
+    line(`backups of the ${existed} files that existed (${backups.length})`, backups.length === existed);
     line('rendered in a Web Worker', /^worker/.test(res.worker || ''), res.worker);
   }
 } catch (e) { total = total || 1; line('pagetest', false, String(e.stack || e)); }

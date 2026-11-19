@@ -572,13 +572,16 @@ const CLASSES = [
  [9300,'F',1,'farm','Farm',[1,2,3]],
 ];
 const CLS = new Map(CLASSES.map(c => [c[0], c]));
-const KINDS = ['growable','airport','seaport','ploppable'];
+const KINDS = ['growable','airport','seaport','landmark','ploppable'];
 // task airsea (2026-11-19): what bldimport.py / bldweb.js PORTS grow for each port kind (re/analysis/PORT_PICK.md):
 // the airpark grows 1x1 fillers only and ignores Key weights (weight = copies, at most 20); the dockyard draws by weight
 const PORT_KINDS = {
   airport: { sizes: [1], maxWeight: 20, what: 'airport zones (as a 1x1 airpark building next to the terminals, stats of Parked Airplane)' },
   seaport: { sizes: [1, 2], maxWeight: 1000, what: 'seaport zones (dockyard, beside the piers, stats of Seaport Crane or Loading Bay)' },
 };
+// task plop (2026-11-19): bldimport.py / bldweb.js LANDMARK: a landmark is placed by the player from the game's landmark
+// menu, once per city (re/analysis/PLOPPABLES.md); lots 1x1 to 4x4, the weight is not used
+const LANDMARK_KIND = { sizes: [1, 2, 3, 4], what: "the game's landmark menu (placed by the player, one per city; stats of a stock landmark of that lot: Big Ben, Coit Tower, Arc de Triomphe, Palace of Fine Arts)" };
 
 const DEFAULT_RULES = {
   cell_m: 16,
@@ -599,7 +602,8 @@ const DEFAULT_RULES = {
     clean: ['office','lab','tech','warehouse','assembly'],
     airport: ['airport','hangar','terminal','runway'],
     seaport: ['seaport','harbor','harbour','dock','pier','shipyard','crane'],
-    ploppable: ['park','school','hospital','statue','monument','landmark','fire','police','church','library','stadium','museum']
+    landmark: ['landmark','monument','statue','obelisk','memorial','museum','cathedral','basilica','palace','castle','pavilion','temple'],
+    ploppable: ['park','school','hospital','fire','police','church','library','stadium']
   }
 };
 let rules = structuredClone(DEFAULT_RULES);
@@ -955,6 +959,7 @@ function suggest(rec) {
   let kind = 'growable', zone = null, hit;
   if ((hit = hasWord(text, K.airport))) { kind = 'airport'; why.push(`name has "${hit}": airport`); }
   else if ((hit = hasWord(text, K.seaport))) { kind = 'seaport'; why.push(`name has "${hit}": seaport`); }
+  else if ((hit = hasWord(text, K.landmark))) { kind = 'landmark'; why.push(`name has "${hit}": landmark`); }
   else if ((hit = hasWord(text, K.ploppable))) { kind = 'ploppable'; why.push(`name has "${hit}": ploppable`); }
   else if ((hit = hasWord(text, K.farm))) { zone = 'F'; why.push(`name has "${hit}": farm`); }
   else if ((hit = hasWord(text, K.R))) { zone = 'R'; why.push(`name has "${hit}": residential`); }
@@ -965,12 +970,12 @@ function suggest(rec) {
   else { zone = 'R'; why.push(`no keyword, footprint ${area.toFixed(0)} m2: residential`); }
   const set = { kind, height_m: round(m.h, 10) };
   if (kind !== 'growable') {
-    const pk = PORT_KINDS[kind];
+    const pk = PORT_KINDS[kind] || (kind === 'landmark' ? LANDMARK_KIND : null);
     const lotN = pk ? (pk.sizes.includes(want) ? want : pk.sizes.filter(s => s <= want).pop() || pk.sizes[0]) : want;
     set.class = null; set.lot = [lotN, lotN];
     why.push(`lot ${want}x${want} from footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m at ${cell} m per cell`);
-    if (pk && lotN !== want) why.push(`${kind} buildings grow as ${pk.sizes.map(s => s + 'x' + s).join(' or ')}: lot ${lotN}x${lotN}`);
-    if (pk) why.push('grows in ' + pk.what);
+    if (pk && lotN !== want) why.push(`${kind} buildings ${kind === 'landmark' ? 'are' : 'grow as'} ${pk.sizes.map(s => s + 'x' + s).join(' or ')}: lot ${lotN}x${lotN}`);
+    if (pk) why.push((kind === 'landmark' ? 'placed from ' : 'grows in ') + pk.what);
     return { set, why: why.join('. ') };
   }
   let dens = m.h <= R.light_max_m ? 1 : m.h <= R.medium_max_m ? 2 : 3;
@@ -1013,7 +1018,11 @@ function warnings(rec) {
     if (!pk.sizes.includes(n) || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`${m.kind} buildings grow as ${pk.sizes.map(s => s + 'x' + s).join(' or ')} only: bldimport skips this one`);
     if (m.kind === 'airport' && m.weight > pk.maxWeight) w.push(`an airport's weight is the number of copies in the airpark's list, at most ${pk.maxWeight}: bldimport skips this one`);
   }
-  if (m.kind === 'ploppable') w.push('ploppable buildings are not imported yet: bldimport skips this one');
+  if (m.kind === 'landmark') {
+    const n = rec.bld ? rec.bld.lot : (m.lot ? m.lot[0] : 1);
+    if (!LANDMARK_KIND.sizes.includes(n) || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`landmarks are ${LANDMARK_KIND.sizes.map(s => s + 'x' + s).join(', ')} only: bldimport skips this one`);
+  }
+  if (m.kind === 'ploppable') w.push('civic and other ploppable buildings are not imported yet (landmarks are: kind landmark): bldimport skips this one');
   if (rec.bld) {
     if (m.lot && (m.lot[0] !== rec.bld.lot || m.lot[1] !== rec.bld.lot)) w.push(`the .bld file is a ${rec.bld.lot}x${rec.bld.lot} building: bldimport uses the file's lot`);
     if ((m.scale || 1) !== 1 || (m.rotate_deg || 0) !== 0) w.push('scale and rotate do not apply to a .bld file (its art is drawn by the Building Architect)');

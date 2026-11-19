@@ -3,12 +3,14 @@
 //
 //   open      a pack as downloaded: a .zip, a folder (a File list or a folder handle), a .zip inside a .zip (3 levels)
 //   sort      building (.bld, version 8 SC3U or 7 1999), part (BA .tga / .bmp / prop .met), plugin (.pin + .dat,
-//             identified only), readme, other (with a note)
+//             the Maxis landmark packs), readme, other (with a note)
 //   report    per .bld: every texture name of its model resolved as the BA renderer does (verify/bldbat/RESULTS.md
 //             step 3): color, embedded, stock (Apps/Res/BA), pack, custom (Apps/BACustom), missing; same-named files
 //             byte-compared (pack against Apps/BACustom, pack against pack)
 //   install   parts into Apps/BACustom/<Paints|Details|Props>, never over a different same-named file unless the
-//             player named it in `overwrite`; backups + state in mods/netmod/sc3pack (bldimport's scheme); remove
+//             player named it in `overwrite`; backups + state in mods/netmod/sc3pack (bldimport's scheme); remove.
+//             Task plop (2026-11-19): plugins too, the .pin and its .dat files into Apps/PlugIn/ where SC3U loads them by
+//             itself, the 2000 art converted (sc3plugin.py: LZO1X decode, QFS encode), same rules
 //
 // The game folder is any BLDWEB folder view (handleFS: File System Access, listFS: a file list with the writes kept
 // in memory, then BLDWEB.zipOf(writes) is the .zip the player unpacks).
@@ -24,6 +26,7 @@ function SC3PACK_LIB(BLDWEB) {
   const README_EXT = ['.txt', '.doc', '.rtf', '.htm', '.html', '.pdf', '.nfo', '.wri', '.md'];
   const INSTALLER_EXT = ['.cab', '.hdr', '.ins', '.lid', '.tag', '.inx', '.ex_', '.dl_', '.bin', '.ini', '.dll'];
   const STATE_DIR = 'mods/netmod/sc3pack', MAX_DEPTH = 3, ZIP_BAD = 'not a readable .zip';
+  const PLUGIN_ROOT = 'Apps/PlugIn/';      // task plop: FS->PlugInDirectory() + "PlugIn\\" (SIMINIT 0x1000583e)
 
   class PackError extends Error {}
   const sha = b => BLDWEB.sha256(b);
@@ -147,6 +150,89 @@ function SC3PACK_LIB(BLDWEB) {
   const openHandle = async dir => openFolder(await handleInputs(dir));
 
   // ================================================================================================ file checks
+  // ================================================================================================ plugins (task plop)
+  function art1999(b, idx) {             // sc3pack.art_1999
+    let n = 0;
+    for (const [, , t, off, sz] of idx.values()) if (t === 0 && sz >= 0x18 && ((u32(b, off) >>> 8) & 0xFF) === 1 && u32(b, off + 4) === 0x8000) n++;
+    return n;
+  }
+  function pluginTargets(pinPath, ini) { // sc3pack.plugin_targets -> [{pin, dats}, null] or [null, why]
+    const dats = [];
+    for (const [, v] of ini.dbsegments || []) {
+      const path = v.includes(';') ? pyStrip(v.slice(v.indexOf(';') + 1)) : '';
+      if (!path.toLowerCase().startsWith('%plugindirectory%')) return [null, 'a [DBSegments] file is not under %PluginDirectory%: ' + v];
+      let rel = path.slice('%plugindirectory%'.length).split('\\').join('/');
+      while (rel.startsWith('/')) rel = rel.slice(1);
+      while (rel.endsWith('/')) rel = rel.slice(0, -1);
+      if (!rel || rel.split('/').some(x => x === '' || x === '.' || x === '..')) return [null, 'a [DBSegments] path is not a plain file path: ' + v];
+      dats.push(PLUGIN_ROOT + rel);
+    }
+    if (!dats.length) return [null, 'no [DBSegments] file'];
+    return [{ pin: dats[0].slice(0, dats[0].lastIndexOf('/')) + '/' + base(pinPath), dats }, null];
+  }
+  function lzo1x(src) {                   // sc3plugin.lzo1x_decompress (LZO1X-1) -> [bytes, used]
+    const n = src.length; let out = new Uint8Array(Math.max(256, n * 4)), op = 0, ip = 0;
+    const need = k => { if (ip + k > n) throw new PackError('LZO stream ends early'); };
+    const grow = k => { if (op + k > out.length) { const o2 = new Uint8Array(Math.max(out.length * 2, op + k)); o2.set(out.subarray(0, op)); out = o2; } };
+    const ext = (t, b) => { if (t === 0) { need(1); while (src[ip] === 0) { t += 255; ip++; need(1); } t += b + src[ip++]; } return t; };
+    const lits = k => { need(k); grow(k); out.set(src.subarray(ip, ip + k), op); op += k; ip += k; };
+    const copy = (dist, k) => { const p = op - dist; if (p < 0) throw new PackError('LZO match before the start of the output'); grow(k); for (let j = 0; j < k; j++) out[op + j] = out[p + j]; op += k; };
+    need(1);
+    let t = src[ip], state = 'loop';
+    if (t > 17) { ip++; t -= 17; lits(t); if (t < 4) { need(1); t = src[ip++]; state = 'match'; } else state = 'first'; }
+    for (;;) {
+      if (state === 'loop') {
+        need(1); t = src[ip++];
+        if (t >= 16) { state = 'match'; continue; }
+        t = ext(t, 15); lits(t + 3); state = 'first';
+      }
+      if (state === 'first') {
+        need(1); t = src[ip++];
+        if (t >= 16) { state = 'match'; continue; }
+        need(1); const dist = 1 + 0x800 + (t >> 2) + (src[ip++] << 2);
+        copy(dist, 3); state = 'done';
+      }
+      if (state === 'match') {
+        let dist, k;
+        if (t >= 64) { need(1); dist = 1 + ((t >> 2) & 7) + (src[ip++] << 3); k = (t >> 5) + 1; }
+        else if (t >= 32) { t = ext(t & 31, 31); need(2); dist = 1 + (src[ip] >> 2) + (src[ip + 1] << 6); ip += 2; k = t + 2; }
+        else if (t >= 16) {
+          const hi = (t & 8) << 11; t = ext(t & 7, 7); need(2);
+          const d = (src[ip] >> 2) + (src[ip + 1] << 6); ip += 2;
+          if (hi === 0 && d === 0) return [out.slice(0, op), ip];
+          dist = hi + d + 0x4000; k = t + 2;
+        } else { need(1); dist = 1 + (t >> 2) + (src[ip++] << 2); k = 2; }
+        copy(dist, k); state = 'done';
+      }
+      if (state === 'done') {
+        t = src[ip - 2] & 3;
+        if (t === 0) { state = 'loop'; continue; }
+        lits(t); need(1); t = src[ip++]; state = 'match';
+      }
+    }
+  }
+  const is1999 = p => p.length >= 0x18 && ((u32(p, 0) >>> 8) & 0xFF) === 1 && u32(p, 4) === 0x8000;
+  function convertRecord(p) {            // sc3plugin.convert_record
+    const d0 = u32(p, 0), d2 = u32(p, 8), d3 = u32(p, 12), d4 = u32(p, 16), clen = u32(p, 20);
+    if (clen !== p.length - 0x10) throw new PackError('1999 record length field ' + clen + ', record ' + p.length + ' bytes');
+    const [block, used] = lzo1x(p.subarray(0x18));
+    if (block.length !== d4 || used !== p.length - 0x18) throw new PackError('LZO stream decoded to ' + block.length + ' bytes (header says ' + d4 + '), used ' + used + ' of ' + (p.length - 0x18));
+    if (block.length < 4 || u32(block, 0) !== d4) throw new PackError('decoded block does not start with its own length');
+    const stream = BLDWEB.qfsCompress(block), out = new Uint8Array(0x14 + stream.length), dv = new DataView(out.buffer);
+    [d0, 0x80000, d2, d3, stream.length + 4].forEach((v, k) => dv.setUint32(4 * k, v >>> 0, true));
+    out.set(stream, 0x14);
+    return out;
+  }
+  function convertDat(d) {               // sc3plugin.convert_dat -> [bytes, n]
+    const { idx, order } = BLDWEB.records(d), recs = []; let n = 0;
+    for (const [g, i, t] of order) {
+      let p = idx.get(keyOf(g, i, t));
+      if (t === 0 && is1999(p)) { p = convertRecord(p); n++; }
+      recs.push([g, i, t, p]);
+    }
+    return [n ? BLDWEB.newContainer(recs) : d, n];
+  }
+
   function ixfIndex(b) {
     if (b.length < 24 || u32(b, 0) !== MAGIC) return null;
     const out = new Map(); let o = 4;
@@ -274,7 +360,7 @@ function SC3PACK_LIB(BLDWEB) {
         row.kind = 'plugin';
         const types = {};
         for (const v of idx.values()) { const k = hex8(v[2]); types[k] = (types[k] || 0) + 1; }
-        row.plugin = { type: 'dat', records: idx.size, types, keys: new Set([...idx.keys()]) };
+        row.plugin = { type: 'dat', records: idx.size, types, keys: new Set([...idx.keys()]), art_1999: art1999(b, idx) };
       } else if (ex === '.met' && metNames(b) !== null) {
         row.kind = 'part'; row.met = metNames(b); mets.set(e.path, row.met);
       } else if ((ex === '.tga' && isTga(b)) || (ex === '.bmp' && isBmp(b))) {
@@ -414,7 +500,12 @@ function SC3PACK_LIB(BLDWEB) {
       }
       let enabled = null;
       for (const [k, v] of ini.admin || []) if (k.toLowerCase() === 'enabled') enabled = v;
-      plugins.push({ pin: f.path, enabled, segments: segs, occupants: keys, sprites: (ini.spritesegments || []).map(([k]) => k) });
+      let [tg, why] = pluginTargets(f.path, ini);
+      if (tg !== null && !segs.every(s => s.found)) { tg = null; why = 'a [DBSegments] file is not in the pack'; }
+      let art = 0;
+      for (const s of segs) if (s.found) art += dats.get(base(s.found).toLowerCase()).plugin.art_1999;
+      plugins.push({ pin: f.path, enabled, segments: segs, occupants: keys, sprites: (ini.spritesegments || []).map(([k]) => k),
+        install: tg, not_installable: why, art_1999: art });
     }
     for (const f of files) if (f.kind === 'plugin' && f.plugin.type === 'dat' && !used.has(f.path)) plugins.push({ dat: f.path, pin: null });
     const outFiles = [];
@@ -464,6 +555,30 @@ function SC3PACK_LIB(BLDWEB) {
       await game.writeNew(tgt, b);
       log.push([f.path, now !== null ? 'replaced ' + tgt : 'installed ' + tgt]);
     }
+    for (const p of rep.plugins) {          // task plop: plugins (.pin + its .dat files, the 2000 art converted)
+      if (!p.pin) continue;
+      if (p.install === null) { log.push([p.pin, 'skipped: ' + p.not_installable]); continue; }
+      const todo = [[p.pin, p.install.pin, data.get(p.pin)]];
+      p.segments.forEach((sg, k) => {
+        let b = data.get(sg.found);
+        if (art1999(b, ixfIndex(b))) b = convertDat(b)[0];
+        todo.push([sg.found, p.install.dats[k], b]);
+      });
+      for (const [srcp, tgt, b] of todo) {
+        const nm = base(tgt).toLowerCase(), now = await readOrNull(game, tgt);
+        if (bytesEq(now, b)) { log.push([srcp, 'already installed']); continue; }
+        if (now !== null && !ow.has(nm)) { log.push([srcp, 'conflict: a different ' + base(tgt) + ' is in ' + tgt.slice(0, tgt.lastIndexOf('/'))]); continue; }
+        let ent = st.files[tgt];
+        if (ent === undefined) {
+          if (now !== null) await game.writeNew(STATE_DIR + '/backup/' + tgt, now);
+          ent = { existed: now !== null };
+        }
+        Object.assign(ent, { written: sha(b), pack, source: srcp });
+        st.files[tgt] = ent;
+        await game.writeNew(tgt, b);
+        log.push([srcp, now !== null ? 'replaced ' + tgt : 'installed ' + tgt]);
+      }
+    }
     await saveState(game, st);
     return { log, state: st, report: rep };
   }
@@ -490,7 +605,7 @@ function SC3PACK_LIB(BLDWEB) {
   // ================================================================================================ page view
   // view(doc, el, rep, { onInstall(overwrite, kinds), onRemove(pack) }): the sort, the per-.bld report and the
   // install controls, drawn with the page's game-UI classes (sc3ui.css: .ui-group, .ui-label, .ui-table, .ui-note, button.primary).
-  const KIND_LABEL = { building: 'Buildings (.bld)', part: 'Building Architect parts', plugin: 'Plugins (.dat + .pin, identified only)', readme: 'Readmes', archive: 'Archives opened', other: 'Other files' };
+  const KIND_LABEL = { building: 'Buildings (.bld)', part: 'Building Architect parts', plugin: 'Plugins (.dat + .pin, landmark packs)', readme: 'Readmes', archive: 'Archives opened', other: 'Other files' };
   const STATUS_LABEL = { color: 'colour', embedded: 'in the .bld', stock: 'game (Res\\BA)', pack: 'this pack', custom: 'game (BACustom)', missing: 'MISSING', 'not checked': 'not checked (no game folder)' };
   function view(doc, el, rep, opt = {}) {
     const h = (tag, attrs = {}, ...kids) => {
@@ -533,12 +648,16 @@ function SC3PACK_LIB(BLDWEB) {
     }
     for (const p of rep.plugins) {
       if (!p.pin) { el.append(h('p', { class: 'ui-label' }, p.dat + ': plugin .dat without a .pin')); continue; }
-      el.append(h('details', { class: 'ui-group' }, h('summary', {}, 'Plugin ' + p.pin + ': ' + p.occupants.length + ' buildings (ploppables: not installed by this page yet)'),
+      const how = p.install ? 'Install puts it in ' + p.install.pin.slice(0, p.install.pin.lastIndexOf('/')).split('/').join('\\') +
+        ', the game loads it by itself and its buildings are in the landmark menu' + (p.art_1999 ? ' (' + p.art_1999 + ' pictures in the 2000 format, converted for SimCity 3000 Unlimited)' : '')
+        : 'cannot be installed: ' + p.not_installable;
+      el.append(h('details', { class: 'ui-group' }, h('summary', {}, 'Plugin ' + p.pin + ': ' + p.occupants.length + ' buildings. ' + how),
         h('table', { class: 'ui-table' }, p.occupants.map(o => h('tr', {}, h('td', {}, o.label), h('td', {}, o.key), h('td', {}, o.in_dat ? 'in the .dat' : 'NOT in the .dat')))),
         h('p', { class: 'ui-label' }, 'Data files: ' + p.segments.map(s => s.file + (s.found ? '' : ' (not in the pack)')).join(', '))));
     }
     const parts = rep.files.filter(f => f.kind === 'part');
-    if (rep.game && parts.length && opt.onInstall) {
+    const nPlug = rep.plugins.filter(p => p.pin && p.install).length;
+    if (rep.game && (parts.length || nPlug) && opt.onInstall) {
       const conflicts = parts.filter(f => f.state === 'conflict' && !f.pack_differ);
       const unknown = parts.filter(f => f.part_kind === null);
       const box = h('div', { class: 'ui-group' });
@@ -555,9 +674,10 @@ function SC3PACK_LIB(BLDWEB) {
         }
       }
       const todo = new Set(parts.filter(f => f.state === 'new' && !f.pack_differ).map(f => base(f.path).toLowerCase())).size;
-      box.append(h('button', { class: 'primary', onclick: () => opt.onInstall([...ow].filter(([, cb]) => cb.checked).map(([n]) => n), Object.fromEntries([...kinds].filter(([, s]) => s.value).map(([p, s]) => [p, s.value]))) },
-        'Install ' + todo + ' new part' + (todo === 1 ? '' : 's') + ' into Apps\\BACustom'));
-      if (opt.onRemove) box.append(' ', h('button', { onclick: () => opt.onRemove(opt.pack || null) }, 'Remove the parts this page installed'));
+      const label = (parts.length ? 'Install ' + todo + ' new part' + (todo === 1 ? '' : 's') + ' into Apps\\BACustom' : 'Install') +
+        (nPlug ? (parts.length ? ' and ' : ' ') + nPlug + ' plugin' + (nPlug === 1 ? '' : 's') + ' into Apps\\PlugIn' : '');
+      box.append(h('button', { class: 'primary', onclick: () => opt.onInstall([...ow].filter(([, cb]) => cb.checked).map(([n]) => n), Object.fromEntries([...kinds].filter(([, s]) => s.value).map(([p, s]) => [p, s.value]))) }, label));
+      if (opt.onRemove) box.append(' ', h('button', { onclick: () => opt.onRemove(opt.pack || null) }, 'Remove what this page installed'));
       el.append(box);
     }
     return el;
@@ -567,7 +687,7 @@ function SC3PACK_LIB(BLDWEB) {
     version: VERSION, PackError, STATE_DIR, KIND_DIR,
     openZip, openFolder, openFiles, openHandle, sortPack, gameIndex, report, dumps, install, remove, installed, view,
     // pieces for the tests
-    readBld, ixfIndex, parsePin, metNames, pySplitlines, pyStrip, cp437,
+    readBld, ixfIndex, parsePin, metNames, pySplitlines, pyStrip, cp437, lzo1x, convertDat, pluginTargets,
   };
 }
 

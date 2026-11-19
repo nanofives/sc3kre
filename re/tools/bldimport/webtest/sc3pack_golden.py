@@ -9,7 +9,9 @@ read only): install.json = the snapshots after
   1. install (no overwrite)
   2. install again, overwriting the conflicting name(s), with a kind picked for the unknown-kind part(s)
   3. remove
-Each snapshot = the log + sha256 of every file under Apps/BACustom and mods/netmod/sc3pack.
+Each snapshot = the log + sha256 of every file under Apps/BACustom, Apps/PlugIn and mods/netmod/sc3pack.
+Task plop (2026-11-19): --plugin-pack <pack with .pin + .dat plugins> adds a second run on the same game: install,
+install again (already installed), remove; the .dat files with 2000 art are written converted (sc3plugin.py).
 """
 import argparse
 import hashlib
@@ -28,7 +30,7 @@ KINDS = {"sc3pt loose.tga": "detail"}
 
 def snapshot(game, res):
     files = {}
-    for root in ("Apps/BACustom", "mods/netmod/sc3pack"):
+    for root in ("Apps/BACustom", "Apps/PlugIn", "mods/netmod/sc3pack"):
         rels = []
         P._walk(game, root, rels)
         for r in rels:
@@ -53,6 +55,7 @@ def main(argv):
     ap.add_argument("--game", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--install-pack", required=True)
+    ap.add_argument("--plugin-pack")
     ap.add_argument("packs", nargs="+")
     a = ap.parse_args(argv)
     os.makedirs(a.out, exist_ok=True)
@@ -76,15 +79,29 @@ def main(argv):
     snaps.append(snapshot(g, P.install(g, ents, name)))
     snaps.append(snapshot(g, P.install(g, ents, name, OVERWRITE, KINDS)))
     snaps.append(snapshot(g, P.remove(g)))
+    out = {"pack": os.path.abspath(a.install_pack), "name": name, "overwrite": OVERWRITE, "kinds": KINDS,
+           "snapshots": snaps}
+    pok = True
+    if a.plugin_pack:
+        pe = P.open_pack(a.plugin_pack)
+        pn = os.path.basename(os.path.normpath(a.plugin_pack))
+        ps = [snapshot(g, {"log": []})]
+        ps.append(snapshot(g, P.install(g, pe, pn)))
+        ps.append(snapshot(g, P.install(g, pe, pn)))
+        ps.append(snapshot(g, P.remove(g)))
+        out.update(plugin_pack=os.path.abspath(a.plugin_pack), plugin_name=pn, plugin_snapshots=ps)
+        plug = sorted(k for k in ps[1]["files"] if k.startswith("Apps/PlugIn/"))
+        pok = bool(plug) and not any(k.startswith("Apps/PlugIn/") for k in ps[3]["files"])
+        print("  plugin install: %d files into Apps/PlugIn (%s), reinstall: %s, remove takes them out: %s" % (
+            len(plug), ", ".join(plug), [w for _, w in ps[2]["log"]], pok))
     with open(os.path.join(a.out, "install.json"), "w", encoding="ascii", newline="\n") as fh:
-        fh.write(P.dumps({"pack": os.path.abspath(a.install_pack), "name": name, "overwrite": OVERWRITE,
-                          "kinds": KINDS, "snapshots": snaps}))
+        fh.write(P.dumps(out))
     back = {k: v for k, v in snaps[3]["files"].items() if not k.startswith("mods/")}
     ok = back == snaps[0]["files"] and sorted(k for k in snaps[3]["files"] if k.startswith("mods/")) == [
         P.STATE_DIR + "/state.json"]
     print("  install: %d, %d, %d log lines; remove puts Apps/BACustom back: %s" % (
         len(snaps[1]["log"]), len(snaps[2]["log"]), len(snaps[3]["log"]), ok))
-    return 0 if ok else 1
+    return 0 if ok and pok else 1
 
 
 if __name__ == "__main__":
