@@ -337,8 +337,8 @@ SC4's own exemplars: confirmed in round 2026-11-19l, section 10.5). Prop exempla
 | 0x27812870 | family ids (a lot row naming a family gets one member) |
 | 0x0A751675 / 0xCA7515CC / 0x4A764564 | interval in days / start {month, day} / duration in days. The four seasonal variants of a tree share one lot position, each with interval 365 and its own start and duration (Dogwood: Summer {5, 19} 123 days, Winter {11, 19} 92 days). Fences carry interval 14,600 / duration 3,650 [UNCERTAIN: meaning], treated as always shown |
 
-Lot textures (kind 2) name FSH instances of group 0x0986135E, 19 of the 25 most used ones are in the BSC pack. Not
-baked (section 9.4).
+Lot textures (kind 2) name FSH instances of group 0x0986135E, 19 of the 25 most used ones are in the BSC pack. Drawn
+since round sc4lottex (section 12).
 
 ### 9.3 Lot frame and rotations
 
@@ -361,8 +361,7 @@ baked (section 9.4).
 
 5,190 prop rows over the 110 buildings' chosen lots: 486 placed (72 buildings), 866 outside the SC3 lot (the SC3 lot
 is 16 m square, the SC4 lots 16 x 32-48 m), 378 seasonal variants of another season (DATE = 1 July), 3,454 in no pack
-given (54 ids), 6 whose model is in no pack given. Not baked: lot textures (driveways, paths, the SC4 grass), so cars
-stand on SC3's lawn.
+given (54 ids), 6 whose model is in no pack given. Lot textures (driveways, paths): section 12.
 
 ## 10. SimCity 4's own civic buildings, parks, rewards and landmarks (round 2026-11-19l, stream sc4civ)
 
@@ -527,3 +526,92 @@ were changed to read across them (`props.resolve`, `props.plan`; `sc4web.js reso
 
 The install converting itself (section 10.5) has one prop source, so pooling and the model lookup give the same rows as
 before: 0 props missing there (the BSC pack was not added to an install run: nothing is missing for it to supply).
+
+## 12. Lot textures (round 2026-11-19l, stream sc4lottex: `lottex.py`, `sc4conv.write_lottex`, bldrender `sc3ground`)
+
+`sc4conv.py` (and the page, `sc4web.js lotPlan` / `lotComposite`) draw the texture rows of the props' lot (section 9) on
+the ground under the building, from the same sources as the props: the download, the `--deps` packs, the install.
+Results: `verify/sc4lottex/RESULTS.md`. Every count below is from the 42 JMyers lots and the install's 1,908 lots.
+
+### 12.1 What a texture row holds
+
+Lot object kind 2 (section 3), 13 words:
+
+| word | JMyers (326 rows) | install (25,452 rows) | used as |
+|---|---|---|---|
+| 1 | 0 on all | 0 (20,021), 0x20 (5,431) [UNCERTAIN: meaning, not read] | not read |
+| 2 | rotation 0-3: 150 / 23 / 77 / 43, with bit 0x80000000: 6 / 4 / 12 / 11 | 19,077 / 2,732 / 1,582 / 1,437, with the bit 247 / 148 / 93 / 136 | quarter turns, mirror (12.2) |
+| 6-9 | the square, 16 x 16 m on all, on the 16 m grid | 16 m up to 2^-16 (12,913 exactly 16), not on the grid: offsets of 0.04-0.05 m are common, some anywhere (`CS$$1_6x6`: x 15.241) | where the picture lies |
+| 12 | the texture id | the texture id | FSH key |
+
+The texture is an FSH of group 0x0986135E, instance = id + zoom index (0-4 = SC4 zooms 1-5): of the install's 1,453 FSH
+in that group, 290 ids have all five (8 x 8 to 128 x 128 px), two only the first, one only 5. The converter reads id + 4:
+128 x 128 px over 16 m = 8 px per metre. Formats of the 76 ids the JMyers lots name and a source holds: 0x60 DXT1 (9,
+every texel opaque) and 0x61 DXT3 (67, with transparent texels).
+
+**No lot property names a base texture.** The lot exemplars carry 0x88EDC789 .. 0x88EDC798, 0x27812837, 0x4A4A88F0,
+0x699B08A4, 0x88FCD877, 0xCBE243F7, 0xE99B068C (and 0x88EDC791, 0x89136440, 0xE99B068D in the install). The two that
+name an instance point at exemplars of group 0xC977C536: 0x88EDC798 at exemplar type 21 (`LotRetainingWall-$$$ivy`,
+`LotRetainingWall-$$rock`) and 0x88FCD877 at type 17 (`Slate Brick`), with FSH lists of their own. The lot's base is the
+textures without a transparent texel among its rows: on the JMyers lots every tile that has texture rows holds exactly one
+such (124 tiles), 8 of the 9 plain grass, one a vegetable garden (`25DC0000`).
+
+### 12.2 Orientation: the cars test
+
+Which of the 16 ways to lay the image on its square (8 turns and mirrors of the image x 2 senses of the rotation word) is
+SC4's was tested on what the lots themselves say: a parked car stands on paving. For every car prop of a lot with texture
+rows (name matching car / truck / van / suv / sedan ..., or the car family A0000038), the composite texel under its centre
+is read (opaque layers first, 12.3) and called paved when it fails the grass test (12.4):
+
+| mapping | install, 239 cars on 178 lots | JMyers, 29 cars on 23 lots |
+|---|---|---|
+| **image turned 180 degrees, then rotation x 90 degrees clockwise (columns along +x, rows along +z)** | **197 paved** (35 grass, 7 bare) | **20** |
+| the same, rotation counter-clockwise | 195 | 17 |
+| mirrored columns, turned 0, counter-clockwise | 193 | 15 |
+| mirrored columns, turned 0, clockwise | 191 | 14 |
+| the 8 mappings with rows along +x | 176-179 | 6-12 |
+| the other 4 | 166-167 | 4-5 |
+
+On cars over an odd rotation only (where the sense matters): install 30 against 28, JMyers 7 against 4, for the sense
+above, which is the sense `props.QUARTER` already uses for props (9.3). The mirror bit: on cars over a mirrored texture,
+mirroring the image's columns before the turn gives install 43 paved of 48 against 34 for its rows, JMyers 6 of 9
+against 2. A seam test (adjacent tiles' edge colours over 1,645 install lots) only separated columns-along-x from
+rows-along-x (mean edge difference 0.131-0.148 against 0.166-0.179) and not the rest. [UNCERTAIN: no SC4 render of a lot
+was compared, and the sense margins are small.] The civic renders agree: the police station's cars stand in the painted
+parking bays (`verify/sc4lottex/owner_shots/04`), as did the school's in a review render.
+
+### 12.3 Layering
+
+Lot order is not the draw order. On tiles holding an opaque texture and a transparent one, the opaque one comes later in
+the lot in 190 of 296 such pairs of the install and 55 of 198 on JMyers: drawn in lot order, those overlays would be
+hidden. The cars test over orders (install / JMyers paved cars): opaque textures first, then the others in lot order 197 /
+20; plain lot order 182 / 11; texture id ascending 190 / 16; reverse lot order 163 / 9. The converter draws the opaque
+textures first, then the others, each group in lot order. The order among the transparent ones changes no car (lot order,
+reverse and by id: 197 / 20 each) and is kept as lot order [UNCERTAIN].
+
+### 12.4 Lawn: SC4's grass is left to SC3's lawn
+
+The 8 plain grass bases the JMyers lots use average luminance 0.32-0.40 at hue 71-85 degrees (`D400F050`, on 92 rows: RGB
+93 / 115 / 44, luminance 0.39, hue 78). SC3's lit lawn (bldrender `grass`, fitted to the stock lots) is 100 / 145 / 78 at
+zoom 3, luminance 0.49, hue 100. With the `baked` tone of the building art the SC4 grass would be 157 / 193 / 73,
+luminance 0.66. So a converted lot drawn with SC4's grass is a darker, yellower square among the stock lawns (picture
+`06`). After compositing, a texel is cleared when it is grass: green the strictly strongest channel, hue at most 108
+degrees (`5 (r - b) >= g - min(r, b)`), saturation above 0.15 (`20 (g - min) > 3 g`): integers only. It clears 0.88-1.00 of
+the 8 grass bases' texels and 0.65 of the garden plot. Bldrender then draws its own lawn there. On the JMyers lots the
+drawn textures cover 9-58% of the SC3 lot (median 34%), on SC4's own civic lots 0-99.8% (median 63%).
+
+### 12.5 On the SC3 lot and in the picture
+
+- **Canvas.** The props' SC3 lot window (9.3, `props.plan`) at 8 px per metre in the house's model frame: pixel (i, j) =
+  window corner + (i + 0.5, j + 0.5) / 8 m, back through the lot turn (`turn(.., kb - 2)`) into the lot frame, then into
+  each texture's square. A texture square inside the window is `placed`, partly inside `cut` (drawn up to the edge), else
+  `outside`. Compositing is straight alpha over in float64, then floor(x + 0.5) to 8 bits, in the same order in Python and
+  the page.
+- **Files.** `<stem>_lot.png` (the canvas, transparent where nothing or grass is), `<stem>_lot.obj` (the house + one quad
+  over the window, OBJ group `sc3ground`, 1 cm above the house's lowest point) and `<stem>_props_lot.obj` (house, props,
+  quad). `models.json` `file` = `<stem>[_props][_lot].obj` by `x_sc4.props.on` and `x_sc4.textures.on`, both kept on a
+  rerun. `x_sc4.textures` = `on, lot, rows, placed, cut, outside_sc3_lot, missing, unreadable, ground {sc4_ground, lawn,
+  drawn} (shares of the SC3 lot), used, missing_ids`.
+- **bldrender `sc3ground`.** Faces of that group are drawn in every slot and shaded as the lawn (kind 2): the stock rim,
+  no tone, saturation, grain or contrast, never a shadow caster. A sample on a transparent texel is the lawn itself (not a
+  peeled layer: with props, peeling ran out and showed the canvas's empty black texels). bldweb.js does the same.

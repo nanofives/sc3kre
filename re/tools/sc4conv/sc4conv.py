@@ -37,6 +37,11 @@ found; the report names every prop id found in no pack. <stem>.obj stays the hou
 With --sc4 <the player's SimCity 4 install> (task sc4baseprops, 2026-11-19), the game's own props (shrubs, bushes,
 trees, cars of SimCity_1.dat, their textures in SimCity_2..5.dat and EP1.dat) are one more prop source, after the
 download and the --deps packs (SC4 loads its own files first, so a plugin's exemplar of the same id wins).
+Lot textures (task sc4lottex, 2026-11-20, lottex.py): the driveways, paths, paving and flower beds of the same lot, from
+the same sources, composited on the SC3 lot (SC4 grass left to SC3's lawn) into <stem>_lot.png and drawn by a ground
+quad (OBJ group sc3ground): <stem>_lot.obj (the house and the textures) and <stem>_props_lot.obj (with the props too).
+models.json 'file' follows the two switches x_sc4.props.on and x_sc4.textures.on (a rerun keeps the player's choice;
+--no-textures writes them off): <stem>[_props][_lot].obj.
 
 Civic buildings, parks, rewards and landmarks (task sc4civ, 2026-11-19l, re/analysis/SC4_FORMATS.md 10): a building
 SC4 files under OccupantGroups 0x1005 (civic), 0x1006 (park), 0x150B (reward) or 0x150A (landmark) is written as the
@@ -66,6 +71,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import catalog as C  # noqa: E402
 import deps as DP  # noqa: E402
+import lottex as LT  # noqa: E402
 import props as PR  # noqa: E402
 import rewards as RW  # noqa: E402
 import views as V  # noqa: E402
@@ -226,7 +232,7 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         fh.write('\n'.join(mtl))
     svc = (pctx or {}).get('services', {}).get(b['tgi']) if pctx is not None else None
     n = svc['lot'] if svc else lot_for(b)
-    pinfo = write_props(b, vs, stem, obj, mtl, out, pctx, fill, n) if pctx is not None else None
+    pinfo, tinfo = write_props(b, vs, stem, obj, mtl, out, pctx, fill, n) if pctx is not None else (None, None)
     cls, why = class_for(b) if not svc else (None, svc['why'])
     design, colour = design_of(b['name'])
     title = (b['title'] or b['name']).splitlines()[0].strip().rstrip(',')
@@ -270,9 +276,15 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         entry['x_sc4']['versions'] = versions
     if pinfo is not None:                 # task sc4props: the SC4 lot's props, baked into <stem>_props.obj
         entry['x_sc4']['props'] = pinfo
-        if pinfo['on']:
-            entry['file'] = stem + '_props.obj'
+    if tinfo is not None:                 # task sc4lottex: the SC4 lot's textures, <stem>_lot.obj / _props_lot.obj
+        entry['x_sc4']['textures'] = tinfo
+    entry['file'] = file_for(stem, pinfo, tinfo)
     return entry
+
+
+def file_for(stem, pinfo, tinfo):
+    """Task sc4lottex: the OBJ the two switches name, <stem>[_props][_lot].obj."""
+    return stem + ('_props' if pinfo and pinfo['on'] else '') + ('_lot' if tinfo and tinfo['on'] else '') + '.obj'
 
 
 # ---------------------------------------------------------------------------------------------- task sc4props
@@ -282,18 +294,21 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
 # names the _props OBJ while x_sc4.props.on is true (the default when at least one prop is placed); a rerun keeps
 # the player's x_sc4.props.on. Prop textures are written once per pack texture: sc4prop_<group>_<instance>.png.
 def write_props(b, vs, stem, obj, mtl, out, pctx, fill, n=None):
+    """-> (x_sc4.props, x_sc4.textures), either None. Task sc4lottex: the lot's textures too (write_lottex)."""
     n = lot_for(b) if n is None else n
     v0 = vs[0]['P']
     box = (float(v0[:, 0].min()), float(v0[:, 0].max()), float(v0[:, 2].min()), float(v0[:, 2].max()))
     pl = PR.plan(b, pctx['lots'], pctx['sources'], box, n)
     if pl is None:
-        return None
+        return None, None
     slots = PR.placed_meshes(pl, pctx['cache'], fill)
     info = PR.summary(pl)
     info = dict({'on': info['placed'] > 0 and not pctx.get('off')}, **info)
     pctx['plans'].append((b, pl))
+    y0 = float(min(v['P'][:, 1].min() for v in vs))
+    tinfo, lot_png = write_lottex(b, stem, obj, mtl, out, pctx, pl, n, y0)
     if not info['placed']:
-        return info
+        return info, tinfo
     pobj = [obj[0], 'mtllib %s_props.mtl' % stem] + obj[2:]
     pmtl = list(mtl)
     seen = set()
@@ -323,7 +338,6 @@ def write_props(b, vs, stem, obj, mtl, out, pctx, fill, n=None):
             vbase += len(P)
             tbase += len(UV)
     x0, x1, z0, z1 = pl['window']
-    y0 = float(min(v['P'][:, 1].min() for v in vs))
     pobj += ['g sc4lot', 'usemtl sc4lot',
              'v %.5f %.5f %.5f' % (x0, y0, z0), 'v %.5f %.5f %.5f' % (x1, y0, z1), 'v %.5f %.5f %.5f' % (x1, y0, z1),
              'f %d %d %d' % (vbase + 1, vbase + 2, vbase + 3)]
@@ -332,7 +346,67 @@ def write_props(b, vs, stem, obj, mtl, out, pctx, fill, n=None):
         fh.write('\n'.join(pobj) + '\n')
     with open(os.path.join(out, stem + '_props.mtl'), 'w', newline='\n') as fh:
         fh.write('\n'.join(pmtl))
-    return info
+    if lot_png:                           # task sc4lottex: the house, the props and the lot textures
+        write_with_quad(out, stem + '_props_lot', pobj, pmtl, lot_png, pl, y0)
+    return info, tinfo
+
+
+# ---------------------------------------------------------------------------------------------- task sc4lottex
+# Lot textures (round 2026-11-19l, lottex.py): the texture rows of the same SC4 lot as the props, composited on the SC3
+# lot window into <stem>_lot.png (SC4 grass cleared: SC3's lawn shows there) and drawn by one quad in the OBJ group
+# sc3ground, which bldrender lights as its own lawn. <stem>_lot.obj = the house + the quad, <stem>_props_lot.obj = the
+# house, the props and the quad (written by write_props when props are placed). On when any texel is drawn.
+def write_lottex(b, stem, obj, mtl, out, pctx, pl, n, y0):
+    """-> (x_sc4.textures or None, the PNG name when something is drawn, else None)."""
+    rows = LT.plan(pl, pctx['sources'])
+    if not rows:
+        return None, None
+    img, stats = LT.composite(pl, rows, n, pctx['texcache'])
+    t = LT.summary(pl, rows, stats)
+    drawn = stats['drawn'] > 0
+    tinfo = dict({'on': drawn and not pctx.get('tex_off')}, **t)
+    pctx['tplans'].append((b, rows, stats))
+    if not drawn:
+        return tinfo, None
+    png = stem + '_lot.png'
+    Image.fromarray(img, 'RGBA').save(os.path.join(out, png))
+    write_with_quad(out, stem + '_lot', obj, mtl, png, pl, y0)
+    return tinfo, png
+
+
+def write_with_quad(out, name, lines, mtl, png, pl, y0):
+    """<name>.obj / .mtl = the given OBJ lines (their mtllib renamed) + the ground quad, the MTL + its material."""
+    lines = [lines[0], 'mtllib %s.mtl' % name] + list(lines[2:])
+    vb = sum(1 for ln in lines if ln.startswith('v '))
+    tb = sum(1 for ln in lines if ln.startswith('vt '))
+    qo, qm = LT.quad_lines(pl, y0 + LT.Y_LIFT, vb, tb, png)
+    with open(os.path.join(out, name + '.obj'), 'w', newline='\n') as fh:
+        fh.write('\n'.join(lines + qo) + '\n')
+    with open(os.path.join(out, name + '.mtl'), 'w', newline='\n') as fh:
+        fh.write('\n'.join(list(mtl) + qm))
+
+
+def tex_notes(tplans):
+    """Report lines for the lot textures of every converted building (sc4web.js texNotes: the same text)."""
+    from collections import Counter
+    if not tplans:
+        return []
+    st, miss = Counter(), Counter()
+    for _b, rows, _s in tplans:
+        for r in rows:
+            st[r['state']] += 1
+            if r['state'] == 'missing':
+                miss[r['id']] += 1
+    tot = sum(st.values())
+    nb = sum(1 for _b, _r, s in tplans if s['drawn'] > 0)
+    lines = ['Lot textures: %d of %d texture rows drawn (%s), %d of them cut at the SC3 lot edge, %d outside the SC3 lot,'
+             ' %d in no pack given, %d unreadable' % (st['ok'] + st['cut'], tot, nw(nb, 'building', 'buildings'),
+                                                    st['cut'], st['outside'], st['missing'], st['unreadable'])]
+    if miss:
+        lines.append('Textures not found (%d ids, rows in brackets): %s'
+                     % (len(miss), ', '.join('%08X (%d)' % (k, v)
+                                             for k, v in sorted(miss.items(), key=lambda kv: (-kv[1], kv[0])))))
+    return lines
 
 
 def props_notes(plans, sc4=False):
@@ -359,7 +433,7 @@ def props_notes(plans, sc4=False):
     return lines
 
 
-def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, services=None, sc4=None):
+def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, services=None, sc4=None, tex_off=False):
     """Task sc4props: the prop sources (the download, then each --deps pack) and one fetch of every prop model the
     buildings' lots place, before any building is written. Task sc4baseprops: sc4 = the player's SimCity 4 install,
     the last source (its own props; read in place, memory-mapped)."""
@@ -370,7 +444,7 @@ def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, servic
         log('SimCity 4 install as a prop source: %d prop exemplars, %d cohorts' % (len(src.props), len(src.cohorts)))
         sources.append(src)
     ctx = {'lots': lots, 'sources': sources, 'cache': {}, 'pngs': set(), 'plans': [], 'off': off,
-           'services': services or {}, 'sc4': with_sc4}
+           'services': services or {}, 'sc4': with_sc4, 'texcache': {}, 'tplans': [], 'tex_off': tex_off}
     want = {}
     for b in bs:
         try:
@@ -385,6 +459,9 @@ def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, servic
         for r in pl['rows']:
             if r['state'] == 'ok' and isinstance(r['msrc'], DP.DepsIndex):
                 want.setdefault(id(r['msrc']), (r['msrc'], set()))[1].update(PR.view_keys(r['model']))
+        for r in LT.plan(pl, sources):    # task sc4lottex: the lot textures drawn on the SC3 lot
+            if r['state'] in ('ok', 'cut') and isinstance(r['src'], DP.DepsIndex):
+                want.setdefault(id(r['src']), (r['src'], set()))[1].add(LT.tex_key(r['id']))
     for s, keys in want.values():
         s.fetch(sorted(keys))
     return ctx
@@ -756,6 +833,8 @@ def main(argv):
                                   ' as one more prop source (task sc4baseprops)')
     ap.add_argument('--no-props', action='store_true', help='write the lot props but leave them off'
                                                            ' (x_sc4.props.on false)')
+    ap.add_argument('--no-textures', action='store_true', help='write the lot textures but leave them off'
+                                                              ' (x_sc4.textures.on false, task sc4lottex)')
     a = ap.parse_args(argv[1:])
     if a.sc4 is not None and C.install_files(a.sc4) is None:
         print('--sc4 %s: no SimCity_1.dat in that folder (give the SimCity 4 folder itself)' % a.sc4)
@@ -831,7 +910,7 @@ def main(argv):
             c = next((m for m in fam[d] if not is_diag(m)), None)
             pick[d] = c['tgi'] if c is not None else None
     pctx = props_context(idx, bs, lots, a.deps, a.deps_cache, not a.no_fill, a.no_props, services=services,
-                         sc4=a.sc4)
+                         sc4=a.sc4, tex_off=a.no_textures)
     for b in bs:
         design = design_key(b, services)
         first = pick[design] == b['tgi']
@@ -847,6 +926,9 @@ def main(argv):
         pr = e['x_sc4'].get('props')
         if pr is not None:
             auto['props_on'] = pr['on']
+        tx = e['x_sc4'].get('textures')
+        if tx is not None:
+            auto['textures_on'] = tx['on']
         o = old.get(e['x_sc4']['exemplar']) or old.get(e['file'])
         if o:                             # keep a field the player changed (classifier page) since the last run
             prev = (o.get('x_sc4') or {}).get('auto') or {}
@@ -856,7 +938,10 @@ def main(argv):
             op = (o.get('x_sc4') or {}).get('props')
             if pr is not None and isinstance(op, dict) and 'props_on' in prev and op.get('on') != prev['props_on']:
                 pr['on'] = bool(op.get('on')) and pr['placed'] > 0     # task sc4props: the player's switch
-                e['file'] = stem_of(b['name']) + ('_props.obj' if pr['on'] else '.obj')
+            ot = (o.get('x_sc4') or {}).get('textures')
+            if tx is not None and isinstance(ot, dict) and 'textures_on' in prev and ot.get('on') != prev['textures_on']:
+                tx['on'] = bool(ot.get('on')) and tx['ground']['drawn'] > 0     # task sc4lottex: the player's switch
+            e['file'] = file_for(stem_of(b['name']), pr, tx)
         models.append(e)
         vs = versions.get(b['tgi']) or []
         for v in vs:                      # task plop2: the building's SC4 landmark / ploppable lots as SC3 landmarks
@@ -877,7 +962,7 @@ def main(argv):
                                                  'class %s' % e['class'], e['lot'],
                                                        'enabled' if e['enabled'] else '',
                                                        ' diagonal' if e['x_sc4']['diagonal'] else ''))
-    for ln in props_notes(pctx['plans'], pctx['sc4']):
+    for ln in props_notes(pctx['plans'], pctx['sc4']) + tex_notes(pctx['tplans']):
         print(ln)
     top = {'sc3models': 1, 'models': models}
     if missing:                           # task sc4pass2: buildings of the download without a model, by name

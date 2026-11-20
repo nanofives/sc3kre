@@ -82,8 +82,9 @@ console.log(`  converted with props in ${((Date.now() - t0) / 1000).toFixed(1)} 
 }
 const pngNotes = [];
 for (const m of pyModels) {
-  const stem = m.x_sc4 ? m.file.replace(/(_props)?\.obj$/i, '') : m.file.replace(/\.obj$/i, ''), notes = [];
-  const exts = ['.obj', '.mtl'].concat(fs.existsSync(path.join(pyConv, stem + '_props.obj')) ? ['_props.obj', '_props.mtl'] : []);
+  const stem = m.x_sc4 ? m.file.replace(/(_props)?(_lot)?\.obj$/i, '') : m.file.replace(/\.obj$/i, ''), notes = [];
+  const exts = ['.obj', '.mtl'];
+  for (const x of ['_props', '_lot', '_props_lot']) if (fs.existsSync(path.join(pyConv, stem + x + '.obj'))) exts.push(x + '.obj', x + '.mtl');   // task sc4lottex
   for (const ext of exts) if (!eqBytes(fs.readFileSync(path.join(pyConv, stem + ext)), conv.files.get(stem + ext))) notes.push(ext + ' differs');
   for (const v of ['S', 'W', 'N', 'E']) {
     const png = `${stem}_${v}.png`, js = conv.files.get(png);
@@ -91,6 +92,7 @@ for (const m of pyModels) {
     const d = await samePixels(fs.readFileSync(path.join(pyConv, png)), js);
     if (d) notes.push(png + ': ' + d);
   }
+  if (fs.existsSync(path.join(pyConv, stem + '_lot.png'))) { const d = await samePixels(fs.readFileSync(path.join(pyConv, stem + '_lot.png')), conv.files.get(stem + '_lot.png')); if (d) notes.push('_lot.png: ' + d); }   // task sc4lottex
   const p = m.x_sc4 && m.x_sc4.props;
   line(`convert ${stem} (${exts.length} text files, 4 textures${p ? ', props ' + p.placed + ' of ' + p.rows : ''})`, !notes.length, notes.join('; '));
 }
