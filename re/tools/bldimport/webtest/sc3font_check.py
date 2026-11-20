@@ -24,6 +24,7 @@ from fbf import Font  # noqa: E402
 CHROME = os.environ.get('SC3_BROWSER') or r'C:\Program Files\Google\Chrome\Application\chrome.exe'  # SC3_BROWSER=<msedge.exe>: Edge
 PAGE = HERE.parent / 'sc3font_test.html'
 ONE_BIT = {'MAIN9', 'MAIN10', 'SYSTEM9'}
+SMOOTH = {'TITLE9', 'TITLE12'}   # build_fonts.mjs / sc3font.js SMOOTH (owner 2026-11-20)
 
 
 def chrome(url, extra):
@@ -67,6 +68,12 @@ def compare(tag, r, rgb, cov, lang_dir, step, side):
             wrong = int(((got > 0.5) != (exp_p > 0.5)).sum())
             ok = wrong == 0 and d.max() < 0.35 and around < 1
             detail = '%d of %d px differ (ink threshold 0.5), max coverage error %.3f' % (wrong, got.size, d.max())
+        elif s['font'] in SMOOTH:
+            # owner 2026-11-20 "Smooth": outlines traced from the game's coverage, not its pixels (UI_STYLE.md "Smooth
+            # outlines"): measured mean error 0.064-0.084 and ink 0.97-1.01 at 100%, so the check is shape, not pixels
+            ink_ratio = float(got.sum() / max(exp_p.sum(), 1e-9))
+            ok = d.mean() <= 0.10 and 0.94 <= ink_ratio <= 1.06 and around < 3
+            detail = 'smooth: coverage error mean %.3f, ink %.3f of the game, %.2f outside the box' % (d.mean(), ink_ratio, around)
         else:
             p99 = float(np.percentile(d, 99))
             ok = d.max() <= 0.02 and around < 1

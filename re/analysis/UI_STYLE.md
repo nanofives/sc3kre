@@ -444,9 +444,9 @@ the smooth one wins at 150% and up. 1-bit fonts (MAIN9, MAIN10, SYSTEM9) trace t
 grid (stair-step diagonals), so tracing only rounds the corners: not recommended.
 
 **The switch:** `SMOOTH` in `re/tools/sc3ui/build_fonts.mjs` (published files) and `SMOOTH` in `sc3font.js` (run-time
-fallback), both `[]` today. Owner pick -> `['TITLE9', 'TITLE12']` in both, re-run `build_fonts.mjs --game <install>`,
-then `sync_css.py` (+ `--publish`). sc3ui.css does not change (same file names and metrics). `sc3font_check.py`'s two
-published TITLE checks (coverage within 0.012) then need a smooth tolerance. WOFF2 sizes: TITLE9 17,452 -> 21,300,
+fallback), both `['TITLE9', 'TITLE12']` since the owner's pick on 2026-11-20 ("Smooth", published fd06ca7+). To go back: `[]` in both, re-run `build_fonts.mjs --game <install>`,
+then `sync_css.py` (+ `--publish`). sc3ui.css does not change (same file names and metrics). `sc3font_check.py` checks the smooth
+fonts by shape (mean coverage error within 0.10, ink 0.94 to 1.06 of the game): 22 of 22 on 2026-11-20. WOFF2 sizes: TITLE9 17,452 -> 21,300,
 TITLE12 21,956 -> 26,376 bytes. Pictures and numbers: `verify/smoothfont/RESULTS.md` (local).
 
 ### Proof: the replica with the published fonts against R3

@@ -50,6 +50,9 @@
     '--ui-type-ui': ['MAIN9', 18], '--ui-type-prose': ['MAIN9', 18], '--ui-type-row': ['SYSTEM9', 18],
     '--ui-type-name': ['MAIN10', 18], '--ui-type-title': ['TITLE12', 28], '--ui-type-btn': ['TITLE9', 19],
   };
+  // smoothfont (round 2026-11-20f): fonts the run-time builder traces as smooth outlines (the same switch as SMOOTH in
+  // re/tools/sc3ui/build_fonts.mjs, keep the two lists equal). Empty = pixel squares. opts.smooth (a list) overrides.
+  const SMOOTH = ['TITLE9', 'TITLE12'];   // owner 2026-11-20: "Smooth" (same list as build_fonts.mjs)
   const SPACING = ['--ui-ls-ui', '--ui-ls-row', '--ui-ls-name', '--ui-ls-title', '--ui-ls-btn'];
   const LANGS = ['ENGLISH', 'English-UK', 'GERMAN', 'FRENCH', 'ITALIAN', 'DUTCH', 'SWEDISH'];
   const P = 64, UPM = 1024, KEY = 16;
@@ -117,6 +120,144 @@
     return out;                                      // [x0, y0, x1, y1] boxes, y up
   }
 
+  // ------------------------------------------------------------------ smooth outlines (smoothfont, round 2026-11-20f)
+  // Owner 2026-11-20: "can you make the comic sans font less pixelated?". Instead of one square per font pixel, the
+  // glyph's coverage (15 levels on TITLE9 / TITLE12 / SERIF17) is read as samples of a smooth shape: upsampled S x S
+  // with a Catmull-Rom kernel, cut at one iso level, the contour simplified (Douglas-Peucker) and drawn as a TrueType
+  // quadratic B-spline (vertices become off-curve points, sharp corners stay on-curve). Advances, line height and
+  // baseline are the same as the pixel build, so layout does not move. The iso level is picked per font so that the
+  // outline's area equals the font's total coverage (ink mass kept): smoothFont() below.
+  const SM = { S: 8, pad: 2, tol: 0.07, corner: 0.55 };   // samples per px, padding px, simplify px, corner cos limit
+  function crKernel(t) {                                   // Catmull-Rom, a = -0.5
+    t = Math.abs(t);
+    if (t < 1) return 1.5 * t * t * t - 2.5 * t * t + 1;
+    if (t < 2) return -0.5 * t * t * t + 2.5 * t * t - 4 * t + 2;
+    return 0;
+  }
+  // coverage of glyph i upsampled: field[(gy * W) + gx], sample (gx, gy) at pixel position ((gx + 0.5) / S - pad, ...)
+  function glyphField(f, i, opt) {
+    const [l, t, r, b] = f.cells[i], gw = r - l, gh = b - t, S = opt.S, pad = opt.pad;
+    const W = (gw + 2 * pad) * S, H = (gh + 2 * pad) * S;
+    const cov = new Float64Array(gw * gh);
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) cov[y * gw + x] = f.cov(i, x, y);
+    const pos = k => (k + 0.5) / S - pad - 0.5;            // sample k -> continuous pixel-centre coordinate
+    const wts = (n, m) => {                                // per sample: [first pixel, 4 weights]
+      const out = [];
+      for (let k = 0; k < n; k++) { const p = pos(k), p0 = Math.floor(p) - 1, w = []; for (let j = 0; j < 4; j++) w.push(crKernel(p - (p0 + j))); out.push([p0, w]); }
+      return out;
+    };
+    const wx = wts(W, gw), wy = wts(H, gh), tmp = new Float64Array(W * gh), fld = new Float64Array(W * H);
+    for (let y = 0; y < gh; y++) for (let gx = 0; gx < W; gx++) {
+      const [p0, w] = wx[gx]; let s = 0;
+      for (let j = 0; j < 4; j++) { const x = p0 + j; if (x >= 0 && x < gw) s += w[j] * cov[y * gw + x]; }
+      tmp[y * W + gx] = s;
+    }
+    for (let gy = 0; gy < H; gy++) { const [p0, w] = wy[gy]; for (let gx = 0; gx < W; gx++) {
+      let s = 0; for (let j = 0; j < 4; j++) { const y = p0 + j; if (y >= 0 && y < gh) s += w[j] * tmp[y * W + gx]; }
+      fld[gy * W + gx] = s;
+    } }
+    let mass = 0; for (const c of cov) mass += c;
+    return { fld, W, H, gw, gh, mass };
+  }
+  function fieldArea(F, T) { let n = 0; for (const v of F.fld) if (v >= T) n++; return n / (F.S2 || 1); }
+  // marching squares on the field at level T: closed loops in pixel coordinates (x right, y down), each oriented so the
+  // inside is on the right in y-up font space (TrueType's clockwise outer contours)
+  function isoLoops(F, T, opt) {
+    const { fld, W, H } = F, S = opt.S, pad = opt.pad;
+    const v = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : fld[y * W + x];
+    const px = gx => (gx + 0.5) / S - pad, py = gy => (gy + 0.5) / S - pad;
+    // crossing point on an edge: 'h' edge from (x,y) to (x+1,y), 'v' edge from (x,y) to (x,y+1)
+    const pt = (kind, x, y) => {
+      const a = v(x, y), b = kind === 'h' ? v(x + 1, y) : v(x, y + 1), t = (T - a) / (b - a);
+      return kind === 'h' ? [px(x + t), py(y)] : [px(x), py(y + t)];
+    };
+    const next = new Map(), pos = new Map();
+    for (let y = -1; y < H; y++) for (let x = -1; x < W; x++) {
+      const a = v(x, y) >= T, b = v(x + 1, y) >= T, c = v(x + 1, y + 1) >= T, d = v(x, y + 1) >= T;
+      const code = (a ? 8 : 0) | (b ? 4 : 0) | (c ? 2 : 0) | (d ? 1 : 0);
+      if (code === 0 || code === 15) continue;
+      const eT = 'h' + x + ',' + y, eR = 'v' + (x + 1) + ',' + y, eB = 'h' + x + ',' + (y + 1), eL = 'v' + x + ',' + y;
+      const P = { [eT]: ['h', x, y], [eR]: ['v', x + 1, y], [eB]: ['h', x, y + 1], [eL]: ['v', x, y] };
+      // segments as [from, to], inside on the right in y-up = on the left walking in y-down image coordinates.
+      // Walking a square clockwise on screen (T, R, B, L), an inside corner sits on the walker's right in y-down, so
+      // each segment runs from the edge where the walk leaves the inside to the edge where it enters it.
+      const segs = [];
+      const centre = (v(x, y) + v(x + 1, y) + v(x + 1, y + 1) + v(x, y + 1)) / 4 >= T;
+      switch (code) {
+        case 8: segs.push([eL, eT]); break;          // a only
+        case 4: segs.push([eT, eR]); break;          // b
+        case 2: segs.push([eR, eB]); break;          // c
+        case 1: segs.push([eB, eL]); break;          // d
+        case 12: segs.push([eL, eR]); break;         // a b
+        case 6: segs.push([eT, eB]); break;          // b c
+        case 3: segs.push([eR, eL]); break;          // c d
+        case 9: segs.push([eB, eT]); break;          // d a
+        case 14: segs.push([eL, eB]); break;         // not d
+        case 13: segs.push([eB, eR]); break;         // not c
+        case 11: segs.push([eR, eT]); break;         // not b
+        case 7: segs.push([eT, eL]); break;          // not a
+        case 10: if (centre) segs.push([eL, eB], [eR, eT]); else segs.push([eL, eT], [eR, eB]); break;   // a c
+        case 5: if (centre) segs.push([eT, eL], [eB, eR]); else segs.push([eT, eR], [eB, eL]); break;    // b d
+      }
+      for (const [s, e] of segs) { next.set(s, e); if (!pos.has(s)) pos.set(s, pt(...P[s])); if (!pos.has(e)) pos.set(e, pt(...P[e])); }
+    }
+    const loops = [], done = new Set();
+    for (const k0 of next.keys()) {
+      if (done.has(k0)) continue;
+      const loop = []; let k = k0;
+      while (!done.has(k)) { done.add(k); loop.push(pos.get(k)); k = next.get(k); if (k === undefined) break; }
+      if (loop.length >= 3) loops.push(loop);
+    }
+    return loops;
+  }
+  function simplify(pts, tol) {                            // Douglas-Peucker on a closed loop
+    if (pts.length < 4) return pts;
+    // split at the two points farthest apart so both halves are open polylines
+    let i0 = 0, i1 = 0, best = -1;
+    for (let k = 0; k < pts.length; k++) { const d = (pts[k][0] - pts[0][0]) ** 2 + (pts[k][1] - pts[0][1]) ** 2; if (d > best) { best = d; i1 = k; } }
+    best = -1; for (let k = 0; k < pts.length; k++) { const d = (pts[k][0] - pts[i1][0]) ** 2 + (pts[k][1] - pts[i1][1]) ** 2; if (d > best) { best = d; i0 = k; } }
+    const keep = new Uint8Array(pts.length); keep[i0] = keep[i1] = 1;
+    const n = pts.length, idx = (a, b) => { const o = []; for (let k = a; ; k = (k + 1) % n) { o.push(k); if (k === b) break; } return o; };
+    const dp = ids => {
+      if (ids.length < 3) return;
+      const A = pts[ids[0]], B = pts[ids[ids.length - 1]], dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1e-9;
+      let far = 0, fk = -1;
+      for (let k = 1; k < ids.length - 1; k++) { const P = pts[ids[k]], d = Math.abs((P[0] - A[0]) * dy - (P[1] - A[1]) * dx) / L; if (d > far) { far = d; fk = k; } }
+      if (far > tol) { keep[ids[fk]] = 1; dp(ids.slice(0, fk + 1)); dp(ids.slice(fk)); }
+    };
+    dp(idx(i0, i1)); dp(idx(i1, i0));
+    return pts.filter((p, k) => keep[k]);
+  }
+  const loopArea = L => { let a = 0; for (let k = 0; k < L.length; k++) { const p = L[k], q = L[(k + 1) % L.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
+  // one glyph as TrueType contours: [[x, y, onCurve], ...] in font units, y up from the baseline
+  function smoothContours(f, i, T, opt) {
+    const F = glyphField(f, i, opt), out = [];
+    for (let L of isoLoops(F, T, opt)) {
+      if (Math.abs(loopArea(L)) < 0.04) continue;          // specks under 1/25 px
+      L = simplify(L, opt.tol);
+      if (L.length < 3) continue;
+      const n = L.length, pts = [];
+      for (let k = 0; k < n; k++) {
+        const a = L[(k + n - 1) % n], p = L[k], b = L[(k + 1) % n];
+        const ux = p[0] - a[0], uy = p[1] - a[1], vx = b[0] - p[0], vy = b[1] - p[1];
+        const cos = (ux * vx + uy * vy) / ((Math.hypot(ux, uy) * Math.hypot(vx, vy)) || 1e-9);
+        pts.push([Math.round(p[0] * P), Math.round((f.base - p[1]) * P), cos < opt.corner ? 1 : 0]);
+      }
+      // drop repeats left by rounding
+      const c = pts.filter((p, k) => { const q = pts[(k + 1) % pts.length]; return p[0] !== q[0] || p[1] !== q[1]; });
+      if (c.length >= 3) out.push(c);
+    }
+    return out;
+  }
+  // the iso level whose outlines hold the font's ink mass (area of every glyph = sum of its coverage)
+  function smoothLevel(f, glyphs, opt) {
+    const F = glyphs.map(i => { const g = glyphField(f, i, opt); g.S2 = opt.S * opt.S; return g; });
+    const mass = F.reduce((s, g) => s + g.mass, 0);
+    let lo = 0.15, hi = 0.85;
+    for (let it = 0; it < 30; it++) { const m = (lo + hi) / 2, a = F.reduce((s, g) => s + fieldArea(g, m), 0); if (a > mass) lo = m; else hi = m; }
+    return (lo + hi) / 2;
+  }
+
   function u16(a, v) { a.push((v >> 8) & 255, v & 255); }
   function i16(a, v) { u16(a, v & 0xffff); }
   function append(dst, src) { for (let k = 0; k < src.length; k++) dst.push(src[k]); }
@@ -126,7 +267,16 @@
   // measures what this browser's rasteriser really draws for each width and passes its inverse here.
   const areaSide = c => Math.round(P * c);
   function buildTTF(fbfBytes, family, opts) {
-    const f = parseFBF(fbfBytes), side = (opts && opts.side) || areaSide;
+    opts = opts || {};
+    const f = parseFBF(fbfBytes), side = opts.side || areaSide;
+    // smooth: true = traced outlines for an anti-aliased font (ignored for 1-bit ones unless smooth1bit),
+    // or an object overriding SM (S, pad, tol, corner, level)
+    const sm = (opts.smooth && (!f.oneBit || opts.smooth1bit)) ? Object.assign({}, SM, typeof opts.smooth === 'object' ? opts.smooth : {}) : null;
+    let level = null;
+    if (sm) {
+      const ids = []; for (let i = 32; i < 256; i++) { const [l, , r] = f.cells[i]; if (r > l) ids.push(i); }
+      level = sm.level || smoothLevel(f, ids, sm);
+    }
     // glyph 0 = .notdef (empty), then every byte value with a cell or an advance
     const gl = [{ byte: -1, adv: 0, boxes: [] }];
     const cmap = [];
@@ -136,34 +286,45 @@
       const u = i >= 0x80 && i < 0xA0 ? CP1252[i - 0x80] : i;
       if (!u) continue;
       cmap.push([u, gl.length]);
-      gl.push({ byte: i, adv: adv * P, boxes: r > l ? glyphContours(f, i, side) : [] });
+      if (sm) gl.push({ byte: i, adv: adv * P, boxes: [], contours: r > l ? smoothContours(f, i, level, sm) : [] });
+      else gl.push({ byte: i, adv: adv * P, boxes: r > l ? glyphContours(f, i, side) : [] });
     }
-    return Object.assign(writeTTF(gl, cmap, f.line, f.base, family), { oneBit: f.oneBit });
+    return Object.assign(writeTTF(gl, cmap, f.line, f.base, family, { colr: opts.colr }), { oneBit: f.oneBit, smooth: !!sm, level });
   }
 
-  function writeTTF(gl, cmap, line, base, family) {
+  // a contour whose first point is off-curve starts at the implied on-curve midpoint instead (some rasterisers want one)
+  function startOnCurve(c) {
+    const k = c.findIndex(p => p[2]);
+    if (k > 0) return c.slice(k).concat(c.slice(0, k));
+    if (k === 0) return c;
+    const a = c[c.length - 1], b = c[0];
+    return [[Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2), 1]].concat(c);
+  }
+  function writeTTF(gl, cmap, line, base, family, opts) {
+    const colr = !(opts && opts.colr === false);
     cmap.sort((a, b) => a[0] - b[0]);
     const asc = base * P, desc = (line - base) * P;
     let xMin = 0, yMin = 0, xMax = 0, yMax = 0, maxPts = 0, maxCont = 0, advMax = 0;
     const glyf = [], loca = [0];
     for (const g of gl) {
       advMax = Math.max(advMax, g.adv);
-      if (g.boxes.length) {
-        const a = [];
-        const bx0 = Math.min(...g.boxes.map(q => q[0])), by0 = Math.min(...g.boxes.map(q => q[1]));
-        const bx1 = Math.max(...g.boxes.map(q => q[2])), by1 = Math.max(...g.boxes.map(q => q[3]));
+      // contours: boxes (the pixel build, 4 on-curve points each, clockwise) or smooth outlines ([x, y, on] lists)
+      const cs = g.contours ? g.contours.map(startOnCurve)
+        : g.boxes.map(([x0, y0, x1, y1]) => [[x0, y0, 1], [x0, y1, 1], [x1, y1, 1], [x1, y0, 1]]);   // clockwise, y up
+      if (cs.length) {
+        const a = [], pts = [].concat(...cs);
+        const bx0 = Math.min(...pts.map(q => q[0])), by0 = Math.min(...pts.map(q => q[1]));
+        const bx1 = Math.max(...pts.map(q => q[0])), by1 = Math.max(...pts.map(q => q[1]));
         g.xMin = bx0; xMin = Math.min(xMin, bx0); yMin = Math.min(yMin, by0); xMax = Math.max(xMax, bx1); yMax = Math.max(yMax, by1);
-        i16(a, g.boxes.length); i16(a, bx0); i16(a, by0); i16(a, bx1); i16(a, by1);
-        g.boxes.forEach((q, k) => u16(a, k * 4 + 3));
+        i16(a, cs.length); i16(a, bx0); i16(a, by0); i16(a, bx1); i16(a, by1);
+        let end = -1; for (const c of cs) { end += c.length; u16(a, end); }
         u16(a, 0);                                     // no instructions
-        const pts = [];
-        for (const [x0, y0, x1, y1] of g.boxes) pts.push([x0, y0], [x0, y1], [x1, y1], [x1, y0]);   // clockwise, y up
-        for (let k = 0; k < pts.length; k++) a.push(1); // on-curve, x and y as int16 deltas
+        for (const p of pts) a.push(p[2] ? 1 : 0);     // on / off curve, x and y as int16 deltas
         let px = 0; for (const [x] of pts) { i16(a, x - px); px = x; }
         let py = 0; for (const [, y] of pts) { i16(a, y - py); py = y; }
         while (a.length % 4) a.push(0);
         append(glyf, a);
-        maxPts = Math.max(maxPts, pts.length); maxCont = Math.max(maxCont, g.boxes.length);
+        maxPts = Math.max(maxPts, pts.length); maxCont = Math.max(maxCont, cs.length);
       } else g.xMin = 0;
       loca.push(glyf.length);
     }
@@ -218,8 +379,8 @@
     // Chrome on Windows draws COLRv1 web fonts through its own FreeType rasteriser instead of DirectWrite, whose
     // ClearType-style filter spreads each pixel into its neighbours. FreeType's coverage of a pixel-aligned square is
     // exact, so a font pixel comes out as one screen pixel.
-    {
-      const inked = gl.map((g, k) => [k, g]).filter(([k, g]) => k && g.boxes.length);
+    if (colr) {
+      const inked = gl.map((g, k) => [k, g]).filter(([k, g]) => k && (g.contours ? g.contours.length : g.boxes.length));
       const bgl = []; u32(bgl, inked.length);
       const paints = [];
       inked.forEach(([k], j) => { u16(bgl, k); u32(bgl, 4 + inked.length * 6 + j * 6); });
@@ -338,7 +499,8 @@
         const family = 'SC3 ' + nm + ' (game)';
         const bytes = await fs.read(p);
         const side = opts.calibrate === false ? areaSide : (await calibrate()).side;
-        const t = buildTTF(bytes, family.replace(/[()]/g, '').trim(), { side });
+        const sm = (opts.smooth || SMOOTH).includes(nm);
+        const t = buildTTF(bytes, family.replace(/[()]/g, '').trim(), sm ? { side, smooth: true, smooth1bit: true } : { side });
         const face = new FontFace(family, t.buffer, { weight: '1 1000', style: 'normal' });
         await face.load();
         fonts[nm] = { family, line: t.line, base: t.base, glyphs: t.glyphs, face };
@@ -403,5 +565,5 @@
     catch (e) { if (root.console) console.info('sc3font: game fonts not used:', e.message); return null; }
   }
 
-  root.SC3Font = { load, apply, reset, useGame, publishedLoaded, buildTTF, parseFBF, calibrate, sideFrom, FONTS, TOKENS };
+  root.SC3Font = { load, apply, reset, useGame, publishedLoaded, buildTTF, parseFBF, calibrate, sideFrom, FONTS, TOKENS, SMOOTH };
 })(typeof window !== 'undefined' ? window : globalThis);

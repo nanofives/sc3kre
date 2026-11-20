@@ -39,7 +39,7 @@ export const FONTS = ['MAIN9', 'MAIN10', 'SYSTEM9', 'TITLE9', 'TITLE12', 'SERIF1
 // coverage (sc3font.js smoothContours) instead of pixel squares. Same file names, advances, line height and baseline,
 // so sc3ui.css does not change: edit this list (or pass --smooth), re-run the build, then sync_css.py for the importer.
 // Empty = the pixel-exact build published since gamefont (2026-11-19d). Candidate (owner to pick): ['TITLE9', 'TITLE12'].
-export const SMOOTH = [];
+export const SMOOTH = ['TITLE9', 'TITLE12'];   // owner 2026-11-20: "Smooth"
 
 function args() {
   const a = { out: path.join(ROOT, 'docs', 'assets', 'fonts'), lang: 'ENGLISH', smooth: SMOOTH.slice(), colr: true };

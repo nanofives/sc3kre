@@ -52,7 +52,7 @@
   };
   // smoothfont (round 2026-11-20f): fonts the run-time builder traces as smooth outlines (the same switch as SMOOTH in
   // re/tools/sc3ui/build_fonts.mjs, keep the two lists equal). Empty = pixel squares. opts.smooth (a list) overrides.
-  const SMOOTH = [];
+  const SMOOTH = ['TITLE9', 'TITLE12'];   // owner 2026-11-20: "Smooth" (same list as build_fonts.mjs)
   const SPACING = ['--ui-ls-ui', '--ui-ls-row', '--ui-ls-name', '--ui-ls-title', '--ui-ls-btn'];
   const LANGS = ['ENGLISH', 'English-UK', 'GERMAN', 'FRENCH', 'ITALIAN', 'DUTCH', 'SWEDISH'];
   const P = 64, UPM = 1024, KEY = 16;
