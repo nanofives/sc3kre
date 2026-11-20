@@ -600,7 +600,8 @@ function SC4WEB_LIB(B) {
         if (pid >= 0x88EDC900 && pid <= 0x88EDCDFF) {
           const r = asList(pv(ex, pid)).map(x => pyInt(x) >>> 0);
           const sgn = r.map(x => x & 0x80000000 ? x - 4294967296 : x);
-          objs.push({ type: r[0], rot: r[2] & 3, x: sgn[3] / 65536.0, z: sgn[5] / 65536.0, ids: r.slice(12) });
+          objs.push({ type: r[0], rot: r[2] & 3, flip: !!(r[2] & 0x80000000), x: sgn[3] / 65536.0, z: sgn[5] / 65536.0,   // task sc4lottex: flip, bounds
+            bounds: [sgn[6] / 65536.0, sgn[7] / 65536.0, sgn[8] / 65536.0, sgn[9] / 65536.0], ids: r.slice(12) });
         }
       }
       const sz = asList(pv(ex, 0x88EDC790, [0, 0]));
@@ -1006,8 +1007,10 @@ function SC4WEB_LIB(B) {
     if (versions && versions.length) entry.x_sc4.versions = versions;
     files.set(stem + '.obj', textBytes(obj.join('\n') + '\n'));
     files.set(stem + '.mtl', textBytes(mtl.join('\n')));
-    const pinfo = pctx ? writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n) : null;
-    if (pinfo) { entry.x_sc4.props = pinfo; if (pinfo.on) entry.file = stem + '_props.obj'; }   // task sc4props
+    const [pinfo, tinfo] = pctx ? writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n) : [null, null];
+    if (pinfo) entry.x_sc4.props = pinfo;   // task sc4props
+    if (tinfo) entry.x_sc4.textures = tinfo;   // task sc4lottex
+    entry.file = fileFor(stem, pinfo, tinfo);
     for (const [png, im] of pngs) files.set(png, im);         // RGBA image; png() turns it into PNG bytes
     return entry;
   }
@@ -1230,14 +1233,17 @@ function SC4WEB_LIB(B) {
       missing_ids: [...miss.entries()].map(([k, v]) => [hexU(k, 8), v]).sort((a, b) => cmpStr(a[0], b[0])) };
   }
   const houseBox = vs => { const P = vs[0].P; let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity; for (const p of P) { if (p[0] < a) a = p[0]; if (p[0] > b) b = p[0]; if (p[2] < c) c = p[2]; if (p[2] > d) d = p[2]; } return [a, b, c, d]; };
-  function writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n = null) {   // sc4conv.write_props -> x_sc4.props or null
-    const pl = propPlan(b, pctx.lots, pctx.sources, houseBox(vs), n === null ? lotFor(b) : n);
-    if (!pl) return null;
+  function writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n = null) {   // sc4conv.write_props -> [x_sc4.props, x_sc4.textures], either null
+    if (n === null) n = lotFor(b);
+    const pl = propPlan(b, pctx.lots, pctx.sources, houseBox(vs), n);
+    if (!pl) return [null, null];
     const slots = placedMeshes(pl, pctx.cache, fill);
     const s = propSummary(pl);
     const info = Object.assign({ on: s.placed > 0 && !pctx.off }, s);
     pctx.plans.push([b, pl]);
-    if (!s.placed) return info;
+    let y0 = Infinity; for (const v of vs) for (const p of v.P) if (p[1] < y0) y0 = p[1];
+    const [tinfo, lotPng] = writeLottex(b, stem, obj, mtl, files, pctx, pl, n, y0);   // task sc4lottex
+    if (!s.placed) return [info, tinfo];
     const pobj = [obj[0], 'mtllib ' + stem + '_props.mtl'].concat(obj.slice(2)), pmtl = mtl.slice(), seen = new Set();
     let vbase = obj.filter(l => l.startsWith('v ')).length, tbase = obj.filter(l => l.startsWith('vt ')).length;
     for (let slot = 0; slot < 4; slot++) {
@@ -1259,13 +1265,154 @@ function SC4WEB_LIB(B) {
       }
     }
     const [x0, x1, z0, z1] = pl.window;
-    let y0 = Infinity; for (const v of vs) for (const p of v.P) if (p[1] < y0) y0 = p[1];
     const V3 = (x, y, z) => 'v ' + pyFixed(x, 5) + ' ' + pyFixed(y, 5) + ' ' + pyFixed(z, 5);
     pobj.push('g sc4lot', 'usemtl sc4lot', V3(x0, y0, z0), V3(x1, y0, z1), V3(x1, y0, z1), 'f ' + (vbase + 1) + ' ' + (vbase + 2) + ' ' + (vbase + 3));
     pmtl.push('newmtl sc4lot', 'Kd 1 1 1', '');
     files.set(stem + '_props.obj', textBytes(pobj.join('\n') + '\n'));
     files.set(stem + '_props.mtl', textBytes(pmtl.join('\n')));
-    return info;
+    if (lotPng) writeWithQuad(files, stem + '_props_lot', pobj, pmtl, lotPng, pl, y0);   // task sc4lottex
+    return [info, tinfo];
+  }
+  const fileFor = (stem, pinfo, tinfo) => stem + (pinfo && pinfo.on ? '_props' : '') + (tinfo && tinfo.on ? '_lot' : '') + '.obj';   // sc4conv.file_for
+
+  // ================================================================================================ lot textures (task sc4lottex)
+  // sc4conv/lottex.py + sc4conv.write_lottex, the same steps and float order: the texture rows of the props' lot (FSH
+  // group 0x0986135E, zoom 5 = instance + 4), composited on the SC3 lot window at 8 px per metre (opaque textures first,
+  // then the rest, each in lot order; the image turned 180 degrees then rot quarter turns clockwise, the mirror bit
+  // mirroring its columns), SC4 grass cleared (SC3's lawn shows there), drawn by one quad in the OBJ group sc3ground.
+  const G_LOTTEX = 0x0986135E, LOT_PX_M = 8, LOT_Y_LIFT = 0.01, LOT_EDGE_TOL = 1e-6;
+  const lotTexKey = tid => [T_FSH, G_LOTTEX, (tid + 4) >>> 0];
+  const lotGrass = (r, g, b) => { const mn = Math.min(r, b); return g > r && g > b && 5 * (r - b) >= g - mn && 20 * (g - mn) > 3 * g; };   // lottex.grass
+  function lotPlan(pl, sources) {           // lottex.plan
+    const { lot, house: hrow, kb } = pl, [x0w, x1w, z0w, z1w] = pl.window, out = [];
+    lot.objects.forEach((o, k) => {
+      if (o.type !== 2 || !o.ids.length) return;
+      const tid = o.ids[0] >>> 0, b = o.bounds;
+      const cs = [[b[0], b[1]], [b[2], b[3]]].map(([cx, cz]) => turn(cx - hrow.x, cz - hrow.z, -(kb - 2)));
+      const box = [Math.min(cs[0][0], cs[1][0]), Math.max(cs[0][0], cs[1][0]), Math.min(cs[0][1], cs[1][1]), Math.max(cs[0][1], cs[1][1])];
+      const r = { row: k, id: tid, rot: o.rot & 3, flip: !!o.flip, bounds: b.slice(), box, src: null, state: 'ok' };
+      const key = lotTexKey(tid), src = sources.find(x => x.has(...key)) || null;
+      if (!src) r.state = 'missing';
+      else {
+        r.src = src;
+        if (box[1] <= x0w || box[0] >= x1w || box[3] <= z0w || box[2] >= z1w) r.state = 'outside';
+        else if (box[0] < x0w - LOT_EDGE_TOL || box[1] > x1w + LOT_EDGE_TOL || box[2] < z0w - LOT_EDGE_TOL || box[3] > z1w + LOT_EDGE_TOL) r.state = 'cut';
+      }
+      out.push(r);
+    });
+    return out;
+  }
+  function lotTexture(r, cache) {           // lottex.texture -> { w, h, d RGBA } or the error text
+    const key = lotTexKey(r.id);
+    let m = cache.get(r.src); if (!m) { m = new Map(); cache.set(r.src, m); }
+    const ck = tgiKey(...key);
+    if (!m.has(ck)) {
+      try { const bm = readFshFirst(r.src.read(...key)); m.set(ck, bm.w === bm.h ? { w: bm.w, h: bm.h, d: bm.image } : 'not square (' + bm.w + ' x ' + bm.h + ')'); }
+      catch (e) { if (!(e instanceof Sc4Error) && !(e instanceof RangeError)) throw e; m.set(ck, String(e.message || e)); }
+    }
+    return m.get(ck);
+  }
+  function lotComposite(pl, rows, n, cache) {   // lottex.composite -> [RGBA image, stats]
+    const [x0w, , z0w] = pl.window, hx = pl.house.x, hz = pl.house.z, q = pyMod(pl.kb - 2, 4);
+    const P = n * 16 * LOT_PX_M, NP = P * P;
+    const lx = new Float64Array(NP), lz = new Float64Array(NP);
+    for (let j = 0; j < P; j++) {
+      const mz = z0w + (j + 0.5) * (1.0 / LOT_PX_M);
+      for (let i = 0; i < P; i++) {
+        let ax = x0w + (i + 0.5) * (1.0 / LOT_PX_M), az = mz;
+        for (let t = 0; t < q; t++) { const nx = -az, nz = ax; ax = nx; az = nz; }   // turn(model, kb - 2), QUARTER -1
+        lx[j * P + i] = ax + hx; lz[j * P + i] = az + hz;
+      }
+    }
+    const ims = [];
+    for (const r of rows) {
+      if (r.state !== 'ok' && r.state !== 'cut') continue;
+      const im = lotTexture(r, cache);
+      if (typeof im === 'string') { r.state = 'unreadable'; r.why = im; continue; }
+      ims.push([r, im]);
+    }
+    const opaque = im => { for (let k = 3; k < im.d.length; k += 4) if (im.d[k] !== 255) return false; return true; };
+    const order = ims.filter(([, im]) => opaque(im)).concat(ims.filter(([, im]) => !opaque(im)));
+    const ca = new Float64Array(NP), cc = new Float64Array(NP * 3);
+    for (const [r, im] of order) {
+      const b = r.bounds, N = im.w, steps = (2 + r.rot) % 4;
+      for (let k = 0; k < NP; k++) {
+        const u = (lx[k] - b[0]) / (b[2] - b[0]), v = (lz[k] - b[1]) / (b[3] - b[1]);
+        if (!(u >= 0.0 && u < 1.0 && v >= 0.0 && v < 1.0)) continue;
+        let c = Math.floor(u * N), rr = Math.floor(v * N);
+        for (let t = 0; t < steps; t++) { const nr = N - 1 - c; c = rr; rr = nr; }
+        if (r.flip) c = N - 1 - c;
+        const o = (rr * N + c) * 4;
+        const sa = im.d[o + 3] / 255.0, da = ca[k], oa = sa + da * (1.0 - sa), w = da * (1.0 - sa);
+        for (let ch = 0; ch < 3; ch++) {
+          const num = im.d[o + ch] * sa + cc[3 * k + ch] * w;
+          cc[3 * k + ch] = oa > 0.0 ? num / oa : 0.0;
+        }
+        ca[k] = oa;
+      }
+    }
+    const d = new Uint8Array(NP * 4), cl8 = x => x < 0 ? 0 : x > 255 ? 255 : x;
+    let nSc4 = 0, nLawn = 0, nDrawn = 0;
+    for (let k = 0; k < NP; k++) {
+      for (let ch = 0; ch < 3; ch++) d[4 * k + ch] = cl8(Math.floor(cc[3 * k + ch] + 0.5));
+      const a8 = cl8(Math.floor(ca[k] * 255.0 + 0.5)), sc4 = a8 >= 128;
+      const lawn = sc4 && lotGrass(d[4 * k], d[4 * k + 1], d[4 * k + 2]);
+      d[4 * k + 3] = lawn ? 0 : a8;
+      nSc4 += sc4; nLawn += lawn; nDrawn += d[4 * k + 3] >= 128;
+    }
+    const tot = NP;
+    return [{ w: P, h: P, d }, { sc4_ground: new PyFloat(pyRound(nSc4 / tot, 4)), lawn: new PyFloat(pyRound(nLawn / tot, 4)), drawn: new PyFloat(pyRound(nDrawn / tot, 4)) }];
+  }
+  function lotSummary(pl, rows, stats) {    // lottex.summary
+    const st = countBy(rows.map(r => r.state));
+    const miss = countBy(rows.filter(r => r.state === 'missing').map(r => r.id));
+    const used = countBy(rows.filter(r => r.state === 'ok' || r.state === 'cut').map(r => r.id));
+    const hx = m => [...m.entries()].sort((a, b) => a[0] - b[0]).map(([k, v]) => [hexU(k, 8), v]);
+    return { lot: pl.lot.name, rows: rows.length, placed: st.get('ok') || 0, cut: st.get('cut') || 0,
+      outside_sc3_lot: st.get('outside') || 0, missing: st.get('missing') || 0, unreadable: st.get('unreadable') || 0,
+      ground: stats, used: hx(used), missing_ids: hx(miss) };
+  }
+  function writeLottex(b, stem, obj, mtl, files, pctx, pl, n, y0) {   // sc4conv.write_lottex -> [x_sc4.textures or null, PNG name or null]
+    const rows = lotPlan(pl, pctx.sources);
+    if (!rows.length) return [null, null];
+    const [img, stats] = lotComposite(pl, rows, n, pctx.texcache);
+    const t = lotSummary(pl, rows, stats);
+    const drawn = num(stats.drawn) > 0;
+    const tinfo = Object.assign({ on: drawn && !pctx.texOff }, t);
+    pctx.tplans.push([b, rows, stats]);
+    if (!drawn) return [tinfo, null];
+    const png = stem + '_lot.png';
+    files.set(png, img);
+    writeWithQuad(files, stem + '_lot', obj, mtl, png, pl, y0);
+    return [tinfo, png];
+  }
+  function writeWithQuad(files, name, lines, mtl, png, pl, y0) {   // sc4conv.write_with_quad + lottex.quad_lines
+    lines = [lines[0], 'mtllib ' + name + '.mtl'].concat(lines.slice(2));
+    const vb = lines.filter(l => l.startsWith('v ')).length, tb = lines.filter(l => l.startsWith('vt ')).length;
+    const [x0, x1, z0, z1] = pl.window, y = y0 + LOT_Y_LIFT;
+    const V3 = (x, z) => 'v ' + pyFixed(x, 5) + ' ' + pyFixed(y, 5) + ' ' + pyFixed(z, 5);
+    const qo = ['g sc3ground', 'usemtl sc4lottex', V3(x0, z0), V3(x1, z0), V3(x1, z1), V3(x0, z1),
+      'vt 0.000000 1.000000', 'vt 1.000000 1.000000', 'vt 1.000000 0.000000', 'vt 0.000000 0.000000',
+      'f ' + (vb + 1) + '/' + (tb + 1) + ' ' + (vb + 3) + '/' + (tb + 3) + ' ' + (vb + 2) + '/' + (tb + 2),
+      'f ' + (vb + 1) + '/' + (tb + 1) + ' ' + (vb + 4) + '/' + (tb + 4) + ' ' + (vb + 3) + '/' + (tb + 3)];
+    const qm = ['newmtl sc4lottex', 'Kd 1 1 1', 'map_Kd ' + png, ''];
+    files.set(name + '.obj', textBytes(lines.concat(qo).join('\n') + '\n'));
+    files.set(name + '.mtl', textBytes(mtl.concat(qm).join('\n')));
+  }
+  function texNotes(tplans) {               // sc4conv.tex_notes
+    if (!tplans.length) return [];
+    const st = new Map([['ok', 0], ['cut', 0], ['outside', 0], ['missing', 0], ['unreadable', 0]]), miss = new Map();
+    let tot = 0;
+    for (const [, rows] of tplans) for (const r of rows) {
+      st.set(r.state, (st.get(r.state) || 0) + 1); tot++;
+      if (r.state === 'missing') miss.set(r.id, (miss.get(r.id) || 0) + 1);
+    }
+    const nb = tplans.filter(([, , s]) => num(s.drawn) > 0).length;
+    const lines = ['Lot textures: ' + (st.get('ok') + st.get('cut')) + ' of ' + tot + ' texture rows drawn (' + nw(nb, 'building', 'buildings') + '), ' +
+      st.get('cut') + ' of them cut at the SC3 lot edge, ' + st.get('outside') + ' outside the SC3 lot, ' + st.get('missing') + ' in no pack given, ' + st.get('unreadable') + ' unreadable'];
+    if (miss.size) lines.push('Textures not found (' + miss.size + ' ids, rows in brackets): ' +
+      [...miss.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([k, v]) => hexU(k, 8) + ' (' + v + ')').join(', '));
+    return lines;
   }
   function propsNotes(plans, sc4 = false) {   // sc4conv.props_notes
     if (!plans.length) return [];
@@ -1283,13 +1430,14 @@ function SC4WEB_LIB(B) {
       [...miss.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([k, v]) => hexU(k, 8) + ' (' + v + ')').join(', '));
     return lines;
   }
-  async function propsContext(idx, bs, lots, deps, fill, off, log, services = null, sc4 = null) {   // sc4conv.props_context
+  async function propsContext(idx, bs, lots, deps, fill, off, log, services = null, sc4 = null, texOff = false) {   // sc4conv.props_context
     const sources = [ownSource(idx)];
     for (const d of deps) sources.push(await depsIndex(d, log));
     const withSc4 = !!(sc4 && sc4.length && !idx.install);   // task sc4baseprops: the player's SC4 install, the last source
     if (withSc4) sources.push(await installSource(sc4, log));
-    const ctx = { lots, sources, cache: new Map(), plans: [], off: !!off, services: services || new Map(), sc4: withSc4 };
-    const want = new Map(), own = [];
+    const ctx = { lots, sources, cache: new Map(), plans: [], off: !!off, services: services || new Map(), sc4: withSc4,
+      texcache: new Map(), tplans: [], texOff: !!texOff };   // task sc4lottex
+    const want = new Map(), own = [], ownTex = [];
     for (const b of bs) {
       let vs; try { vs = loadViews(idx, b, ZOOM5); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) continue; throw e; }
       const sv = ctx.services.get(tgiKey(...b.tgi));
@@ -1299,9 +1447,16 @@ function SC4WEB_LIB(B) {
         if (!want.has(r.msrc)) want.set(r.msrc, new Map());
         for (const k of viewKeys(r.model)) want.get(r.msrc).set(tgiKey(...k), k);
       } else if (r.state === 'ok' && idx.install) own.push(r.model);   // task sc4civ: SC4's own props, by slices
+      for (const r of lotPlan(pl, sources)) {   // task sc4lottex: the lot textures drawn on the SC3 lot
+        if (r.state !== 'ok' && r.state !== 'cut') continue;
+        const k = lotTexKey(r.id);
+        if (!r.src.own) { if (!want.has(r.src)) want.set(r.src, new Map()); want.get(r.src).set(tgiKey(...k), k); }
+        else if (idx.install) ownTex.push(k);
+      }
     }
     for (const [s, keys] of want) await s.fetch([...keys.values()], log);
     if (own.length) await fetchModels(idx, own);
+    if (ownTex.length) await fetchKeys(idx, ownTex);
     return ctx;
   }
 
@@ -1671,7 +1826,7 @@ function SC4WEB_LIB(B) {
     for (const [d, ms] of fam) if (d[0] === 'S') { const c = ms.find(m => !isDiag(m)); pick.set(d, c ? c.tgi : null); }   // task sc4civ: the first is on
     const files = new Map(), models = [];
     const pctx = await propsContext(idx, bs, lots, sources.deps || opt.deps || [], fill, opt.noProps, log, services,
-      sources.sc4 || opt.sc4 || null);      // task sc4props; task sc4baseprops: the SC4 install's own props
+      sources.sc4 || opt.sc4 || null, opt.noTextures);   // task sc4props; task sc4baseprops: the SC4 install's own props; task sc4lottex
     for (let bi = 0; bi < bs.length; bi++) {
       const b = bs[bi];
       if (opt.progress) await opt.progress(bi, bs.length, b);
@@ -1681,17 +1836,19 @@ function SC4WEB_LIB(B) {
       catch (ex) { if (!(ex instanceof Sc4Error)) throw ex; const line = '  skip ' + b.name + ': ' + ex.message; log(line); report.push(line); continue; }
       const ed = editableOf(e), auto = {}; for (const k of ed) auto[k] = e[k];   // task sc4civ: + the service fields
       e.x_sc4.auto = auto;
-      const pr = e.x_sc4.props || null;
+      const pr = e.x_sc4.props || null, tx = e.x_sc4.textures || null;
       if (pr) auto.props_on = pr.on;
+      if (tx) auto.textures_on = tx.on;
       const o = old.get('X' + e.x_sc4.exemplar) || old.get('F' + e.file);
       if (o) {
         const prev = (o.x_sc4 && o.x_sc4.auto) || {};
         for (const k of ed) if (k in o && k in prev && !pyEq(o[k], prev[k])) e[k] = o[k];
+        const isObj = x => x && typeof x === 'object' && !Array.isArray(x);
         const op = o.x_sc4 && o.x_sc4.props;   // task sc4props: the player's props switch
-        if (pr && op && typeof op === 'object' && !Array.isArray(op) && 'props_on' in prev && !pyEq(op.on, prev.props_on)) {
-          pr.on = !!op.on && pr.placed > 0;
-          e.file = stemOf(b.name) + (pr.on ? '_props.obj' : '.obj');
-        }
+        if (pr && isObj(op) && 'props_on' in prev && !pyEq(op.on, prev.props_on)) pr.on = !!op.on && pr.placed > 0;
+        const ot = o.x_sc4 && o.x_sc4.textures;   // task sc4lottex: the player's textures switch
+        if (tx && isObj(ot) && 'textures_on' in prev && !pyEq(ot.on, prev.textures_on)) tx.on = !!ot.on && num(tx.ground.drawn) > 0;
+        e.file = fileFor(stemOf(b.name), pr, tx);
       }
       models.push(e);
       const vs = versions.get(b.tgi) || [];
@@ -1708,7 +1865,7 @@ function SC4WEB_LIB(B) {
         models.push(le);
       }
     }
-    for (const ln of propsNotes(pctx.plans, pctx.sc4)) { log(ln); report.push(ln); }
+    for (const ln of propsNotes(pctx.plans, pctx.sc4).concat(texNotes(pctx.tplans))) { log(ln); report.push(ln); }
     const top = { sc3models: 1, models };
     if (missing.length) top.x_sc4_missing = missing;  // task sc4pass2: the download's buildings without a model, by name
     const text = pyDump(top, 1);

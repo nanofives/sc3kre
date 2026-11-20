@@ -61,6 +61,11 @@ bsc=""; [ -n "$sc4packs" ] && [ -n "$sc4zip" ] && for f in "$sc4packs"/*Common\ 
 # packed) + sc4_baseprops.mjs (sc4web.js: the install picked with the download, read by slices, and remembered) + the
 # page installing the install-alone case twice (the game's .dat files picked with the .zip; Open SC4 game first)
 sc4base=""; [ -n "${SC4INSTALL:-}" ] && [ -n "$bsc" ] && sc4base=1 && steps=$((steps + 4))
+# sc4lottex (2026-11-20): SC4 lot textures (driveways, paths, paving) on the ground under the building, with the same three
+# sources: sc4_lottex_setup.py (sc4conv.py over the download alone, + BSC, + install, both; --no-textures; a rerun with the
+# two switches; the rerun packed) + sc4_lottex.mjs (sc4web.js: report lines, every file of the both run, the switches,
+# pack and frames of a building drawn with its ground art and no props)
+[ -n "$sc4base" ] && steps=$((steps + 2))
 [ -n "${BLD1999:-}" ] && steps=$((steps + 5))
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
@@ -122,6 +127,8 @@ if [ -n "$sc4base" ]; then
   step "sc4_baseprops.mjs (sc4web.js: the install picked with the download and remembered, by slices; files, pack, frames)" node "$here/sc4_baseprops.mjs" --golden "$work/sc4baseprops" --game "$game" --zip "$sc4zip" --deps "$bsc" --install "$SC4INSTALL" --frames
   step "pagetest.mjs sc4baseprops_inst --sc4with (the page: the game's .dat files picked with the .zip, installed)" node "$here/pagetest.mjs" --golden "$work/sc4baseprops" --game "$game" --case sc4baseprops_inst --sc4zip "$sc4zip" --sc4with "$SC4INSTALL"
   step "pagetest.mjs sc4baseprops_inst --sc4remember (the page: Open SC4 game first, then the .zip alone, installed)" node "$here/pagetest.mjs" --golden "$work/sc4baseprops" --game "$game" --case sc4baseprops_inst --sc4zip "$sc4zip" --sc4remember "$SC4INSTALL"
+  step "sc4_lottex_setup.py (sc4conv.py: JMyers lot textures from the download, BSC, install, both; --no-textures; rerun switches; bldimport.py pack)" $py "$here/sc4_lottex_setup.py" --sc4 "$sc4dir" --deps "$bsc" --install "$SC4INSTALL" --game "$game" --out "$work/sc4lottex"
+  step "sc4_lottex.mjs (sc4web.js: lot textures per source set, every file, --no-textures, rerun switches, pack, frames)" node "$here/sc4_lottex.mjs" --golden "$work/sc4lottex" --game "$game" --zip "$sc4zip" --deps "$bsc" --install "$SC4INSTALL" --frames
 fi
 echo "$((n - bad)) of $n steps passed"
 exit $bad

@@ -80,8 +80,10 @@ log(`tower zip converted in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 const pyConv = g('goc', 'conv');
 const pyModels = readJson(path.join(pyConv, 'models.json')).models;
 {
-  const m = pyModels[0] || {}, stem = (m.file || '').replace(/\.obj$/i, ''), notes = [];
-  for (const ext of ['.obj', '.mtl']) if (!eqBytes(fs.readFileSync(path.join(pyConv, stem + ext)), conv.files.get(stem + ext))) notes.push(ext + ' differs');
+  const m = pyModels[0] || {}, stem = (m.file || '').replace(/(_props)?(_lot)?\.obj$/i, ''), notes = [];   // task sc4lottex: the house's stem
+  const exts = ['.obj', '.mtl'];
+  for (const x of ['_props', '_lot', '_props_lot']) if (fs.existsSync(path.join(pyConv, stem + x + '.obj'))) exts.push(x + '.obj', x + '.mtl');   // task sc4lottex
+  for (const ext of exts) if (!eqBytes(fs.readFileSync(path.join(pyConv, stem + ext)), conv.files.get(stem + ext))) notes.push(ext + ' differs');
   line(`tower ${m.file}: OBJ + MTL text`, pyModels.length === 3 && !notes.length, notes.join('; '));
   const pn = [];
   for (const v of ['S', 'W', 'N', 'E']) {

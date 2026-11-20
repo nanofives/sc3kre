@@ -113,6 +113,12 @@ DEFAULT_STYLE = "stock"
 ALPHA_TEST = os.environ.get("SC3BLD_ALPHA", "1") != "0"      # texture alpha < 0.5 = see-through (depth peeling)
 SLOT_GROUPS = os.environ.get("SC3BLD_SLOTGROUPS", "1") != "0"  # OBJ group/object sc3slot<r> = drawn in slot r only
 PEEL_LAYERS = 4
+# task sc4lottex (2026-11-20): faces in an OBJ group / object named `sc3ground` are ground art (a converted SC4 lot's
+# driveways and paths): drawn in every slot and lit like the lawn below them (the rim of the stock lots, no tone,
+# saturation, grain or contrast of the model), never a shadow caster; where their texture is transparent the sample is
+# the lawn itself (it lies 1 cm below), not a peeled layer. Inert for models without such a group. Off switch:
+# SC3BLD_GROUNDGROUP=0.
+GROUND_GROUP = os.environ.get("SC3BLD_GROUNDGROUP", "1") != "0"
 
 
 def _pz(v, z):
@@ -181,9 +187,11 @@ def _read_mtl(path):
 def load_obj(path):
     """-> mesh dict: tri (N,3,3) xyz metres, uv (N,3,2) or None per tri via has_uv (N,), mat (N,), mats [dict],
     slot (N,) int8: -1 = drawn in every rotation slot, r = only in slot r (faces in an OBJ group or object named
-    `sc3slot<r>`, task sc4conv: a model that brings its own art per view, such as a converted SC4 building)."""
+    `sc3slot<r>`, task sc4conv: a model that brings its own art per view, such as a converted SC4 building),
+    ground (N,) bool: faces of the group `sc3ground` (task sc4lottex, GROUND_GROUP)."""
     V, VT = [], []
-    tris, uvs, has, mid, slots = [], [], [], [], []
+    tris, uvs, has, mid, slots, gnd = [], [], [], [], [], []
+    cur_ground = False
     mats = {}
     mat_names = ["_default"]
     mat_list = [{"kd": (0.8, 0.8, 0.8), "tex": None, "name": "_default"}]
@@ -214,6 +222,7 @@ def load_obj(path):
             nm = " ".join(p[1:]).lower()
             cur_slot = int(nm[7]) if SLOT_GROUPS and nm.startswith("sc3slot") and nm[7:8] in "0123" \
                 and len(nm) >= 8 else -1
+            cur_ground = GROUND_GROUP and nm == "sc3ground"
         elif k == "f":
             idx = []
             for t in p[1:]:
@@ -233,11 +242,12 @@ def load_obj(path):
                 has.append(ok)
                 mid.append(cur)
                 slots.append(cur_slot)
+                gnd.append(cur_ground)
     if not tris:
         raise RenderError("%s: no faces" % path)
     return {"tri": np.array(tris, dtype=np.float64), "uv": np.array(uvs, dtype=np.float64),
             "has_uv": np.array(has, dtype=bool), "mat": np.array(mid, dtype=np.int32), "mats": mat_list,
-            "slot": np.array(slots, dtype=np.int8)}
+            "slot": np.array(slots, dtype=np.int8), "ground": np.array(gnd, dtype=bool)}
 
 
 def slot_mesh(mesh, r):
@@ -247,8 +257,9 @@ def slot_mesh(mesh, r):
         return mesh
     keep = (s < 0) | (s == r)
     out = dict(mesh)
-    for k in ("tri", "uv", "has_uv", "mat", "slot"):
-        out[k] = mesh[k][keep]
+    for k in ("tri", "uv", "has_uv", "mat", "slot", "ground"):
+        if k in mesh:
+            out[k] = mesh[k][keep]
     return out
 
 
@@ -478,7 +489,11 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
     g = g_px / (W / 2.0)                                         # px of growth -> tile units along u / v
     parts = [_rot_slot(mesh["tri"], n, r)]
     parts0 = [mesh["tri"]]
-    kinds = [np.zeros(len(mesh["tri"]), dtype=np.int8)]
+    # kind 0 model, 1 the lawn, 2 ground art of the model (sc3ground faces, task sc4lottex)
+    gf = mesh.get("ground")
+    kinds = [np.where(gf, 2, 0).astype(np.int8) if gf is not None else np.zeros(len(mesh["tri"]), dtype=np.int8)]
+    n_ground = int((kinds[0] == 2).sum())
+    gmesh = gf if n_ground else None
     if ground:
         gt, guv = ground_mesh(n, g)
         parts.append(_rot_slot(gt, n, r))
@@ -512,6 +527,8 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
             sel = (mids == k) & mesh["has_uv"][idm]
             if sel.any():
                 tr[sel] = _sample_tex(mesh["mats"][k]["alpha"][..., None], uvt[sel])[:, 0] < 0.5
+        if gmesh is not None:                                   # ground art: its clear texels are the lawn (below)
+            tr &= ~gmesh[idm]
         cm = np.zeros(len(ids), dtype=bool)
         cm[np.where(mod)[0]] = tr
         hole[c] = cm
@@ -534,7 +551,7 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
         nrm0[flip] *= -1
         sh = None
         if shadows and (kind == 0).any():
-            sm = _shadow_map(t[kind == 0], sun=_sun(st.get("shadow_sun")))
+            sm = _shadow_map(t[kind == 0], sun=_sun(st.get("shadow_sun")))   # ground art (kind 2) casts none
             sh = _in_shadow(pts, sm, bias=0.02)
             if st["light"] == "axis":           # shadows fall on what faces the shadow sun (ground, roofs), never
                 sh &= (nrm @ _sun(st.get("shadow_sun"))) > 0.05     # on a wall turned away from it
@@ -551,24 +568,51 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
             light = st["ambient"] + st["diffuse"] * nl
         alb = np.empty((len(ids), 3), dtype=np.float32)
         is_g = kind[ids] == 1
+        is_l = kind[ids] == 2                                     # task sc4lottex: ground art, lit as the lawn
+        if is_l.any() and alpha_mats:                             # its transparent texels: the lawn below
+            li = np.where(is_l)[0]
+            ml = mesh["mat"][ids[li]]
+            uvl = (mesh["uv"][ids[li]] * bw[li][:, :, None]).sum(1)
+            hl = mesh["has_uv"][ids[li]]
+            clear = np.zeros(len(li), dtype=bool)
+            for k in alpha_mats:
+                sel = (ml == k) & hl
+                if sel.any():
+                    clear[sel] = _sample_tex(mesh["mats"][k]["alpha"][..., None], uvl[sel])[:, 0] < 0.5
+            is_g = is_g.copy()
+            is_g[li[clear]] = True
+            is_l[li[clear]] = False
         rim = st.get("rim")
-        if rim and is_g.any() and _pz(rim["dark"], z):
+        if rim and (is_g | is_l).any() and _pz(rim["dark"], z):
             # stock lots are darker along their two FRONT edges (the lower-left u = 0 and lower-right v = n edges
             # of the frame, in every slot): a patchy band about rim["width"] cells deep (BUILDING_ART.md 4.1)
-            pg = pts[is_g]
+            ig = is_g | is_l
+            pg = pts[ig]
             d = np.minimum(pg[:, 0], n - pg[:, 1])
             fall = np.clip(1.0 - d / rim["width"], 0, 1) ** 1.5
             patch = np.clip(0.55 + 0.6 * _value_noise(_rot_slot(pg, n, (4 - r) % 4), 4.0, 11), 0, 1)
-            lg = light[is_g] * (1.0 - _pz(rim["dark"], z) * fall * patch)
+            lg = light[ig] * (1.0 - _pz(rim["dark"], z) * fall * patch)
             light = light.copy()
-            light[is_g] = lg
+            light[ig] = lg
         if is_g.any():
             gtex = ground_tex if ground_tex is not None else grass_texture(**_grass_args(st, z))
             # ground uv in slot-0 lot coordinates: undo the slot rotation of the sample position
             p0 = _rot_slot(pts[is_g], n, (4 - r) % 4)
             k_uv = GRASS_TEXELS_PER_CELL / gtex.shape[0]
             alb[is_g] = _sample_tex(gtex, np.stack([p0[:, 0] * k_uv, p0[:, 1] * k_uv], 1))
-        mi = ~is_g
+        if is_l.any():                                            # task sc4lottex: ground art, its texture as it is
+            mids = mesh["mat"][ids[is_l]]
+            a3 = np.array([m["kd"] for m in mesh["mats"]], dtype=np.float32)[mids]
+            uvt = (mesh["uv"][ids[is_l]] * bw[is_l][:, :, None]).sum(1)
+            hu = mesh["has_uv"][ids[is_l]]
+            for k, m in enumerate(mesh["mats"]):
+                if m.get("tex") is None:
+                    continue
+                sel = (mids == k) & hu
+                if sel.any():
+                    a3[sel] = _sample_tex(m["tex"], uvt[sel])
+            alb[is_l] = a3
+        mi = ~(is_g | is_l)
         if mi.any():
             mids = mesh["mat"][ids[mi]]
             a2 = np.array([m["kd"] for m in mesh["mats"]], dtype=np.float32)[mids]

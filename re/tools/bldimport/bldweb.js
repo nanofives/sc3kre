@@ -768,8 +768,8 @@ function BLDWEB_LIB() {
   async function loadObj(folder, rel) {
     const data = await folder.get(rel);
     if (!data) throw new BldError(rel + ': not found');
-    const V = [], VT = [], tris = [], uvs = [], has = [], mid = [], slots = [];
-    let curSlot = -1;
+    const V = [], VT = [], tris = [], uvs = [], has = [], mid = [], slots = [], gnd = [];
+    let curSlot = -1, curGround = 0;
     const mats = new Map(), texCache = new Map();
     const matNames = ['_default'], matList = [{ kd: [0.8, 0.8, 0.8], tex: null, name: '_default' }];
     let cur = 0;
@@ -792,6 +792,7 @@ function BLDWEB_LIB() {
         // task sc4web (bldrender task sc4conv): faces in a group / object named sc3slot<r> are drawn in slot r only
         const nm = p.slice(1).join(' ').toLowerCase();
         curSlot = nm.startsWith('sc3slot') && nm.length >= 8 && '0123'.includes(nm[7]) ? +nm[7] : -1;
+        curGround = nm === 'sc3ground' ? 1 : 0;   // task sc4lottex: ground art (bldrender.GROUND_GROUP)
       } else if (k === 'f') {
         const idx = [];
         for (const t of p.slice(1)) {
@@ -806,7 +807,7 @@ function BLDWEB_LIB() {
           tris.push(tri.map(([a]) => { const v = V.at(a); if (!v) throw new BldError('face index out of range'); return v.slice(0, 3); }));
           const ok = tri.every(([, b]) => b !== null);
           uvs.push(ok ? tri.map(([, b]) => { const v = VT.at(b); if (!v) throw new BldError('uv index out of range'); return v; }) : [[0, 0], [0, 0], [0, 0]]);
-          has.push(ok); mid.push(cur); slots.push(curSlot);
+          has.push(ok); mid.push(cur); slots.push(curSlot); gnd.push(curGround);
         }
       }
     }
@@ -816,15 +817,15 @@ function BLDWEB_LIB() {
       for (let c = 0; c < 3; c++) tri[i * 9 + j * 3 + c] = tris[i][j][c];
       uv[i * 6 + j * 2] = uvs[i][j][0]; uv[i * 6 + j * 2 + 1] = uvs[i][j][1];
     }
-    return { n: N, tri, uv, has_uv: Uint8Array.from(has.map(Number)), mat: Int32Array.from(mid), mats: matList, slot: Int8Array.from(slots) };
+    return { n: N, tri, uv, has_uv: Uint8Array.from(has.map(Number)), mat: Int32Array.from(mid), mats: matList, slot: Int8Array.from(slots), ground: Uint8Array.from(gnd) };
   }
   function slotMesh(mesh, r) {           // bldrender.slot_mesh: the faces drawn in rotation slot r
     const s = mesh.slot;
     if (!s || !s.some(x => x >= 0)) return mesh;
     const keep = []; for (let i = 0; i < mesh.n; i++) if (s[i] < 0 || s[i] === r) keep.push(i);
-    const N = keep.length, tri = new Float64Array(N * 9), uv = new Float64Array(N * 6), hu = new Uint8Array(N), mt = new Int32Array(N), sl = new Int8Array(N);
-    keep.forEach((i, j) => { tri.set(mesh.tri.subarray(9 * i, 9 * i + 9), 9 * j); uv.set(mesh.uv.subarray(6 * i, 6 * i + 6), 6 * j); hu[j] = mesh.has_uv[i]; mt[j] = mesh.mat[i]; sl[j] = s[i]; });
-    return Object.assign({}, mesh, { n: N, tri, uv, has_uv: hu, mat: mt, slot: sl });
+    const N = keep.length, tri = new Float64Array(N * 9), uv = new Float64Array(N * 6), hu = new Uint8Array(N), mt = new Int32Array(N), sl = new Int8Array(N), gd = new Uint8Array(N);
+    keep.forEach((i, j) => { tri.set(mesh.tri.subarray(9 * i, 9 * i + 9), 9 * j); uv.set(mesh.uv.subarray(6 * i, 6 * i + 6), 6 * j); hu[j] = mesh.has_uv[i]; mt[j] = mesh.mat[i]; sl[j] = s[i]; gd[j] = mesh.ground ? mesh.ground[i] : 0; });
+    return Object.assign({}, mesh, { n: N, tri, uv, has_uv: hu, mat: mt, slot: sl, ground: gd });
   }
   function place(mesh, n, cellM, scale, rotDeg) {
     const N = mesh.n, P = N * 3, sc = scale;
@@ -1037,6 +1038,9 @@ function BLDWEB_LIB() {
     const gpx = pz(gtab, n);
     const g = gpx / (W / 2.0);
     const nm = mesh.n, nt = nm + (ground ? 2 : 0);
+    // task sc4lottex: faces of the OBJ group sc3ground are ground art (bldrender kind 2): lit as the lawn, no shadow
+    // caster, a transparent texel is the lawn below
+    const gr = mesh.ground && mesh.ground.some(x => x) ? mesh.ground : null;
     const t0 = new Float64Array(nt * 9);
     t0.set(mesh.tri);
     if (ground) {
@@ -1068,7 +1072,7 @@ function BLDWEB_LIB() {
         const id = ib[q];
         if (id < 0 || id >= nm) continue;
         const al = mesh.mats[mesh.mat[id]].alpha;
-        if (!al || !mesh.has_uv[id]) continue;
+        if (!al || !mesh.has_uv[id] || (gr && gr[id])) continue;
         const o = 6 * id, b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
         const uu = (mesh.uv[o] * b0 + mesh.uv[o + 2] * b1) + mesh.uv[o + 4] * b2;
         const vv = (mesh.uv[o + 1] * b0 + mesh.uv[o + 3] * b1) + mesh.uv[o + 5] * b2;
@@ -1090,12 +1094,19 @@ function BLDWEB_LIB() {
       const nrmT = faceNormals(t, nt), nrm0T = faceNormals(t0, nt);
       // the 'sun' light with diffuse 0 (the baked styles) is the ambient alone, so no shadow map is needed (light =
       // ambient + 0 * nl with nl >= 0 is the value bldrender gets with its map)
-      const sm = shadows && nm > 0 && !(st.light !== 'axis' && st.diffuse === 0) ? shadowMap(t.subarray(0, nm * 9), nm) : null;
+      let sm = null;
+      if (shadows && !(st.light !== 'axis' && st.diffuse === 0)) {
+        if (!gr) { if (nm > 0) sm = shadowMap(t.subarray(0, nm * 9), nm); }
+        else {                              // ground art casts no shadow: the model faces alone, in order
+          const keep = []; for (let i = 0; i < nm; i++) if (!gr[i]) keep.push(i);
+          if (keep.length) { const tm = new Float64Array(keep.length * 9); keep.forEach((i, j) => tm.set(t.subarray(9 * i, 9 * i + 9), 9 * j)); sm = shadowMap(tm, keep.length); }
+        }
+      }
       const shadowSun = SUN;
       const sel = new Int32Array(M);
       { let m = 0; for (let q = 0; q < ib.length; q++) if (ib[q] >= 0) sel[m++] = q; }
       const pts = new Float64Array(M * 3), nrm = new Float64Array(M * 3), nrm0 = new Float64Array(M * 3);
-      const light = new Float64Array(M), alb = new Float32Array(M * 3), isG = new Uint8Array(M);
+      const light = new Float64Array(M), alb = new Float32Array(M * 3), isG = new Uint8Array(M), isL = new Uint8Array(M);
       let nModel = 0;
       for (let m = 0; m < M; m++) {
         const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2], o = 9 * id;
@@ -1105,7 +1116,17 @@ function BLDWEB_LIB() {
         if (mm3(n0, n1, n2, F) > 0) { n0 *= -1; n1 *= -1; n2 *= -1; m0 *= -1; m1 *= -1; m2 *= -1; }
         nrm[3 * m] = n0; nrm[3 * m + 1] = n1; nrm[3 * m + 2] = n2; nrm0[3 * m] = m0; nrm0[3 * m + 1] = m1; nrm0[3 * m + 2] = m2;
         isG[m] = id >= nm ? 1 : 0;
-        if (!isG[m]) nModel++;
+        if (!isG[m] && gr && gr[id]) {      // task sc4lottex: ground art; where its texture is clear, the lawn
+          isL[m] = 1;
+          const al = mesh.mats[mesh.mat[id]].alpha;
+          if (al && mesh.has_uv[id]) {
+            const o = 6 * id;
+            const uu = (mesh.uv[o] * b0 + mesh.uv[o + 2] * b1) + mesh.uv[o + 4] * b2;
+            const vv = (mesh.uv[o + 1] * b0 + mesh.uv[o + 3] * b1) + mesh.uv[o + 5] * b2;
+            if (al.d[texIndex(al, uu, vv)] < 0.5) { isL[m] = 0; isG[m] = 1; }
+          }
+        }
+        if (!isG[m] && !isL[m]) nModel++;
         let sh = false;
         if (sm) {
           sh = inShadow(pts[3 * m], pts[3 * m + 1], pts[3 * m + 2], sm, 0.02);
@@ -1122,11 +1143,11 @@ function BLDWEB_LIB() {
         }
       }
       const rim = st.rim;
-      let nG = M - nModel;
+      let nG = M - nModel;                  // the lawn and ground art
       if (rim && nG && pz(rim.dark, z)) {
         const dark = pz(rim.dark, z);
         for (let m = 0; m < M; m++) {
-          if (!isG[m]) continue;
+          if (!isG[m] && !isL[m]) continue;
           const u = pts[3 * m], v = pts[3 * m + 1];
           const d = Math.min(u, n - v);                       // np.minimum(pg[:, 0], n - pg[:, 1])
           let fall = 1.0 - d / rim.width; fall = fall < 0 ? 0 : fall > 1 ? 1 : fall; fall = Math.pow(fall, 1.5);
@@ -1136,7 +1157,8 @@ function BLDWEB_LIB() {
           light[m] = light[m] * (1.0 - dark * fall * patch);
         }
       }
-      if (nG) {
+      let nL = 0; for (let m = 0; m < M; m++) nL += isL[m];
+      if (nG - nL) {
         const kuv = GRASS_TEXELS_PER_CELL / groundTex.h;
         for (let m = 0; m < M; m++) {
           if (!isG[m]) continue;
@@ -1145,13 +1167,29 @@ function BLDWEB_LIB() {
           alb[3 * m] = groundTex.d[ti]; alb[3 * m + 1] = groundTex.d[ti + 1]; alb[3 * m + 2] = groundTex.d[ti + 2];
         }
       }
+      if (nL) {                             // task sc4lottex: ground art, its texture as it is
+        for (let m = 0; m < M; m++) {
+          if (!isL[m]) continue;
+          const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
+          const mat = mesh.mats[mesh.mat[id]];
+          let a0 = fr(mat.kd[0]), a1 = fr(mat.kd[1]), a2 = fr(mat.kd[2]);
+          if (mat.tex && mesh.has_uv[id]) {
+            const o = 6 * id;
+            const uu = (mesh.uv[o] * b0 + mesh.uv[o + 2] * b1) + mesh.uv[o + 4] * b2;
+            const vv = (mesh.uv[o + 1] * b0 + mesh.uv[o + 3] * b1) + mesh.uv[o + 5] * b2;
+            const ti = texIndex(mat.tex, uu, vv);
+            a0 = mat.tex.d[ti]; a1 = mat.tex.d[ti + 1]; a2 = mat.tex.d[ti + 2];
+          }
+          alb[3 * m] = a0; alb[3 * m + 1] = a1; alb[3 * m + 2] = a2;
+        }
+      }
       if (nModel) {
         const one = nModel === 1;
         const sat = pz(st.sat, z), gr = pz(st.grain, z);
         const satK = fr(sat - 1.0), grK = fr(gr);
         const tone = st.tone && st.tone.length ? [fr(st.tone[0]), fr(st.tone[1])] : null, lo4 = fr(1e-4);
         for (let m = 0; m < M; m++) {
-          if (isG[m]) continue;
+          if (isG[m] || isL[m]) continue;
           const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
           const mat = mesh.mats[mesh.mat[id]];
           let a0 = fr(mat.kd[0]), a1 = fr(mat.kd[1]), a2 = fr(mat.kd[2]);
@@ -1197,7 +1235,7 @@ function BLDWEB_LIB() {
         const one = nModel === 1, piv = fr(st.pivot), cf = fr(con), lo = fr(1e-4);
         const cl = x => x < 0 ? 0 : x > 1 ? 1 : x;
         for (let m = 0; m < M; m++) {
-          if (isG[m]) continue;
+          if (isG[m] || isL[m]) continue;
           const q = sel[m], r0 = rgb[3 * q], r1 = rgb[3 * q + 1], r2 = rgb[3 * q + 2];
           const y = mm3f(r0, r1, r2, LUMA, one);
           const y2 = cl(fr(piv + fr(fr(y - piv) * cf)));

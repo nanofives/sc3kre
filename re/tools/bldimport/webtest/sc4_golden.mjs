@@ -66,14 +66,17 @@ const zipIn = [{ path: path.basename(zipPath), bytes: async () => new Uint8Array
 const conv = await W.convert(await W.sourcesFrom(zipIn), { log: s => console.log('  ' + s) });
 console.log(`  zip converted in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 for (const m of pyModels) {
-  const stem = m.file.replace(/\.obj$/i, ''), notes = [];
-  for (const ext of ['.obj', '.mtl']) if (!eqBytes(fs.readFileSync(path.join(pyConv, stem + ext)), conv.files.get(stem + ext))) notes.push(ext + ' differs');
+  const stem = m.file.replace(/(_props)?(_lot)?\.obj$/i, ''), notes = [];   // task sc4lottex: the house's stem
+  const exts = ['.obj', '.mtl'];
+  for (const x of ['_props', '_lot', '_props_lot']) if (fs.existsSync(path.join(pyConv, stem + x + '.obj'))) exts.push(x + '.obj', x + '.mtl');   // task sc4lottex
+  for (const ext of exts) if (!eqBytes(fs.readFileSync(path.join(pyConv, stem + ext)), conv.files.get(stem + ext))) notes.push(ext + ' differs');
   for (const v of ['S', 'W', 'N', 'E']) {
     const png = `${stem}_${v}.png`, js = conv.files.get(png);
     if (!js) { notes.push(png + ' missing'); continue; }
     const d = await samePixels(fs.readFileSync(path.join(pyConv, png)), js);
     if (d) notes.push(png + ': ' + d);
   }
+  if (fs.existsSync(path.join(pyConv, stem + '_lot.png'))) { const d = await samePixels(fs.readFileSync(path.join(pyConv, stem + '_lot.png')), conv.files.get(stem + '_lot.png')); if (d) notes.push('_lot.png: ' + d); }   // task sc4lottex
   line(`convert ${m.file} (obj, mtl, 4 textures)`, !notes.length, notes.join('; '));
 }
 line('convert models.json', eqBytes(fs.readFileSync(path.join(pyConv, 'models.json')), conv.files.get('models.json')),
