@@ -629,6 +629,7 @@ resize.mt_sirens=Siren fix
 resize.mt_stationwarn=Station warnings
 # sc3resize.c
 resize.mt_stylemix=Building style mix
+resize.mt_lotrect=Non-square buildings
 # sc3resize.c
 resize.mt_terrpanel=Larger terrain panel
 # sc3resize.c

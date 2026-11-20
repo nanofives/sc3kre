@@ -9197,6 +9197,7 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_terrpanel"), "Panel de terreno ampliado", "Larger terrain panel" }, NULL, "SC3RESIZE_TERRPANEL" },
     { { SC3KEY("resize.mt_weather"),   "Interruptor de clima",    "Weather switch" },         NULL, "SC3RESIZE_WEATHER" },
     { { SC3KEY("resize.mt_stylemix"),  "Mezcla de estilos",       "Building style mix" },     NULL, "SC3NETMOD_STYLEMIX" },
+    { { SC3KEY("resize.mt_lotrect"),   "Edificios no cuadrados",  "Non-square buildings" },   NULL, "SC3PERF_LOT_RECT" },   /* lotdraw: sc3perf LOTRECT */
     { { SC3KEY("resize.mt_hwyspeed"),  "Autos rápidos en autopista", "Faster highway cars" }, NULL, "SC3SIMRUN_HWYSPEED" },
     { { SC3KEY("resize.mt_sandbox"),   "Sandbox: sin abandono",   "Sandbox: no abandonment" }, NULL, "+SC3SIMRUN_SANDBOX" },
     { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" },
@@ -9255,8 +9256,9 @@ static void mt_vis_all(void *win, int on) {
 
 /* page C controls: mods left, features right, 19 px rows (features 18 px since stylemix 2026-11-18: 15 rows at 19
    pushed the SALTFIX city checkbox to local y 435, onto Volver at 436; 17 px since hwyspeed 2026-11-18: 16 rows at
-   18 would put it at 438; at 17 with a 4 px gap under the rows it is at 418) */
-#define MT_FEAT_DY 17
+   18 would put it at 438; at 17 with a 4 px gap under the rows it is at 418; 16 since lotdraw 2026-11-20: 17 feature
+   rows at 16 end where 16 at 17 did, city checkbox still at 418) */
+#define MT_FEAT_DY 16
 static int mt_build(void *fac, void *win, int es, DWORD col) {
     int n = 0, i, ym = 84, yf = 84;
     n += ho_add_label(fac, win, MT_TITLE, SC3TR(es, "resize.mt_title", "Activar mods y funciones", "Turn mods and features on or off"), 18, 40, 440);
