@@ -289,16 +289,18 @@ button.ui-ok { --ui-bmp: url("sc3ui/ok.png"); --ui-fw: 42; --ui-fh: 32; width: c
 .ui-list > * > input[type=checkbox], .ui-list > * > input[type=radio] { align-self: flex-start; margin-top: calc(-2 * var(--u)); margin-right: calc(4 * var(--u)); }
 /* scroll bars (R3 "Musicas posibles", sc3ui3): the game's own 16x16 frames, SYS.IXF e2b99e01, on every scrolling box of
    every page. One arrow at each end (pressed frame while held, no hover change in the game), the track tiled, the thumb
-   exact at the game's 16 px and, when longer, its two ends kept with the face stretched between them. Browsers without ::-webkit-scrollbar get the game's colours instead. */
+   exact at the game's 16 px and, when longer, its two ends kept with the face repeated between them (border-image:
+   rows 0-5 top edge, 6-11 face, 12-15 bottom edge and shadow, owner 2026-11-20: stretching the whole 16 px frame drew
+   its frame and shadow as big blocks). Browsers without ::-webkit-scrollbar get the game's colours instead. */
 ::-webkit-scrollbar { width: calc(16 * var(--u)); height: calc(16 * var(--u)); background: var(--ui-blue); }
 ::-webkit-scrollbar-track:vertical { image-rendering: pixelated; background: url("sc3ui/scroll_track.png") 0 0 / calc(16 * var(--u)) calc(16 * var(--u)) repeat-y; }
 ::-webkit-scrollbar-track:horizontal { image-rendering: pixelated; background: url("sc3ui/scroll_htrack.png") 0 0 / calc(16 * var(--u)) calc(16 * var(--u)) repeat-x; }
-::-webkit-scrollbar-thumb:vertical { image-rendering: pixelated;
-  background: url("sc3ui/scroll_thumb.png") 0 0 / 100% calc(16 * var(--u)) no-repeat, url("sc3ui/scroll_thumb.png") 0 100% / 100% calc(16 * var(--u)) no-repeat,
-    url("sc3ui/scroll_thumb.png") 0 0 / 100% 100% no-repeat; }
-::-webkit-scrollbar-thumb:horizontal { image-rendering: pixelated; min-width: calc(16 * var(--u));
-  background: url("sc3ui/scroll_hthumb.png") 0 0 / calc(16 * var(--u)) 100% no-repeat, url("sc3ui/scroll_hthumb.png") 100% 0 / calc(16 * var(--u)) 100% no-repeat,
-    url("sc3ui/scroll_hthumb.png") 0 0 / 100% 100% no-repeat; }
+::-webkit-scrollbar-thumb:vertical { image-rendering: pixelated; min-height: calc(16 * var(--u)); background: none;
+  border-style: solid; border-width: calc(6 * var(--u)) 0 calc(4 * var(--u)) 0;
+  border-image: url("sc3ui/scroll_thumb.png") 6 0 4 0 fill / calc(6 * var(--u)) 0 calc(4 * var(--u)) 0 stretch; }
+::-webkit-scrollbar-thumb:horizontal { image-rendering: pixelated; min-width: calc(16 * var(--u)); background: none;
+  border-style: solid; border-width: 0 calc(4 * var(--u)) 0 calc(6 * var(--u));
+  border-image: url("sc3ui/scroll_hthumb.png") 0 4 0 6 fill / 0 calc(4 * var(--u)) 0 calc(6 * var(--u)) stretch; }
 ::-webkit-scrollbar-button { display: none; width: calc(16 * var(--u)); height: calc(16 * var(--u)); image-rendering: pixelated;
   background-size: 100% 100%; background-repeat: no-repeat; }
 ::-webkit-scrollbar-button:vertical:start:decrement { display: block; background-image: url("sc3ui/scroll_up.png"); }
