@@ -254,8 +254,12 @@ def sc4_render(ins, b, r, scale=1.0, ss=3, lot=True):
     az = v['cam']['azimuth_model']
     k = scale * ss
     items = []                                          # (Pm (3,3), UV (3,2), tex)
-    for t in v['tris']:
-        items.append((v['P'][list(t)], v['UV'][list(t)], v['tex'], 'bld'))
+    bP, bUV, btris = v['P'], v['UV'], v['tris']
+    if lot:                               # task sc4ground: the picture raises what is below SC4's ground (the check: as is)
+        bP, bUV = V.clamp_ground(bP, bUV, v['A'], v['tex_size'])
+        bP, bUV = np.array(bP, dtype=np.float64), np.array(bUV, dtype=np.float64)
+    for t in btris:
+        items.append((bP[list(t)], bUV[list(t)], v['tex'], 'bld'))
     info = {'props': 0, 'prop_rows': 0, 'tex_rows': 0, 'fit_err_px': v['cam']['fit_err_px'],
             'elevation': v['cam']['elevation'], 'azimuth': az, 'px_per_m': v['cam']['px_per_m']}
     ground = None
@@ -288,15 +292,15 @@ def sc4_render(ins, b, r, scale=1.0, ss=3, lot=True):
                     Pt = []
                     for p in P:
                         x, z = PR.turn(p[0], p[2], row['q'])
-                        Pt.append([x + row['x'], p[1], z + row['z']])
+                        Pt.append([x + row['x'], p[1] + row['y'] if row['y'] else p[1], z + row['z']])
+                    Pt, UV = V.clamp_ground(Pt, UV)     # task sc4ground: word 4 height, nothing below 0
                     Pt = np.array(Pt)
                     UV = np.array(UV)
                     for t in tris:
                         items.append((Pt[list(t)], UV[list(t)], tex, 'prop'))
             gimg, L, trows = lot_ground(ins, pl)
             info['tex_rows'] = sum(1 for x in trows if x['state'] in ('ok', 'cut'))
-            y0 = float(min(vv['P'][:, 1].min() for vv in vs))
-            y0 = min(y0, 0.0)
+            y0 = 0.0                      # task sc4ground: SC4's ground (was min(lowest vertex, 0))
             gq = np.array([[L[0], y0, L[2]], [L[1], y0, L[2]], [L[1], y0, L[3]], [L[0], y0, L[3]]])
             guv = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], float)
             ground = (gq, guv, gimg)

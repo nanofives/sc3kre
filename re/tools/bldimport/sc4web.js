@@ -601,6 +601,7 @@ function SC4WEB_LIB(B) {
           const r = asList(pv(ex, pid)).map(x => pyInt(x) >>> 0);
           const sgn = r.map(x => x & 0x80000000 ? x - 4294967296 : x);
           objs.push({ type: r[0], rot: r[2] & 3, flip: !!(r[2] & 0x80000000), x: sgn[3] / 65536.0, z: sgn[5] / 65536.0,   // task sc4lottex: flip, bounds
+            y: sgn[4] / 65536.0,     // task sc4ground: the height above the lot (props only)
             bounds: [sgn[6] / 65536.0, sgn[7] / 65536.0, sgn[8] / 65536.0, sgn[9] / 65536.0], ids: r.slice(12) });
         }
       }
@@ -786,7 +787,7 @@ function SC4WEB_LIB(B) {
     for (const v of vs) { const k = Math.abs(pyMod(v.cam.azimuth_model - a + 180, 360) - 180); if (best === null || k < bk) { best = v; bk = k; } }
     return best;
   }
-  function hiddenFaces(v, floorY = 0.05) {   // views.hidden_faces
+  function hiddenFaces(v, floorY = 0.05, ground = null) {   // views.hidden_faces
     const Pv = v.P_view;
     if (Pv.length !== 7) return null;
     // ndarray.min(0) / max(0): on equal values (0.0 / -0.0) numpy keeps the later one
@@ -800,12 +801,25 @@ function SC4WEB_LIB(B) {
         quads.push(q);
       }
     }
-    const y = lo[1] + floorY;
+    let base = lo[1];
+    if (ground !== null && base < ground) base = ground;   // task sc4ground: the floor above SC4's ground
+    const y = base + floorY;
     quads.push([[lo[0], y, lo[2]], [hi[0], y, lo[2]], [hi[0], y, hi[2]], [lo[0], y, hi[2]]]);
     const P = quads.flat(), A = v.A, [tw, th] = v.tex_size;
     const UV = P.map(p => [0, 1].map(j => (((p[0] * A[0][j] + p[1] * A[1][j]) + p[2] * A[2][j]) + A[3][j]) / [tw, th][j]));
     const tris = []; for (let k = 0; k < quads.length; k++) tris.push([4 * k, 4 * k + 1, 4 * k + 2], [4 * k, 4 * k + 2, 4 * k + 3]);
     return [P.map(p => toModel1(p, v.r)), UV, tris];
+  }
+  function clampGround(P, UV, A = null, texSize = null, y = 0.0) {   // views.clamp_ground (task sc4ground): the same steps
+    P = P.map(p => [+p[0], +p[1], +p[2]]); UV = UV.map(u => [+u[0], +u[1]]);
+    for (let k = 0; k < P.length; k++) {
+      if (P[k][1] < y) {
+        const d = y - P[k][1];
+        P[k][1] = y;
+        if (A !== null) UV[k] = [0, 1].map(j => UV[k][j] + (A[1][j] * d) / texSize[j]);
+      }
+    }
+    return [P, UV];
   }
 
   // ================================================================================================ diagonal (task sc4diag)
@@ -886,6 +900,7 @@ function SC4WEB_LIB(B) {
   // ================================================================================================ sc4conv rules
   const EDITABLE = ['name', 'class', 'lot', 'weight', 'enabled', 'scale', 'rotate_deg', 'notes', 'x_bldrender'];
   const CELL_M = 16.0, ZOOM5 = 4;
+  const GROUND_MARK = 'sc4base';   // task sc4ground: sc4conv.GROUND_MARK
   const CLASS_LOTS = { 3100: [1], 3300: [1], 3500: [1, 2], 3700: [2, 3], 3900: [2],
     5100: [1], 5500: [1, 2], 5700: [2, 3, 4], 6100: [2, 3], 6300: [2, 3], 6700: [3, 4],
     8100: [1], 8300: [2], 8500: [1, 2, 3], 8700: [1, 2], 8900: [2, 3], 9100: [3, 4], 9300: [1, 2, 3] };
@@ -963,13 +978,21 @@ function SC4WEB_LIB(B) {
       for (const t of tris) obj.push('f ' + t.map(i => (vbase + i) + '/' + (vbase + i)).join(' '));
       vbase += P.length;
     };
+    let mark = null;
     for (let slot = 0; slot < 4; slot++) {
       const v = matchView(vs, slot);
       obj.push('g sc3slot' + slot, 'usemtl sc4_' + v.name);
-      emit(v.P, v.UV, v.tris);
-      const hf = fill ? hiddenFaces(v) : null;
-      if (hf) emit(...hf);
+      const [cP, cUV] = clampGround(v.P, v.UV, v.A, v.tex_size);   // task sc4ground: nothing below SC4's ground
+      if (slot === 0) mark = [cP[0][0], cP[0][2]];
+      emit(cP, cUV, v.tris);
+      const hf = fill ? hiddenFaces(v, 0.05, 0.0) : null;
+      if (hf) { const [hP, hUV] = clampGround(hf[0], hf[1], v.A, v.tex_size); emit(hP, hUV, hf[2]); }
     }
+    // task sc4ground: sc4conv.ground_mark, one zero-area triangle at y = 0 (GROUND_MARK), so y = 0 lands on the lawn
+    obj.push('g ' + GROUND_MARK, 'usemtl ' + GROUND_MARK);
+    for (let k = 0; k < 3; k++) obj.push('v ' + pyFixed(mark[0], 5) + ' ' + pyFixed(0.0, 5) + ' ' + pyFixed(mark[1], 5));
+    obj.push('f ' + vbase + ' ' + (vbase + 1) + ' ' + (vbase + 2));
+    mtl.push('newmtl ' + GROUND_MARK, 'Kd 1 1 1', '');
     const svc = pctx && pctx.services ? pctx.services.get(tgiKey(...b.tgi)) || null : null;   // task sc4civ
     const [cls, why] = svc ? [null, svc.why] : classFor(b);
     const n = svc ? svc.lot : lotFor(b);
@@ -1132,7 +1155,7 @@ function SC4WEB_LIB(B) {
       const pid = o.ids[0] >>> 0;
       const [s, inst, why] = resolveProp(sources, pid, k);
       const [x, z] = turn(o.x - hrow.x, o.z - hrow.z, -(kb - 2));
-      const r = { row: k, id: pid, inst, name: null, src: s, msrc: null, model: null, x, z, q: pyMod((o.rot & 3) - kb, 4), state: why || 'ok' };
+      const r = { row: k, id: pid, inst, name: null, src: s, msrc: null, model: null, x, z, y: o.y || 0.0, q: pyMod((o.rot & 3) - kb, 4), state: why || 'ok' };   // task sc4ground: y
       if (s) {
         const nm = propValue(s, inst, P_NAME);
         r.name = nm || hexU(inst, 8);
@@ -1208,13 +1231,13 @@ function SC4WEB_LIB(B) {
       const dx = nudge(xmin, xmax, x0w, x1w), dz = nudge(zmin, zmax, z0w, z1w);
       if (dx === null || dz === null) { r.state = 'outside'; continue; }
       if (dx || dz) r.nudge_m = [dx, dz];
-      const ox = r.x + dx, oz = r.z + dz;
+      const ox = r.x + dx, oz = r.z + dz, oy = r.y;   // task sc4ground: the lot row's height (word 4)
       for (let slot = 0; slot < 4; slot++) {
         const v = matchPropView(pv, r.q, slot);
         const parts = v.meshes.slice();
         if (fill && v.fill) parts.push([v.fill[0], v.fill[1], v.fill[2], v.fill_key]);
         for (const [P, UV, tris, fk] of parts) {
-          const Pt = P.map(p => { const [x, z] = turn(p[0], p[2], r.q); return [x + ox, p[1], z + oz]; });
+          const Pt = P.map(p => { const [x, z] = turn(p[0], p[2], r.q); return [x + ox, oy ? p[1] + oy : p[1], z + oz]; });
           slots[slot].push([Pt, UV, tris, fk, r.msrc]);
         }
       }
@@ -1245,7 +1268,7 @@ function SC4WEB_LIB(B) {
     const s = propSummary(pl);
     const info = Object.assign({ on: s.placed > 0 && !pctx.off }, s);
     pctx.plans.push([b, pl]);
-    let y0 = Infinity; for (const v of vs) for (const p of v.P) if (p[1] < y0) y0 = p[1];
+    const y0 = 0.0;                         // task sc4ground: SC4's ground (was the house's lowest point)
     const [tinfo, lotPng] = writeLottex(b, stem, obj, mtl, files, pctx, pl, n, y0);   // task sc4lottex
     if (!s.placed) return [info, tinfo];
     const pobj = [obj[0], 'mtllib ' + stem + '_props.mtl'].concat(obj.slice(2)), pmtl = mtl.slice(), seen = new Set();
@@ -1253,7 +1276,7 @@ function SC4WEB_LIB(B) {
     for (let slot = 0; slot < 4; slot++) {
       pobj.push('g sc3slot' + slot);
       let cur = null;
-      for (const [P, UV, tris, fk, src] of slots[slot]) {
+      for (let [P, UV, tris, fk, src] of slots[slot]) {
         const mname = 'sc4p_' + hexU(fk[1], 8) + '_' + hexU(fk[2], 8);
         if (!seen.has(mname)) {
           seen.add(mname);
@@ -1262,6 +1285,7 @@ function SC4WEB_LIB(B) {
           pmtl.push('newmtl ' + mname, 'Kd 1 1 1', 'map_Kd ' + png, '');
         }
         if (mname !== cur) { pobj.push('usemtl ' + mname); cur = mname; }
+        [P, UV] = clampGround(P, UV);   // task sc4ground: nothing below SC4's ground (props: the uv stays)
         for (const p of P) pobj.push('v ' + pyFixed(p[0], 5) + ' ' + pyFixed(p[1], 5) + ' ' + pyFixed(p[2], 5));
         for (const uv of UV) pobj.push('vt ' + pyFixed(uv[0], 6) + ' ' + pyFixed(1.0 - uv[1], 6));
         for (const t of tris) pobj.push('f ' + t.map(i => (vbase + 1 + i) + '/' + (tbase + 1 + i)).join(' '));

@@ -216,16 +216,21 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         v = V.match_view(vs, slot)
         obj.append('g sc3slot%d' % slot)
         obj.append('usemtl sc4_%s' % v['name'])
-        for p in v['P']:
+        P, UV = V.clamp_ground(v['P'], v['UV'], v['A'], v['tex_size'])     # task sc4ground: nothing below SC4's ground
+        tris = v['tris']
+        if slot == 0:
+            mark = (P[0][0], P[0][2])
+        for p in P:
             obj.append('v %.5f %.5f %.5f' % tuple(p))
-        for uv in v['UV']:
+        for uv in UV:
             obj.append('vt %.6f %.6f' % (uv[0], 1.0 - uv[1]))
-        for t in v['tris']:
+        for t in tris:
             obj.append('f ' + ' '.join('%d/%d' % (vbase + i, vbase + i) for i in t))
-        vbase += len(v['P'])
-        hf = V.hidden_faces(v) if fill else None
+        vbase += len(P)
+        hf = V.hidden_faces(v, ground=0.0) if fill else None
         if hf is not None:              # back walls + floor of the same view: what shows through cut-outs
             P, UV, tris = hf
+            P, UV = V.clamp_ground(P, UV, v['A'], v['tex_size'])
             for p in P:
                 obj.append('v %.5f %.5f %.5f' % tuple(p))
             for uv in UV:
@@ -233,6 +238,8 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
             for t in tris:
                 obj.append('f ' + ' '.join('%d/%d' % (vbase + i, vbase + i) for i in t))
             vbase += len(P)
+    obj += ground_mark(mark, vbase)     # task sc4ground: y = 0 is the lowest point, so SC4's ground lands on the lawn
+    mtl += ['newmtl ' + GROUND_MARK, 'Kd 1 1 1', '']
     with open(os.path.join(out, stem + '.obj'), 'w', newline='\n') as fh:
         fh.write('\n'.join(obj) + '\n')
     with open(os.path.join(out, stem + '.mtl'), 'w', newline='\n') as fh:
@@ -289,6 +296,19 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
     return entry
 
 
+GROUND_MARK = 'sc4base'
+
+
+def ground_mark(xz, vbase):
+    """Task sc4ground: OBJ lines of one zero-area triangle at y = 0 (three copies of a point of the house: its first
+    vertex in slot 0 after clamp_ground), group and material GROUND_MARK. bldrender.place puts the lowest point of a model
+    on the lawn; with this point that is y = 0, SC4's ground, also for a house whose lowest vertex is above 0 (31 of the
+    install's 423 models, 0.01 to 0.82 m). Zero area: no pixel, no shadow."""
+    x, z = xz
+    return (['g ' + GROUND_MARK, 'usemtl ' + GROUND_MARK] + ['v %.5f %.5f %.5f' % (x, 0.0, z)] * 3 +
+            ['f %d %d %d' % (vbase, vbase + 1, vbase + 2)])
+
+
 def file_for(stem, pinfo, tinfo):
     """Task sc4lottex: the OBJ the two switches name, <stem>[_props][_lot].obj."""
     return stem + ('_props' if pinfo and pinfo['on'] else '') + ('_lot' if tinfo and tinfo['on'] else '') + '.obj'
@@ -312,7 +332,7 @@ def write_props(b, vs, stem, obj, mtl, out, pctx, fill, n=None):
     info = PR.summary(pl)
     info = dict({'on': info['placed'] > 0 and not pctx.get('off')}, **info)
     pctx['plans'].append((b, pl))
-    y0 = float(min(v['P'][:, 1].min() for v in vs))
+    y0 = 0.0                              # task sc4ground: SC4's ground (was the house's lowest point)
     tinfo, lot_png = write_lottex(b, stem, obj, mtl, out, pctx, pl, n, y0)
     if not info['placed']:
         return info, tinfo
@@ -336,6 +356,7 @@ def write_props(b, vs, stem, obj, mtl, out, pctx, fill, n=None):
             if mname != cur:
                 pobj.append('usemtl ' + mname)
                 cur = mname
+            P, UV = V.clamp_ground(P, UV)     # task sc4ground: nothing below SC4's ground (props: the uv stays)
             for p in P:
                 pobj.append('v %.5f %.5f %.5f' % (p[0], p[1], p[2]))
             for uv in UV:

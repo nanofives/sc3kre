@@ -38,7 +38,7 @@ import props as PR  # noqa: E402
 G_LOTTEX = 0x0986135E     # FSH group of lot textures (1,453 FSH in SimCity 4's own files, 26,171 in the BSC pack)
 ZOOM5 = 4                 # instance + 4 = the SC4 zoom-5 texture
 PX_PER_M = 8              # 128 px over 16 m
-Y_LIFT = 0.01             # the quad sits 1 cm above the house's lowest point (the lawn is drawn just below 0)
+Y_LIFT = 0.01             # the quad sits 1 cm above SC4's ground y = 0 (task sc4ground; the lawn is drawn just below 0)
 EDGE_TOL = 1e-6
 
 

@@ -95,7 +95,7 @@ name prefix agrees on 42 of 42); 0x88EDC900 and up = lot objects, 13 u32 each:
 | 1 | 0 |
 | 2 | rotation 0-3 in the low bits (0x80000000 / 0x80000003 on two texture rows: high bit [UNCERTAIN]) |
 | 3, 5 | x, z of the object centre, s32 / 65536 metres |
-| 4 | 0 (y) |
+| 4 | 0 in the pack. Height above the lot, s32 / 65536 m (round 2026-11-20c, section 14) |
 | 6-9 | bounds min x, min z, max x, max z, same unit |
 | 10 | 0 |
 | 11 | object id 0x00FD41xx.. [UNCERTAIN: a per-lot serial] |
@@ -608,7 +608,7 @@ drawn textures cover 9-58% of the SC3 lot (median 34%), on SC4's own civic lots 
   `outside`. Compositing is straight alpha over in float64, then floor(x + 0.5) to 8 bits, in the same order in Python and
   the page.
 - **Files.** `<stem>_lot.png` (the canvas, transparent where nothing or grass is), `<stem>_lot.obj` (the house + one quad
-  over the window, OBJ group `sc3ground`, 1 cm above the house's lowest point) and `<stem>_props_lot.obj` (house, props,
+  over the window, OBJ group `sc3ground`, 1 cm above SC4's ground y = 0 since section 14; before, 1 cm above the house's lowest point) and `<stem>_props_lot.obj` (house, props,
   quad). `models.json` `file` = `<stem>[_props][_lot].obj` by `x_sc4.props.on` and `x_sc4.textures.on`, both kept on a
   rerun. `x_sc4.textures` = `on, lot, rows, placed, cut, outside_sc3_lot, missing, unreadable, ground {sc4_ground, lawn,
   drawn} (shares of the SC3 lot), used, missing_ids`.
@@ -641,3 +641,34 @@ projection (4-60 px off): on 11 buildings (10 C and I growables and the Large Hi
 whole building fail. `compose_atlas` leaves out a piece whose triangles cover less than 0.5 texel^2. Without them the per-piece errors of
 the other 8,484 pieces run without a gap up to 2.16 px (5 above 2.0, 0 above 2.2): `ATLAS_FIT` 2.0 -> 2.5. All 423 civic,
 park, reward, landmark and C / I buildings of the install convert.
+
+## 14. SC4's ground on the SC3 lawn (round 2026-11-20c, stream sc4ground)
+
+Results and pictures: `verify/sc4ground/RESULTS.md`.
+
+- **Lot object word 4 = the object's height above the lot**, s32 / 65536 m. On the install's 1,908 lots: 2,431 prop
+  rows (kind 1) on 815 lots are not 0, from 0.25 to 324 m, none below 0. Every building row (kind 0, 1,908 of 1,908) and
+  texture row (kind 2, 25,452 of 25,452) is 0, as is every row of the 42 JMyers and 3 Global Office Center lots. The
+  props at a height are the wall and roof signs of SC4's shops and offices (`CSign1x2x6_$$$sign_1D63` at 8.75 m on
+  `CS$4_1x1`, model y -3.00 to 3.01 m). `props.plan` keeps it as row `y` and `placed_meshes` adds it to the prop's y.
+  Without it the signs hung up to 5.49 m below the ground and bldrender, which puts a model's lowest point on the lawn,
+  lifted the whole lot by that much: 23 of the 24 lifted models of round sc4cmp (Small Shops, Retail Stores, Ferrrara
+  Inc.). The 24th, Smith Tower, is its own view box reaching -0.41 m.
+- **SC4's ground is the model's y = 0** (the building row's height is 0 on every lot). The SC4 models themselves reach
+  below it: of the install's 423 civic, park, reward, landmark and C / I models 39 do (Lincoln Center -3.91 m, Smoke
+  Stacks -1.00 m, Furnace -0.56 m, MPR Metals -0.50 m, Smith Tower -0.41 m, 34 more from -0.39 to -0.01 m), and 31 have
+  their lowest point above it (0.01 to 0.82 m, Radio Station). Of the 110 JMyers houses 32 reach -0.01 to -0.10 m.
+  Global Office Center: 0. Opaque texels of the view pictures that land on the view mesh below 0 (and on no face above
+  it), most of one view: 0 on 21 of the 39, 3 to 105 on 13, 392 Mixer, 509 Television Studio, 3,493 Smoke Stacks (the
+  sides of its 1 m base slab), 5,766 Wong Insurance (its paved forecourt, on a face 0.13 m under 0), 15,666 Lincoln
+  Center (a 3.9 m skirt under its plaza). JMyers: at most 1.
+- **The converter raises every vertex below y = 0 to y = 0** (`views.clamp_ground`), for the house views and the box's
+  back walls with the uv moved by the view's own projection (uv + A[1] * d / texture size: the vertex keeps the texel the
+  SC4 camera saw at its new place), for props with the uv as it was. A face that lies wholly under the ground (Lincoln
+  Center's skirt, Smoke Stacks' slab sides) collapses to nothing; a nearly flat face just under it (Wong Insurance's
+  forecourt) is drawn at ground level. The box's hidden floor is 0.05 m above the ground, not above the box bottom
+  (`hidden_faces(..., ground=0.0)`); the lot quad is at 0.01 m, the window triangle at 0; every OBJ holds one zero-area
+  triangle at y = 0 (group / material `sc4base`, `sc4conv.ground_mark`), so y = 0 is the lowest point of every converted
+  model and bldrender sets it on the lawn. A cut at y = 0 was tried first and dropped: the view meshes do not always
+  enclose the model, and the cut took Wong Insurance's forecourt away. [UNCERTAIN] whether SimCity 4 itself hides a
+  model's parts under its terrain was not checked against an SC4 screenshot.
