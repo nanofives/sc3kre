@@ -55,7 +55,15 @@ exemplar {0x207EDC0E, LM_GROUP, id} (stats of the first stock landmark of that l
 18000 "Landmarks"), its name {0x2026960B, LM_TEXT_GROUP, id}, the line under the name in the dialog (prop 0x7C,
 {0x2026960B, LM_DESC_GROUP, id}: the entry's "description", else its name; a stock landmark's says where it stands),
 the frame table {0x6300, LM_CS_GROUP, id} and the 40 pixel / anchor records (GROUP, id << 16 | frame). No overlay file
-and no road mod are needed for a landmark: it works in a stock game. Lots 1x1 to 4x4, weight not used.
+and no road mod are needed for a landmark: it works in a stock game. Lots 1x1 to 5x5, weight not used.
+
+Non-square landmarks and rewards (task lotshape, 2026-11-20, re/analysis/LOT_SHAPES.md 8): "lot": [w, d] with w and d
+from 1 to 5 each. prop 0x66 = (w, the base's height, d) = (SizeInCellsX, height, SizeInCellsZ); stats of the stock base
+of the longer side (the square the lot fits in); the frames are drawn for the w x d lot (bldrender: slots 0 and 2 are
+w x d, 1 and 3 d x w, anchor at the lot's left vertex). The game places, saves, moves and bulldozes such a building as
+it is, but draws it whole only with sc3perf's LOTRECT patch (mods page row "Non-square buildings"); without it the
+sprite is registered as w x w. Growables, ports and civic looks stay square (the zone developer lays out square lots
+only, SIMRCI 0x10027699).
 
 Civic looks and new rewards (task civmod, 2026-11-19, re/analysis/CIVIC_REWARD.md): two more plugin kinds (exemplar,
 name, line under the name, frame table, pixels as for a landmark). Civic looks go into bldimport.pin / .dat, rewards into
@@ -72,7 +80,8 @@ rewards out of PlugIn for the stock game. sc3resize (CIVVAR / NEWREWARD) makes t
                     models.json order, then the stock one again. Written to bldimport_civic.ini [Variants] / [Names].
                     Without the plugin a placed look comes back as the stock building of its type (measured).
   "kind": "reward"  a new entry of Rewards and Opportunities. models.json fields:
-                      lot          1x1 to 4x4; stats of the first stock reward of that lot (REWARD)
+                      lot          1x1 to 5x5, or [w, d] (task lotshape); stats of the first stock reward of that
+                                   lot (REWARD), of the longer side for [w, d]
                       population   whole number, default 20000: unlocked once the city has that many people
                       year         whole number, default 0 (any year)
                       description  optional: the line under the name; else the name
@@ -135,7 +144,7 @@ PORTS = {
 PORT_MAX_COPIES = 20
 # task plop: a landmark joins the stock landmark dialog (every exemplar whose type IsA 18000); stats of the first stock
 # exemplar by id with a type in `types`, a square footprint of that size, a 0x6300 frame table and a name key
-LANDMARK = {"landuse": 18000, "types": (18000, 18999), "sizes": (1, 2, 3, 4), "label": "Landmark"}
+LANDMARK = {"landuse": 18000, "types": (18000, 18999), "sizes": (1, 2, 3, 4, 5), "label": "Landmark"}
 LM_GROUP, LM_CS_GROUP, LM_TEXT_GROUP, LM_DESC_GROUP = 0xB1D10002, 0xB1D10003, 0xB1D10004, 0xB1D10005
 PLUGIN_NAME = "bldimport"
 PLUGIN_DIR = "Apps/PlugIn/" + PLUGIN_NAME + "/"
@@ -157,13 +166,20 @@ PLUGIN_KINDS = ("landmark", "civic", "reward")
 CIVIC = {"police": 0xD2, "jail": 0x1F41, "fire": 0xD3, "hospital": 0xD1, "school": 0x1F94, "college": 0xD6,
          "library": 0xF5, "museum": 0xD4, "small_park": 0xD, "big_park": 0xD5, "zoo": 0xDA, "baseball": 0xD7,
          "playground": 0x234B, "pond": 0x234C, "fountain": 0x234E, "bus_stop": 0x1F96, "train_station": 0xED}
+# task lotshape: 5x5 for landmarks and rewards: the first stock 5x5 landmark by id is 9500 (San Francisco City Hall,
+# type 18044). Rewards skip a base whose type's [AgentTypeHierarchy] parent is in no_parent: the first 5x5 reward by id is
+# 8023 Defense Contractor, type 11001 under 11000 "Military", and a new reward's type takes its base's parent
+# (agent_type_rows), so 5x5 rewards take 8046 Country Club (type 14370 under 14300 "RecreationEntertainment"); the 5x5
+# rewards before it by id (8009 Geyser Park, 8018 Space Port, 8020 Stadium) have 0x6301 frame tables. No base of the sizes 1x1 to 4x4 has a Military parent (Historic Statue 14100, Mayor's House 10001,
+# City Hall 10001, Stock Exchange 1000), so those keep their bases. The stock game has 102 5x5 exemplars, none non-square.
 # reward: stats of the first stock exemplar by id whose type is a [REWARD_BUILDINGS] row of Advisor-CityPlanner.ini, with
 # a square lot of that size, a plain 0x6300 frame table and a name key, the 4-piece tool's instances left out (their
 # tool is not the plain one). Its own type id = its id (ID_FIRST..ID_LAST): the City Planner keys rewards by type
 # (SIMADV FUN_100089e7, the exemplar is the first one of that type), and sc3resize unlocks and moves types in that
 # block. Population / year: the row's columns 1 and 2, petition 0 and own-rule 0 (the plain population + year rule).
-REWARD = {"sizes": (1, 2, 3, 4), "label": "Reward", "population": 20000, "year": 0,
-          "four_piece": set(range(0x1F5D, 0x1F61)) | set(range(0x1F8B, 0x1F8F)) | set(range(0x1F98, 0x1F9C))}
+REWARD = {"sizes": (1, 2, 3, 4, 5), "label": "Reward", "population": 20000, "year": 0,
+          "four_piece": set(range(0x1F5D, 0x1F61)) | set(range(0x1F8B, 0x1F8F)) | set(range(0x1F98, 0x1F9C)),
+          "no_parent": ("11000",)}
 
 
 class ImportError_(Exception):
@@ -229,15 +245,38 @@ def ids_for(folder, models):
     return ids
 
 
-def lot_of(m):
+RECT_KINDS = ("landmark", "reward")      # task lotshape: the kinds that may have a w x d lot, and 5x5
+RECT_MAX = 5
+
+
+def lot_of(m, rect=False):
+    """-> (lot, error). lot = n for a square lot, (w, d) for a non-square one (rect: kinds RECT_KINDS only)."""
     lot = m.get("lot", [1, 1])
     if not (isinstance(lot, list) and len(lot) == 2 and all(isinstance(x, int) for x in lot)):
         return None, "lot %r is not [n, n]" % (lot,)
+    if rect and not all(1 <= x <= RECT_MAX for x in lot):
+        return None, "lot %dx%d: landmarks and rewards are 1 to %d cells on each side" % (lot[0], lot[1], RECT_MAX)
     if lot[0] != lot[1]:
+        if rect:
+            return (lot[0], lot[1]), None
         return None, "lot %dx%d: only square lots grow (every stock base is n x n, batgrow.class_table)" % tuple(lot)
-    if not 1 <= lot[0] <= 4:
+    if not rect and not 1 <= lot[0] <= 4:
         return None, "lot %dx%d: growables are 1x1 to 4x4" % tuple(lot)
     return lot[0], None
+
+
+def lot_wd(n):
+    """(w, d) of a lot: n or (w, d)."""
+    return (n[0], n[1]) if isinstance(n, (tuple, list)) else (n, n)
+
+
+def lot_base(n):
+    """The base size of a lot: n, or the longer side of a w x d lot (task lotshape)."""
+    return max(lot_wd(n))
+
+
+def lot_str(n):
+    return "%dx%d" % lot_wd(n)
 
 
 def rule_families(pak, fams):
@@ -388,11 +427,14 @@ def reward_table(game):
     """-> {"reward": {"bases" {size: (id, file)}, ...}} (task civmod), the base rule in REWARD above."""
     bld = BG.stock_buildings(game)
     types = set(reward_types(game))
+    hier = {int(k, 0): v for k, v in syspak_sections(game, "CitySim.ini").get("[agenttypehierarchy]", [])}
     bases = {}
     for bid in sorted(bld):
         f, p = bld[bid]
         lu, fp, cs = BG.tkb1_get(p, 0x65), BG.tkb1_get(p, 0x66), BG.tkb1_get(p, 0x67)
         if bid in REWARD["four_piece"] or not lu or lu[0] not in types or not fp or fp[0] != fp[2]:
+            continue
+        if hier.get(lu[0]) in REWARD["no_parent"]:        # task lotshape: not under Military (11000)
             continue
         if fp[0] not in REWARD["sizes"] or fp[0] in bases or not cs or cs[0] != CS_TYPE or BG.tkb1_get(p, 0x6D) is None:
             continue
@@ -422,6 +464,19 @@ def tkb1_set_u32(buf, prop, v):
             struct.pack_into("<I", b, off, v)
             return bytes(b)
     raise ImportError_("prop 0x%x not present" % prop)
+
+
+def tkb1_set_footprint(buf, wd):
+    """prop 0x66 (three numbers: SizeInCellsX, height, SizeInCellsZ) -> (w, height, d) (task lotshape)."""
+    b = bytearray(buf)
+    for p, t, n, off, ln in BG.tkb1_props(buf):
+        if p == 0x66:
+            if t != 3 or n != 3:
+                raise ImportError_("prop 0x66 is not three numbers")
+            h = struct.unpack_from("<3I", b, off)[1]
+            struct.pack_into("<3I", b, off, wd[0], h, wd[1])
+            return bytes(b)
+    raise ImportError_("prop 0x66 not present")
 
 
 def plugin_pin(keys, name=PLUGIN_NAME):
@@ -553,7 +608,10 @@ def render_one(folder, m, n, force=False, log=print, game=None):
     if isinstance(hm, (int, float)) and hm > 0 and abs(info["size_m"][1] - hm) > 0.1 * hm:
         log("  note: %s is %.1f m tall after scale, models.json says height_m %.1f (scale wins)"
             % (m["file"], info["size_m"][1], hm))
-    if not info["fits"]:
+    if not info["fits"] and isinstance(n, (tuple, list)):     # task lotshape: a w x d lot
+        log("  note: %s is %.1f x %.1f m, larger than its %s lot (%.0f x %.0f m): it will overhang the neighbours"
+            % (m["file"], info["size_m"][0], info["size_m"][2], lot_str(n), info["lot_m"][0], info["lot_m"][1]))
+    elif not info["fits"]:
         log("  note: %s is %.1f x %.1f m, larger than its %dx%d lot (%.0f m): it will overhang the neighbours"
             % (m["file"], info["size_m"][0], info["size_m"][2], n, n, info["lot_m"]))
     info["style"] = o["style"]
@@ -598,7 +656,7 @@ def plan(folder, game, log=print):
         base = m.get("base")
         if kind0 == "civic" and "lot" not in m and civic and isinstance(base, str) and "civic:" + base in civic:
             m = dict(m, lot=[next(iter(civic["civic:" + base]["bases"]))] * 2)   # civic: the base's lot by default
-        n, lot_err = lot_of(m)
+        n, lot_err = lot_of(m, rect=kind0 in RECT_KINDS)
         if is_bld(f) and os.path.isfile(os.path.join(folder, f)) and not lot_err:
             try:
                 bl = BF.read_bld(os.path.join(folder, f))["lot"]
@@ -606,7 +664,7 @@ def plan(folder, game, log=print):
                 lot_err = "not a readable .bld file (%s)" % e
             else:
                 if "lot" in m and n != bl:
-                    lot_err = "lot %dx%d in models.json, the .bld file is %dx%d" % (n, n, bl, bl)
+                    lot_err = "lot %s in models.json, the .bld file is %dx%d" % (lot_str(n), bl, bl)
                 n = bl
         cls = m.get("class")
         w = m.get("weight", 1)
@@ -643,8 +701,8 @@ def plan(folder, game, log=print):
         elif port is not None and port["copies"] and w > PORT_MAX_COPIES:
             why = ("weight %d: an %s's weight is the number of copies in the airpark's list (the rule ignores Key "
                    "weights), at most %d" % (w, kind, PORT_MAX_COPIES))
-        elif kind in ("landmark", "reward") and n not in LANDMARK["sizes"]:
-            why = "%s lot %dx%d: %ss are %s" % (kind, n, n, kind, ", ".join("%dx%d" % (s, s) for s in LANDMARK["sizes"]))
+        elif kind in ("landmark", "reward") and any(x not in LANDMARK["sizes"] for x in lot_wd(n)):
+            why = "%s lot %s: %ss are %s" % (kind, lot_str(n), kind, ", ".join("%dx%d" % (s, s) for s in LANDMARK["sizes"]))
         elif port is not None and n not in port["sizes"]:
             why = "%s lot %dx%d: the %s grows %s" % (kind, n, n, port["label"].lower(), " and ".join(
                 "%dx%d" % (s, s) for s in port["sizes"]))
@@ -810,7 +868,7 @@ def build_files(folder, game, src, log=print, force_render=False):
         if nid in bld:
             raise ImportError_("id %d already has a stock building exemplar" % nid)
         frames, info = render_one(folder, e["model"], n, force=force_render, log=log, game=game)
-        base, bfile = tg["bases"][n]
+        base, bfile = tg["bases"][lot_base(n)]
         ex = BG.base_exemplar(game, base, bfile)
         tab, tmpl = stock_table_and_template(game, ex)
         nm = e["name"].encode("cp1252")
@@ -823,6 +881,8 @@ def build_files(folder, game, src, log=print, force_render=False):
             ex = tkb1_set_u32(ex, 0x65, lu)     # landmark 18000, reward its own type; a civic look keeps the base's
         if lm and e["desc"] is not None:
             ex = BG.tkb1_set_key(ex, 0x7C, (TEXT_TYPE, LM_DESC_GROUP, nid))
+        if isinstance(n, (tuple, list)):        # task lotshape: prop 0x66 = (w, the base's height, d)
+            ex = tkb1_set_footprint(ex, n)
         BG.tkb1_props(ex)
         if lm:
             precs, pkeys = (rw_recs, rw_keys) if e["kind"] == "reward" else (lm_recs, lm_keys)
@@ -857,8 +917,8 @@ def build_files(folder, game, src, log=print, force_render=False):
             extra = (", type %d, unlocks at population %d%s" % (nid, e["population"], ", year %d" % e["year"] if e["year"]
                      else "") if e["kind"] == "reward" else ", type %d, look %d of the button" % (
                      lu, len(civ_lines[base]) + 1) if e["kind"] == "civic" else "")
-            rep.append("plop  [%d] %s: \"%s\", %s, %dx%d, stats of stock %d%s, in %s, %s%s" % (
-                nid, e["file"], e["name"], tg["label"], n, n, base, extra, RW_PIN if e["kind"] == "reward" else LM_PIN, describe(info),
+            rep.append("plop  [%d] %s: \"%s\", %s, %s, stats of stock %d%s, in %s, %s%s" % (
+                nid, e["file"], e["name"], tg["label"], lot_str(n), base, extra, RW_PIN if e["kind"] == "reward" else LM_PIN, describe(info),
                 ", %d magenta px nudged" % nudged if nudged else ""))
             continue
         names.append((TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
@@ -1049,10 +1109,10 @@ def cmd_list(a):
     for r in rep:
         print(r)
     for e in entries:
-        base = table[target_of(e)]["bases"][e["lot"]][0]
+        base = table[target_of(e)]["bases"][lot_base(e["lot"])][0]
         kd = "class %d" % e["class"] if e["kind"] == "growable" else "%s (LandUse %d)" % (e["kind"], e["class"])
-        print("ok    [%d] %s: %s %dx%d weight %d (stats of stock %d)" % (e["id"], e["file"], kd,
-                                                                    e["lot"], e["lot"], e["weight"], base))
+        print("ok    [%d] %s: %s %s weight %d (stats of stock %d)" % (e["id"], e["file"], kd,
+                                                                 lot_str(e["lot"]), e["weight"], base))
     return 0
 
 
@@ -1122,7 +1182,7 @@ def cmd_preview(a):
     rows = []
     for e in entries:
         fr, _ = render_one(folder, e["model"], e["lot"], game=game)
-        base = table[target_of(e)]["bases"][e["lot"]][0]
+        base = table[target_of(e)]["bases"][lot_base(e["lot"])][0]
         st = stock_building_frames(game, base)
         sz = min(z, 3)
         sc = 2 if z == 4 else 1
@@ -1207,7 +1267,7 @@ def cmd_check(a):
         if BG.tkb1_get(ex, 0x65) != (e["class"],):
             errs.append("0x65 = %r" % (BG.tkb1_get(ex, 0x65),))
         fp = BG.tkb1_get(ex, 0x66)
-        if fp[0] != e["lot"] or fp[2] != e["lot"]:
+        if (fp[0], fp[2]) != lot_wd(e["lot"]):
             errs.append("0x66 = %r" % (fp,))
         if BG.tkb1_get(ex, 0x64) != e["name"].encode("cp1252"):
             errs.append("0x64 name")
@@ -1250,7 +1310,7 @@ def cmd_check(a):
             if b"0x%08X,0x%08X,0x%08X=%d " % (BLD_TYPE, LM_GROUP, nid, nid) not in pin:
                 errs.append("no [OccupantKeys] line in %s" % (RW_PIN if e["kind"] == "reward" else LM_PIN))
             if e["kind"] == "civic":
-                base = table[target_of(e)]["bases"][e["lot"]][0]
+                base = table[target_of(e)]["bases"][lot_base(e["lot"])][0]
                 m = re.search(rb"^0x%08X=([^\r\n]*)" % base, civ, re.M | re.I)
                 if not m or nid not in [int(x, 0) for x in m.group(1).split(b",") if x.strip()]:
                     errs.append("not in %s [Variants] of base 0x%X" % (CIVIC_INI, base))

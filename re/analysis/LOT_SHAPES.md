@@ -225,3 +225,27 @@ four rotations and cut, so a non-square exemplar needs the switch on (`SC3PERF_L
   row kept the sprite pointer. With LOTRECT the block is 3x2 and nothing is left (measured).
 - The third-row highlight colour: with the whole lot under the sprite no highlight colour stays after placement
   (measured); the highlighter path itself was not read.
+
+## 9. The importer side (lotshape, round 2026-11-20e)
+
+Code: `re/tools/bldimport/bldimport.py`, `bldrender.py`, `bldweb.js` (the page's copy of both, byte identical),
+`classifier.html`, `re/tools/sc4conv/sc4conv.py`, `props.py`, `lottex.py`, `re/tools/bldimport/sc4web.js`. Results:
+`verify/lotshape/RESULTS.md`.
+
+- **models.json** `"lot": [w, d]`, w and d from 1 to 5 each, for kinds `landmark` and `reward` only (`RECT_KINDS`).
+  w = prop 0x66 value 0 = SizeInCellsX, along the model's X axis; d = prop 0x66 value 2 = SizeInCellsZ, along Z.
+  Growables, ports and civic looks stay square (section 5.4; a civic look keeps its base's lot). 3x2 (X > Z) is
+  written as given: with LOTRECT both orientations draw whole (section 8), so nothing is turned.
+- **Frames** (`bldrender.render_frame`): slot 0 has u = 0..w, v = 0..d; each slot step (u, v) -> (v, e_u - u) with the
+  u extent before the step, so slots 1 and 3 are d x w. Width (e_u + e_v) x W / 2, B = e_v x W / 4 + 1, anchor (0, T) =
+  the lot's left vertex in every slot, which is where LOTRECT registers the sprite (8.4). Measured against the lotdraw
+  probe's generator at zoom 0: 2x3 frames 20 px wide, T 8 / 10 / 8 / 10 in slots 0-3 (`make_lotrect.py` gives the
+  same). A square lot n and (n, n) give the same bytes.
+- **Stats**: the stock base of the longer side, prop 0x66 rewritten to (w, the base's height, d). 5x5 bases: landmark
+  9500 (San Francisco City Hall), reward 8046 (Country Club). Rewards skip a base whose type's [AgentTypeHierarchy]
+  parent is 11000 Military: the first 5x5 reward by id is 8023 Defense Contractor (type 11001 under 11000), and a new
+  reward's type takes its base's parent (`agent_type_rows`). No base of 1x1 to 4x4 has that parent.
+- **SC4 converter**: a landmark or reward takes its SC4 lot (`real_lot`: `props.choose_lot`, turned into the model
+  frame by kb - 2 quarter turns) when both sides are 1..5 and the footprint fits it, else the smallest square (now up to
+  5x5). The props window and the lot-texture canvas are w x d (`props.plan`, `lottex.composite`). Growables keep the
+  smallest square.

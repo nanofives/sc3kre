@@ -828,6 +828,8 @@ function BLDWEB_LIB() {
     return Object.assign({}, mesh, { n: N, tri, uv, has_uv: hu, mat: mt, slot: sl, ground: gd });
   }
   function place(mesh, n, cellM, scale, rotDeg) {
+    if (Array.isArray(n) && n[0] !== n[1]) return placeRect(mesh, n[0], n[1], cellM, scale, rotDeg);   // task lotshape
+    if (Array.isArray(n)) n = n[0];
     const N = mesh.n, P = N * 3, sc = scale;
     const a = rotDeg * (Math.PI / 180), c = Math.cos(a), s = Math.sin(a);
     const X = new Float64Array(P), Z = new Float64Array(P), Y = new Float64Array(P);
@@ -848,10 +850,39 @@ function BLDWEB_LIB() {
     const info = { size_m: [x1 - x0, y1 - y0, z1 - z0], lot_m: n * cellM, fits: (x1 - x0 <= n * cellM + 1e-6 && z1 - z0 <= n * cellM + 1e-6) };
     return [out, info];
   }
+  function placeRect(mesh, w, d, cellM, scale, rotDeg) {   // bldrender._place_rect (task lotshape): u on w / 2, v on d / 2
+    const N = mesh.n, P = N * 3, sc = scale;
+    const a = rotDeg * (Math.PI / 180), c = Math.cos(a), s = Math.sin(a);
+    const X = new Float64Array(P), Z = new Float64Array(P), Y = new Float64Array(P);
+    for (let k = 0; k < P; k++) {
+      const p0 = mesh.tri[3 * k] * sc, p1 = mesh.tri[3 * k + 1] * sc, p2 = mesh.tri[3 * k + 2] * sc;
+      X[k] = p0 * c + p2 * s; Z[k] = -p0 * s + p2 * c; Y[k] = p1;
+    }
+    const mn = a_ => { let m = a_[0]; for (let k = 1; k < a_.length; k++) if (a_[k] < m || (m !== m)) m = a_[k]; return m; };
+    const mx = a_ => { let m = a_[0]; for (let k = 1; k < a_.length; k++) if (a_[k] > m || (m !== m)) m = a_[k]; return m; };
+    const x0 = mn(X), x1 = mx(X), z0 = mn(Z), z1 = mx(Z), y0 = mn(Y), y1 = mx(Y);
+    const t = new Float64Array(P * 3);
+    for (let k = 0; k < P; k++) {
+      t[3 * k] = (X[k] - (x0 + x1) / 2.0) / cellM + w / 2.0;
+      t[3 * k + 1] = (Z[k] - (z0 + z1) / 2.0) / cellM + d / 2.0;
+      t[3 * k + 2] = (Y[k] - y0) / cellM;
+    }
+    const out = Object.assign({}, mesh, { tri: t });
+    const info = { size_m: [x1 - x0, y1 - y0, z1 - z0], lot_m: [w * cellM, d * cellM], fits: (x1 - x0 <= w * cellM + 1e-6 && z1 - z0 <= d * cellM + 1e-6) };
+    return [out, info];
+  }
 
   // ================================================================================================ raster (bldrender)
   function rotPts(src, n, r) {           // _rot_slot on an array of (u, v, h) triples -> new Float64Array
     const out = new Float64Array(src);
+    if (Array.isArray(n)) {               // task lotshape: n = [e_u, e_v] of the slot the points are in
+      for (let k = 0; k < out.length; k += 3) {
+        let u = out[k], v = out[k + 1], eu = n[0], ev = n[1];
+        for (let q = 0; q < (r % 4 + 4) % 4; q++) { const nu = v, nv = eu - u; u = nu; v = nv; const e2 = eu; eu = ev; ev = e2; }
+        out[k] = u; out[k + 1] = v;
+      }
+      return out;
+    }
     for (let k = 0; k < out.length; k += 3) {
       let u = out[k], v = out[k + 1];
       for (let q = 0; q < (r % 4 + 4) % 4; q++) { const nu = v, nv = n - u; u = nu; v = nv; }
@@ -1033,9 +1064,14 @@ function BLDWEB_LIB() {
 
   function renderFrame(mesh, n, z, r, ss, ground, shadows, groundTex, st) {
     mesh = slotMesh(mesh, r);
+    // task lotshape: a non-square lot [w, d] keeps its extents per slot (ex0 slot 0, exr slot r); a square one is n
+    const rect = Array.isArray(n) && n[0] !== n[1];
+    if (Array.isArray(n) && !rect) n = n[0];
+    const ex0 = rect ? [n[0], n[1]] : n, exr = rect ? (r % 2 === 0 ? [n[0], n[1]] : [n[1], n[0]]) : n;
+    const eu = rect ? exr[0] : n, ev = rect ? exr[1] : n;
     const W = 8 << z;
     const [dx, dy, gtab] = CALIB[z];
-    const gpx = pz(gtab, n);
+    const gpx = pz(gtab, rect ? Math.max(n[0], n[1]) : n);
     const g = gpx / (W / 2.0);
     const nm = mesh.n, nt = nm + (ground ? 2 : 0);
     // task sc4lottex: faces of the OBJ group sc3ground are ground art (bldrender kind 2): lit as the lawn, no shadow
@@ -1044,10 +1080,10 @@ function BLDWEB_LIB() {
     const t0 = new Float64Array(nt * 9);
     t0.set(mesh.tri);
     if (ground) {
-      const a = -g, b = n + g, e = -1e-4;
-      t0.set([a, a, e, b, a, e, b, b, e, a, a, e, b, b, e, a, b, e], nm * 9);
+      const a = -g, b = (rect ? ex0[0] : n) + g, bv = (rect ? ex0[1] : n) + g, e = -1e-4;
+      t0.set([a, a, e, b, a, e, b, bv, e, a, a, e, b, bv, e, a, bv, e], nm * 9);
     }
-    const t = rotPts(t0, n, r);
+    const t = rotPts(t0, ex0, r);
     // screen
     const NP = nt * 3, X = new Float64Array(NP), Y = new Float64Array(NP), dep = new Float64Array(NP);
     let ymin = Infinity;
@@ -1057,9 +1093,9 @@ function BLDWEB_LIB() {
       dep[k] = v * F[0] + u * F[1] + h * F[2];
       if (Y[k] < ymin || ymin !== ymin) ymin = Y[k];
     }
-    const B = Math.floor(n * W / 4) + 1;
-    const top = Math.max(Math.ceil(-ymin + 1), Math.floor(n * W / 4));
-    const Hh = top + B, Ww = n * W, SW = Ww * ss, SH = Hh * ss;
+    const B = Math.floor(ev * W / 4) + 1;
+    const top = Math.max(Math.ceil(-ymin + 1), Math.floor(eu * W / 4));
+    const Hh = top + B, Ww = (eu + ev) * W / 2, SW = Ww * ss, SH = Hh * ss;
     const sx = new Float64Array(NP), sy = new Float64Array(NP);
     for (let k = 0; k < NP; k++) { sx[k] = (X[k] + dx) * ss; sy[k] = (Y[k] + top + dy) * ss; }
     const { ib, bb, zb } = rasterize(sx, sy, dep, nt, SW, SH, true);
@@ -1149,9 +1185,9 @@ function BLDWEB_LIB() {
         for (let m = 0; m < M; m++) {
           if (!isG[m] && !isL[m]) continue;
           const u = pts[3 * m], v = pts[3 * m + 1];
-          const d = Math.min(u, n - v);                       // np.minimum(pg[:, 0], n - pg[:, 1])
+          const d = Math.min(u, ev - v);                      // np.minimum(pg[:, 0], ev - pg[:, 1])
           let fall = 1.0 - d / rim.width; fall = fall < 0 ? 0 : fall > 1 ? 1 : fall; fall = Math.pow(fall, 1.5);
-          const p0 = rotPts(pts.subarray(3 * m, 3 * m + 3), n, (4 - r) % 4);
+          const p0 = rotPts(pts.subarray(3 * m, 3 * m + 3), exr, (4 - r) % 4);
           let patch = fr(fr(0.55) + fr(fr(0.6) * valueNoise(p0[0], p0[1], p0[2], 4.0, 11)));
           patch = patch < 0 ? 0 : patch > 1 ? 1 : patch;
           light[m] = light[m] * (1.0 - dark * fall * patch);
@@ -1162,7 +1198,7 @@ function BLDWEB_LIB() {
         const kuv = GRASS_TEXELS_PER_CELL / groundTex.h;
         for (let m = 0; m < M; m++) {
           if (!isG[m]) continue;
-          const p0 = rotPts(pts.subarray(3 * m, 3 * m + 3), n, (4 - r) % 4);
+          const p0 = rotPts(pts.subarray(3 * m, 3 * m + 3), exr, (4 - r) % 4);
           const ti = texIndex(groundTex, p0[0] * kuv, p0[1] * kuv);
           alb[3 * m] = groundTex.d[ti]; alb[3 * m + 1] = groundTex.d[ti + 1]; alb[3 * m + 2] = groundTex.d[ti + 2];
         }
@@ -1216,7 +1252,7 @@ function BLDWEB_LIB() {
             a0 = cl(fr(y + fr(fr(a0 - y) * k))); a1 = cl(fr(y + fr(fr(a1 - y) * k))); a2 = cl(fr(y + fr(fr(a2 - y) * k)));
           }
           if (gr) {
-            const p0 = rotPts(pts.subarray(3 * m, 3 * m + 3), n, (4 - r) % 4);
+            const p0 = rotPts(pts.subarray(3 * m, 3 * m + 3), exr, (4 - r) % 4);
             const nz = grain(p0[0], p0[1], p0[2], W, 0);
             const f = fr(1.0 + fr(grK * nz));
             const cl = x => x < 0 ? 0 : x > 1 ? 1 : x;
@@ -1612,7 +1648,7 @@ function BLDWEB_LIB() {
   const portOf = kind => (typeof kind === 'string' && Object.prototype.hasOwnProperty.call(PORTS, kind)) ? PORTS[kind] : null;
   // task plop: bldimport.LANDMARK (a landmark joins the stock landmark dialog: every exemplar whose type IsA 18000) and
   // the plugin it is written to (Apps/PlugIn/bldimport: .pin + .dat, the Maxis landmark packs' layout, sc3plugin.py)
-  const LANDMARK = { landuse: 18000, types: [18000, 18999], sizes: [1, 2, 3, 4], label: 'Landmark' };
+  const LANDMARK = { landuse: 18000, types: [18000, 18999], sizes: [1, 2, 3, 4, 5], label: 'Landmark' };   // task lotshape: 5x5
   const LM_GROUP = 0xB1D10002, LM_CS_GROUP = 0xB1D10003, LM_TEXT_GROUP = 0xB1D10004, LM_DESC_GROUP = 0xB1D10005;
   const PLUGIN_NAME = 'bldimport', PLUGIN_DIR = 'Apps/PlugIn/' + PLUGIN_NAME + '/';
   const LM_PIN = PLUGIN_DIR + PLUGIN_NAME + '.pin', LM_DAT = PLUGIN_DIR + PLUGIN_NAME + '.dat';
@@ -1730,7 +1766,8 @@ function BLDWEB_LIB() {
   const CIVIC_NAMES = Object.keys(CIVIC).sort();
   const FOUR_PIECE = new Set();
   for (const [a, b] of [[0x1F5D, 0x1F61], [0x1F8B, 0x1F8F], [0x1F98, 0x1F9C]]) for (let k = a; k < b; k++) FOUR_PIECE.add(k);
-  const REWARD = { sizes: [1, 2, 3, 4], label: 'Reward', population: 20000, year: 0 };
+  // task lotshape: 5x5, and no base whose type's [AgentTypeHierarchy] parent is 11000 Military (bldimport.REWARD no_parent)
+  const REWARD = { sizes: [1, 2, 3, 4, 5], label: 'Reward', population: 20000, year: 0, no_parent: ['11000'] };
   const CIVIC_INI = PLUGIN_DIR + 'bldimport_civic.ini';
   const RW_PLUGIN_NAME = 'bldimport_rewards', RW_DIR = 'Apps/PlugIn/' + RW_PLUGIN_NAME + '/';
   const RW_PIN = RW_DIR + RW_PLUGIN_NAME + '.pin', RW_DAT = RW_DIR + RW_PLUGIN_NAME + '.dat';
@@ -1767,10 +1804,12 @@ function BLDWEB_LIB() {
   async function rewardTable(game) {      // bldimport.reward_table
     if (game._rewards) return game._rewards;
     const bld = await stockBuildings(game), types = new Set(await rewardTypes(game)), bases = new Map();
+    const hier = new Map(((await syspakSections(game, 'CitySim.ini')).get('[agenttypehierarchy]') || []).map(([k, v]) => [pyInt0(k), v]));
     for (const bid of [...bld.keys()].sort((a, b) => a - b)) {
       const [f, p] = bld.get(bid);
       const lu = tkb1Get(p, 0x65), fp = tkb1Get(p, 0x66), cs = tkb1Get(p, 0x67);
       if (FOUR_PIECE.has(bid) || !(lu && lu.length) || !types.has(lu[0]) || !(fp && fp.length) || fp[0] !== fp[2]) continue;
+      if (REWARD.no_parent.includes(hier.get(lu[0]))) continue;     // task lotshape: not under Military (11000)
       if (!REWARD.sizes.includes(fp[0]) || bases.has(fp[0]) || !(cs && cs.length) || cs[0] !== CS_TYPE || tkb1Get(p, 0x6D) === null) continue;
       bases.set(fp[0], [bid, f]);
     }
@@ -1822,6 +1861,15 @@ function BLDWEB_LIB() {
       wrU32(b, off, v); return b;
     }
     throw new BldError('prop 0x' + prop.toString(16) + ' not present');
+  }
+  function tkb1SetFootprint(buf, wd) {  // bldimport.tkb1_set_footprint (task lotshape): prop 0x66 -> (w, height, d)
+    const b = new Uint8Array(buf);
+    for (const [p, t, n, off] of tkb1Props(buf)) {
+      if (p !== 0x66) continue;
+      if (t !== 3 || n !== 3) throw new BldError('prop 0x66 is not three numbers');
+      wrU32(b, off, wd[0]); wrU32(b, off + 8, wd[1]); return b;
+    }
+    throw new BldError('prop 0x66 not present');
   }
   function pluginPin(keys, name) {       // bldimport.plugin_pin; keys: [[id, name bytes]]
     const pn = name || PLUGIN_NAME;
@@ -2160,14 +2208,20 @@ function BLDWEB_LIB() {
     if (changed) await folder.put(p, new TextEncoder().encode(pyJson(ids, 1, true)));
     return ids;
   }
-  function lotOf(m) {
+  // task lotshape: bldimport.RECT_KINDS / lot_of(m, rect) / lot_wd / lot_base / lot_str. lot = n (square) or [w, d]
+  const RECT_KINDS = ['landmark', 'reward'], RECT_MAX = 5;
+  function lotOf(m, rect) {
     const lot = 'lot' in m ? m.lot : [1, 1];
     if (!(Array.isArray(lot) && lot.length === 2 && lot.every(x => Number.isInteger(x) || typeof x === 'boolean'))) return [null, 'lot ' + JSON.stringify(lot) + ' is not [n, n]'];
     const a = +lot[0], b = +lot[1];
-    if (a !== b) return [null, 'lot ' + a + 'x' + b + ': only square lots grow (every stock base is n x n)'];
-    if (!(1 <= a && a <= 4)) return [null, 'lot ' + a + 'x' + b + ': growables are 1x1 to 4x4'];
+    if (rect && !(1 <= a && a <= RECT_MAX && 1 <= b && b <= RECT_MAX)) return [null, 'lot ' + a + 'x' + b + ': landmarks and rewards are 1 to ' + RECT_MAX + ' cells on each side'];
+    if (a !== b) return rect ? [[a, b], null] : [null, 'lot ' + a + 'x' + b + ': only square lots grow (every stock base is n x n)'];
+    if (!rect && !(1 <= a && a <= 4)) return [null, 'lot ' + a + 'x' + b + ': growables are 1x1 to 4x4'];
     return [a, null];
   }
+  const lotWd = n => (Array.isArray(n) ? [n[0], n[1]] : [n, n]);
+  const lotBase = n => Math.max(...lotWd(n));
+  const lotStr = n => lotWd(n).join('x');
   const xr = m => (m.x_bldrender && typeof m.x_bldrender === 'object' && pyTrue(m.x_bldrender)) ? m.x_bldrender : {};
   function optsOf(m, env) {
     const x = xr(m);
@@ -2194,10 +2248,10 @@ function BLDWEB_LIB() {
         const s0 = [...civic.get('civic:' + base).bases.keys()][0];
         m = Object.assign({}, m, { lot: [s0, s0] });   // civic: the base's lot by default
       }
-      let [n, lotErr] = lotOf(m);
+      let [n, lotErr] = lotOf(m, RECT_KINDS.includes('kind' in m ? m.kind : 'growable'));
       const exists = typeof f === 'string' && !!(await folder.exists(f));
       if (isBld(f) && exists && !lotErr) {
-        try { const bl = readBld(await folder.get(f), f).lot; if ('lot' in m && n !== bl) lotErr = 'lot ' + n + 'x' + n + ' in models.json, the .bld file is ' + bl + 'x' + bl; n = bl; }
+        try { const bl = readBld(await folder.get(f), f).lot; if ('lot' in m && n !== bl) lotErr = 'lot ' + lotStr(n) + ' in models.json, the .bld file is ' + bl + 'x' + bl; n = bl; }
         catch (e) { lotErr = 'not a readable .bld file (' + (e.message || e) + ')'; }
       }
       let cls = 'class' in m ? m.class : null;
@@ -2218,7 +2272,7 @@ function BLDWEB_LIB() {
       else if (lotErr) why = lotErr;
       else if (!Number.isInteger(w) || !(1 <= w && w <= 1000)) why = 'weight ' + JSON.stringify(w) + ' is not a whole number from 1 to 1000';
       else if (port !== null && port.copies && w > PORT_MAX_COPIES) why = 'weight ' + w + ': an ' + kind + "'s weight is the number of copies in the airpark's list (the rule ignores Key weights), at most " + PORT_MAX_COPIES;
-      else if ((kind === 'landmark' || kind === 'reward') && !LANDMARK.sizes.includes(n)) why = kind + ' lot ' + n + 'x' + n + ': ' + kind + 's are ' + LANDMARK.sizes.map(s_ => s_ + 'x' + s_).join(', ');
+      else if ((kind === 'landmark' || kind === 'reward') && lotWd(n).some(x => !LANDMARK.sizes.includes(x))) why = kind + ' lot ' + lotStr(n) + ': ' + kind + 's are ' + LANDMARK.sizes.map(s_ => s_ + 'x' + s_).join(', ');
       else if (port !== null && !port.sizes.includes(n)) why = kind + ' lot ' + n + 'x' + n + ': the ' + port.label.toLowerCase() + ' grows ' + port.sizes.map(s_ => s_ + 'x' + s_).join(' and ');
       else if (port === null && !lm && table && !(Number.isInteger(cls) && table.has(cls))) why = 'class ' + JSON.stringify(cls) + ' is not a growable class (' + [...table.keys()].join(', ') + ')';
       else if (port === null && !lm && table && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
@@ -2266,7 +2320,7 @@ function BLDWEB_LIB() {
     if (typeof hm === 'number' && hm > 0 && Math.abs(info.size_m[1] - hm) > 0.1 * hm && opt.log)
       opt.log('  note: ' + m.file + ' is ' + info.size_m[1].toFixed(1) + ' m tall after scale, models.json says height_m ' + hm.toFixed(1) + ' (scale wins)');
     if (!info.fits && opt.log)
-      opt.log('  note: ' + m.file + ' is ' + info.size_m[0].toFixed(1) + ' x ' + info.size_m[2].toFixed(1) + ' m, larger than its ' + n + 'x' + n + ' lot: it will overhang the neighbours');
+      opt.log('  note: ' + m.file + ' is ' + info.size_m[0].toFixed(1) + ' x ' + info.size_m[2].toFixed(1) + ' m, larger than its ' + lotStr(n) + ' lot: it will overhang the neighbours');
     info.style = o.style;
     return { frames: res.frames, info };
   }
@@ -2331,7 +2385,7 @@ function BLDWEB_LIB() {
       if (bld.has(nid)) throw new BldError('id ' + nid + ' already has a stock building exemplar');
       if (opt.onModel) opt.onModel(k0, entries.length, e);
       const { frames, info } = await renderOne(folder, e.model, n, game, Object.assign({}, opt, { log }));
-      const [base, bfile] = tg.bases.get(n);
+      const [base, bfile] = tg.bases.get(lotBase(n));
       let ex = await baseExemplar(game, base, bfile);
       const [tab, tmpl] = await stockTableAndTemplate(game, ex);
       const nm = cp1252Encode(e.name);
@@ -2342,6 +2396,7 @@ function BLDWEB_LIB() {
       ex = tkb1SetText(ex, 0x64, nm);
       if (e.kind === 'landmark' || e.kind === 'reward') ex = tkb1SetU32(ex, 0x65, lu);   // a civic look keeps the base's type
       if (lm && e.desc !== null) ex = tkb1SetKey(ex, 0x7C, [TEXT_TYPE, LM_DESC_GROUP, nid]);
+      if (Array.isArray(n)) ex = tkb1SetFootprint(ex, n);   // task lotshape: prop 0x66 = (w, the base's height, d)
       tkb1Props(ex);
       const precs = e.kind === 'reward' ? rwRecs : lmRecs, pkeys = e.kind === 'reward' ? rwKeys : lmKeys;
       if (lm) {
@@ -2373,7 +2428,7 @@ function BLDWEB_LIB() {
       if (lm) {
         const extra = e.kind === 'reward' ? ', type ' + nid + ', unlocks at population ' + e.population + (e.year ? ', year ' + e.year : '')
           : e.kind === 'civic' ? ', type ' + lu + ', look ' + (civLines.get(base).length + 1) + ' of the button' : '';
-        rep.push('plop  [' + nid + '] ' + e.file + ': "' + e.name + '", ' + tg.label + ', ' + n + 'x' + n + ', stats of stock ' + base +
+        rep.push('plop  [' + nid + '] ' + e.file + ': "' + e.name + '", ' + tg.label + ', ' + lotStr(n) + ', stats of stock ' + base +
           extra + ', in ' + (e.kind === 'reward' ? RW_PIN : LM_PIN) + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
         if (opt.onFrames) opt.onFrames(e, frames, info);
         continue;

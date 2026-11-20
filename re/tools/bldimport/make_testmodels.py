@@ -23,8 +23,9 @@ Writes the airport / seaport test models instead (bldimport kinds airport / seap
 Writes the landmark test models (bldimport kind landmark, a plugin in Apps\PlugIn\bldimport):
   obelisk_2x2.obj/.mtl    2x2 monument: a red and gold obelisk on a stepped white plaza with four lamp posts
   pavilion_3x3.obj/.mtl   3x3 pavilion: a teal dome on a round colonnade, a fountain basin in front
-  models.json             kind landmark 2x2 and 3x3, plus two entries bldimport must refuse (landmark_5x5.obj: a
-                          5x5 landmark; civic_1x1.obj: kind ploppable, not imported)
+  models.json             kind landmark 2x2, 3x3 and 5x5 (landmark_5x5.obj, the pavilion on a 5x5 lot: refused
+                          until task lotshape allowed 5x5), plus one entry bldimport must refuse (civic_1x1.obj: kind
+                          ploppable, not imported)
 
     py -3.12 re/tools/bldimport/make_testmodels.py --civmod <out folder>   (task civmod, 2026-11-19)
 
@@ -45,6 +46,12 @@ gold spire, population 1000, so they unlock in any town) and a 3x3 growable plaz
 
 Writes the civic list window test set: three police looks (police_blue, police_green, police_red), one fire look and
 one school look. Every other civic button has none, so it must stay stock.
+    py -3.12 re/tools/bldimport/make_testmodels.py --lotshape <out folder>   (task lotshape, 2026-11-20)
+
+Writes non-square landmarks and rewards (re/analysis/LOT_SHAPES.md 8, they need sc3perf LOTRECT in game): a hall on a
+2x3 lot and one on a 3x2 lot (a long block, a tall tower at its +z end, a red -x wall), a 1x4 reward tower row, a 5x5
+reward spire and a 5x4 landmark court, one 2x3 landmark wider than its lot (the overhang note), and entries bldimport must
+refuse: a 2x3 growable, a 2x6 landmark, a police look on a 3x2 lot, a 1x2 seaport.
 """
 import json
 import math
@@ -453,8 +460,8 @@ def landmarks(out):
              notes="landmark 2x2, stats of Coit Tower 9507"),
         dict(common, file="pavilion_3x3.obj", name="Test pavilion", kind="landmark", lot=[3, 3], height_m=22.4,
              notes="landmark 3x3, stats of Arc de Triomphe 9528"),
-        dict(common, file="landmark_5x5.obj", name="Refused: landmark 5x5", kind="landmark", lot=[5, 5],
-             height_m=22.4, notes="landmarks are 1x1 to 4x4 in this tool: bldimport skips this entry"),
+        dict(common, file="landmark_5x5.obj", name="Test pavilion 5x5", kind="landmark", lot=[5, 5],
+             height_m=22.4, notes="landmark 5x5, stats of Congresshalle 9552 (task lotshape; refused before)"),
         dict(common, file="civic_1x1.obj", name="Refused: ploppable", kind="ploppable", lot=[1, 1], height_m=28.5,
              notes="kind ploppable is not imported (civic looks are kind civic, task civmod): skipped")]}
     with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
@@ -625,7 +632,70 @@ def civdlg(out):
     return 0
 
 
+def hall(folder, name, w, d, tower=True, over=0.0):
+    """Task lotshape: a w x d cell lot (cell 16 m, model x = w, z = d): a pale plaza, a long block, a tall tower at the
+    +z end, the -x wall red, a gold roof strip along z. over: metres the plaza reaches past the lot on every side."""
+    o = Obj(name)
+    hx, hz = 8.0 * w - 0.4 + over, 8.0 * d - 0.4 + over
+    o.mat("plaza", (0.86, 0.84, 0.78))
+    o.box(-hx, 0, -hz, hx, 0.3, hz, mats={"ny": None})
+    bx, bz = 8.0 * w - 3.0, 8.0 * d - 3.0
+    o.mat("walls", (0.62, 0.66, 0.74))
+    o.mat("red", (0.80, 0.16, 0.12))
+    o.box(-bx, 0.3, -bz, bx, 11.0, bz, mats={"pz": "walls", "nz": "walls", "px": "walls", "nx": "red", "py": "walls", "ny": None})
+    o.mat("gold", (0.92, 0.74, 0.20))
+    o.box(-1.2, 11.0, -bz + 1.0, 1.2, 12.0, bz - 1.0, mats={"ny": None})
+    if tower:
+        o.mat("tower", (0.20, 0.36, 0.62))
+        t = min(bx, 6.0)
+        o.box(-t, 11.0, bz - 2 * t, t, 11.0 + 8.0 * max(w, d), bz, mats={"ny": None})
+    o.write(folder)
+
+
+def lotshape(out):
+    """Task lotshape: non-square landmarks and rewards, 5x5, and entries to refuse."""
+    os.makedirs(out, exist_ok=True)
+    common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True, "weight": 1}
+    hall(out, "hall_2x3", 2, 3)
+    hall(out, "hall_3x2", 3, 2)
+    hall(out, "towers_1x4", 1, 4)
+    spire(out, "reward_5x5", 5)
+    hall(out, "court_5x4", 5, 4, tower=False)
+    hall(out, "wide_2x3", 2, 3, over=6.0)
+    hall(out, "grow_2x3", 2, 3)
+    hall(out, "landmark_2x6", 2, 6)
+    police_3x3(out, "police_3x2")
+    hall(out, "seaport_1x2", 1, 2)
+    models = [
+        dict(common, file="hall_2x3.obj", name="Test hall 2x3", kind="landmark", lot=[2, 3], height_m=35.0,
+             description="Test hall 2x3, bldimport lotshape", notes="landmark 2x3, stats of a 3x3 landmark"),
+        dict(common, file="hall_3x2.obj", name="Test hall 3x2", kind="landmark", lot=[3, 2], height_m=35.0,
+             notes="landmark 3x2"),
+        dict(common, file="towers_1x4.obj", name="Test towers 1x4", kind="reward", lot=[1, 4], population=1000, year=0,
+             height_m=43.0, description="Test reward 1x4, bldimport lotshape", notes="reward 1x4, stats of a 4x4 reward"),
+        dict(common, file="reward_5x5.obj", name="Test reward 5x5", kind="reward", lot=[5, 5], population=1000, year=0,
+             height_m=52.0, notes="reward 5x5, stats of Country Club 8046"),
+        dict(common, file="court_5x4.obj", name="Test court 5x4", kind="landmark", lot=[5, 4], height_m=12.0,
+             notes="landmark 5x4, stats of a 5x5 landmark"),
+        dict(common, file="wide_2x3.obj", name="Test wide hall 2x3", kind="landmark", lot=[2, 3], height_m=35.0,
+             notes="12 m wider and deeper than its lot: the overhang note"),
+        dict(common, file="grow_2x3.obj", name="Refused: growable 2x3", kind="growable", lot=[2, 3], height_m=35.0,
+             notes="growables stay square: skipped", **{"class": 3500}),
+        dict(common, file="landmark_2x6.obj", name="Refused: landmark 2x6", kind="landmark", lot=[2, 6],
+             height_m=35.0, notes="a side longer than 5: skipped"),
+        dict(common, file="police_3x2.obj", name="Refused: police 3x2", kind="civic", base="police", lot=[3, 2],
+             height_m=12.0, notes="a civic look keeps its base's lot: skipped"),
+        dict(common, file="seaport_1x2.obj", name="Refused: seaport 1x2", kind="seaport", lot=[1, 2], weight=1,
+             height_m=35.0, notes="ports stay square: skipped")]
+    with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
+        json.dump({"sc3models": 1, "generator": "make_testmodels.py --lotshape", "models": models}, fh, indent=2)
+    print("wrote lotshape test models to", out, len(models), "models")
+    return 0
+
+
 def main(argv):
+    if len(argv) == 2 and argv[0] == "--lotshape":
+        return lotshape(argv[1])
     if len(argv) == 2 and argv[0] == "--civdlg":
         return civdlg(argv[1])
     if len(argv) == 2 and argv[0] == "--civtest":

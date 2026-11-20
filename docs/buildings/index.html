@@ -95,7 +95,7 @@ footer a { color: var(--ui-info-text); }
 <h3>What it does not do</h3>
 <ul>
   <li>New civic buttons. A civic model is a second look for a civic button the game already has (<a href="#civic">Civic buildings</a>), and a new reward joins the stock Rewards list (<a href="#rewards">Rewards</a>).</li>
-  <li>Lots that are not square. A building sits on a 1x1, 2x2, 3x3 or 4x4 lot, as every stock growable does.</li>
+  <li>Growing buildings on lots that are not square. A growable, airport or seaport building sits on a 1x1, 2x2, 3x3 or 4x4 lot, as every stock growable does. Landmarks and rewards can have a lot that is not square (<a href="#nonsquare">Lots that are not square</a>).</li>
   <li>Night lights and animation. The stock houses have none either.</li>
   <li>3D formats other than OBJ, the Building Architect's <code>.bld</code> and SimCity 4 buildings. Convert glTF, FBX or anything else to OBJ first (Blender does it).</li>
 </ul>
@@ -156,7 +156,7 @@ footer a { color: var(--ui-info-text); }
 <tr><td>Up axis</td><td>+Y</td><td>OBJ convention and Blender's default export.</td></tr>
 <tr><td>Front</td><td>+Z</td><td>What faces you in Blender's front view. The front is drawn on the lower-right face in the first view rotation, the side stock shopfronts face.</td></tr>
 <tr><td>Ground</td><td>the lowest vertex</td><td>The model is set down so its lowest point touches the ground, and its footprint is centred on the lot.</td></tr>
-<tr><td>Footprint</td><td>at most 16 / 32 / 48 / 64 m</td><td>For a 1x1 / 2x2 / 3x3 / 4x4 lot. A larger model overhangs the neighbouring lots, and the page warns about it.</td></tr>
+<tr><td>Footprint</td><td>at most 16 / 32 / 48 / 64 m</td><td>For a 1x1 / 2x2 / 3x3 / 4x4 lot, 80 m for a 5x5 landmark or reward, 16 m per cell on each side for a lot that is not square. A larger model overhangs the neighbouring lots, and the page warns about it.</td></tr>
 <tr><td>Height</td><td>any</td><td>Tall buildings draw taller. The sample skyscraper is 120 m.</td></tr>
 </tbody></table></div>
 <p>You do not have to model at the right size. The page has a <b>Scale</b> field per model, and the Kenney models in the sample pack use scales from 9 to 22 because the kits are not in metres.</p>
@@ -213,7 +213,7 @@ footer a { color: var(--ui-info-text); }
     <ul>
       <li><b>Kind</b>: <code>growable</code> for a building of a residential, commercial or industrial zone, <code>airport</code> or <code>seaport</code> for one that grows in those zones (<a href="#ports">Airports and seaports</a>), <code>landmark</code> for one you place from the landmark menu (<a href="#landmarks">Landmarks</a>), <code>civic</code> for a second look of a civic button (<a href="#civic">Civic buildings</a>), <code>reward</code> for a new entry of the Rewards list (<a href="#rewards">Rewards</a>).</li>
       <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above). Airport, seaport and landmark buildings have no class.</li>
-      <li><b>Lot</b>: 1x1 to 4x4. Airport buildings are 1x1 only, seaport buildings 1x1 or 2x2.</li>
+      <li><b>Lot</b>: 1x1 to 4x4. Airport buildings are 1x1 only, seaport buildings 1x1 or 2x2. Landmarks and rewards 1x1 to 5x5, or a lot that is not square such as 2x3, with 1 to 5 cells on each side (<a href="#nonsquare">Lots that are not square</a>).</li>
       <li><b>Description</b>, for a landmark, civic look or reward: the line under its name in the landmark menu or the Rewards list.</li>
       <li><b>Base</b>, for a civic look only: the civic button it belongs to. It also sets the lot.</li>
       <li><b>Population</b> and <b>Year</b>, for a reward only: when it joins the Rewards list.</li>
@@ -292,18 +292,23 @@ footer a { color: var(--ui-info-text); }
 <div class="tablewrap"><table>
 <thead><tr><th></th><th>Landmark</th></tr></thead>
 <tbody>
-<tr><td>Lot</td><td>1x1, 2x2, 3x3 or 4x4. A larger landmark is left out.</td></tr>
-<tr><td>Stats from</td><td>the first stock landmark with the same lot, for example Coit Tower for 2x2, the Arc de Triomphe for 3x3 and the Palace of Fine Arts for 4x4</td></tr>
+<tr><td>Lot</td><td>1x1, 2x2, 3x3, 4x4 or 5x5, or a lot that is not square with 1 to 5 cells on each side (<a href="#nonsquare">Lots that are not square</a>). A larger landmark is left out.</td></tr>
+<tr><td>Stats from</td><td>the first stock landmark with the same lot, for example Coit Tower for 2x2, the Arc de Triomphe for 3x3, the Palace of Fine Arts for 4x4 and San Francisco City Hall for 5x5. A lot that is not square takes the stats of the square of its longer side: a 2x3 landmark has the Arc de Triomphe's</td></tr>
 <tr><td>Class and weight</td><td>not used</td></tr>
 <tr><td>Name</td><td>the first line in the landmark menu and what the query box shows</td></tr>
 <tr><td>Description</td><td>the second line in the landmark menu, where the stock landmarks name the city they stand in. Left empty, the name shows there again</td></tr>
 <tr><td>Ids</td><td>from the same range as your other buildings, 38000 to 38999, kept in <code>sc3build\ids.json</code></td></tr>
 </tbody></table></div>
 <p><b>Suggest for all</b> picks <code>landmark</code> when the model's name has landmark, monument, statue, obelisk, memorial, museum, cathedral, basilica, palace, castle, pavilion or temple in it. The Description box shows in the panel when the selected cards are all landmarks.</p>
+<h3 id="nonsquare">Lots that are not square</h3>
+<p>A landmark or a reward can stand on a lot that is not square. Set its <b>Lot</b> to 2x3, 1x4, 5x4 or any other size with 1 to 5 cells on each side: the panel lists them when the selected cards are all landmarks or rewards. The first number is the lot along the model's X axis, the second along its Z axis, the axis its front faces.</p>
+<p class="note"><b>Needs the row Non-square buildings on.</b> The game places, moves, saves and bulldozes such a building as it is, but draws it whole only with the mods: the row <b>Non-square buildings</b> on the <b>Turn mods on or off</b> page has to be on. It is on unless you turned it off. With it off the game draws the building as one square over bare ground.</p>
+<p>Growables, airport and seaport buildings and civic looks stay square. The game lays out the lots of zoned buildings as squares only, and a civic look keeps the lot of its stock building.</p>
 <h3>Where the files go</h3>
 <p>Landmarks go into one plugin, <code>Apps\PlugIn\bldimport\bldimport.pin</code> and <code>bldimport.dat</code>, the way Maxis shipped its own landmark packs. The game loads every plugin in <code>Apps\PlugIn</code> by itself when it starts. They are not written into the road mod's overlay folder.</p>
 <h3>Our test</h3>
 <p>Two test models, an obelisk on 2x2 and a pavilion on 3x3, and the 251 m SimCity 4 office tower as a 4x4 landmark (<a href="#sc4">SimCity 4 buildings</a>) were placed in Madison. They draw at zoom 3 and 4, and the two test models drew in all four view rotations and stood where they were after the city was saved and loaded again.</p>
+<p>Lots that are not square and 5x5: SimCity 4's Alamo as a 2x3 landmark, its Mayor's House as a 2x3 reward and its Hagia Sofia as a 5x5 landmark, converted from the Steam SimCity 4 Deluxe (<a href="#sc4game">From your own SimCity 4</a>), were placed in Madison with Non-square buildings on. All three drew whole in the four view rotations, the save recorded their lots as 2x3, 2x3 and 5x5, and after the city was loaded again they stood where they were and drew the same.</p>
 <h3>Removing landmarks</h3>
 <p><b>Remove from the game</b> deletes the plugin. A city saved with your landmarks and opened without them does not crash. The landmarks are gone, and each of their lots shows orange-brown ground: the game still marks those cells as the lot of a placed building, with nothing on it. You can use that ground again:</p>
 <ul>
@@ -344,8 +349,8 @@ footer a { color: var(--ui-info-text); }
 <div class="tablewrap"><table>
 <thead><tr><th></th><th>Reward</th></tr></thead>
 <tbody>
-<tr><td>Lot</td><td>1x1, 2x2, 3x3 or 4x4. A larger reward is left out</td></tr>
-<tr><td>Stats from</td><td>the first stock reward with the same lot: the Historic Statue for 1x1, the Mayor's House for 2x2, City Hall for 3x3 and the Stock Exchange for 4x4</td></tr>
+<tr><td>Lot</td><td>1x1, 2x2, 3x3, 4x4 or 5x5, or a lot that is not square with 1 to 5 cells on each side (<a href="#nonsquare">Lots that are not square</a>). A larger reward is left out</td></tr>
+<tr><td>Stats from</td><td>the first stock reward with the same lot: the Historic Statue for 1x1, the Mayor's House for 2x2, City Hall for 3x3, the Stock Exchange for 4x4 and the Country Club for 5x5. The first 5x5 reward of the game, the Defense Contractor, is a military building in the game's type list, so it is skipped. A lot that is not square takes the stats of the square of its longer side</td></tr>
 <tr><td>Population</td><td>a whole number up to 100,000,000. Empty: 20,000</td></tr>
 <tr><td>Year</td><td>a whole number up to 9999. 0: any year</td></tr>
 <tr><td>Name</td><td>the line in the Rewards list and what the query box shows. A name with a semicolon or an equals sign in it is left out</td></tr>
@@ -482,7 +487,8 @@ footer a { color: var(--ui-info-text); }
   <li><b>Converts:</b> growable buildings, with their name, wealth, number of residents or jobs and size. The class follows from wealth and residents or jobs, the lot from the size: a house that fits in 16 m goes on a 1x1 lot. SimCity 3000 has one commercial zone for shops and offices and two commercial wealths, so SimCity 4's $ becomes low wealth and $$ or $$$ high wealth. Up to 100 jobs is light, up to 1,000 medium, more is dense. In SimCity 3000 the class alone sets a building's jobs (per lot cell), so we checked the rule against SimCity 4's own 219 shops and offices: 117 get within a factor 2 of their SimCity 4 jobs. A rule by jobs per lot cell gave 118, too few to change it. The rest have more or fewer jobs than any SimCity 3000 class gives on that lot. Industrial buildings get dirty, clean or farm classes: dirty and manufacturing industry become dirty, high-tech clean, farms farm. SimCity 4's factories have fewer jobs than SimCity 3000's lightest industry, so their lot size decides the density, and in SimCity 3000 they give 3 to 10 times more jobs than in SimCity 4. A 4x4 factory becomes dense clean industry, since SimCity 3000 has no 4x4 dirty building to copy.</li>
   <li><b>Shops, offices, factories and farms tried in game.</b> SimCity 4's own small shop, retail store, low office and 55 m office tower all grew in Berlin by the first autosave, and its refinery, textile mill, high-tech plant and small farm in Madison within five game-run minutes. Farms on a 2x2 lot do not grow in our cities: SimCity 3000 farms are almost all 1x1 fields (Madison builds no 2x2 farm at all), so only 1x1 farms show up.</li>
   <li><b>Tall towers convert.</b> SimCity 4 cuts the pictures of a tall building into tiles, and the page puts them back together. Our test tower, 251 m tall, became a dense high-wealth office on a 4x4 lot and grew in Berlin by the first autosave, a little taller than the tallest stock tower. As with the sample Skyscraper, that was with Berlin set to rebuild its commercial lots more often (see <a href="#trouble">Troubleshooting</a>).</li>
-  <li><b>Lots up to 4x4.</b> SimCity 3000 lots are square, 1x1 to 4x4, so the lot is the smallest square the building fits in, and it can be one row deeper than the SimCity 4 lot. A building that needs more than 4x4 gets no class and stays off.</li>
+  <li><b>Lots up to 4x4.</b> SimCity 3000 grows buildings on square lots, 1x1 to 4x4, so the lot of a growable is the smallest square the building fits in, and it can be one row deeper than the SimCity 4 lot. A building that needs more than 4x4 gets no class and stays off.</li>
+  <li><b>Landmarks and rewards keep their SimCity 4 lot.</b> A landmark or reward goes on the lot it has in SimCity 4 when that lot has at most 5 cells on each side and the building fits it, with the props and lot textures of the whole lot. That lot can be one that is not square: the Alamo and the Mayor's House on 2x3, the Sphinx on 4x2. Otherwise it goes on the smallest square it fits in, up to 5x5. A lot that is not square needs the row Non-square buildings on (<a href="#nonsquare">Lots that are not square</a>).</li>
   <li><b>Landmark versions become landmarks.</b> A SimCity 4 download can hold the same building as a growable, a ploppable and a landmark. The page converts the growable, and the landmark version becomes a landmark (<a href="#landmarks">Landmarks</a>) with the same pictures, named as in SimCity 4 and described as <code>From SimCity 4</code>. A ploppable version gets a landmark entry too, switched off, since SimCity 3000 landmarks have no jobs and it is the same building again. The landmark has the building alone, without the props of its SimCity 4 lot. Our test tower's landmark version went into the landmark menu as a 4x4 landmark and was placed in Madison.</li>
   <li><b>Light painted in.</b> Each SimCity 4 picture is lit from the same side of the screen. In two of the four view rotations the converted houses are lit from the other side than their stock neighbours.</li>
   <li><b>Roofs seen from higher up.</b> SimCity 4 looks down at 45 degrees, SimCity 3000 at 30. In each view one wall is stretched sideways and shows less detail.</li>
@@ -563,7 +569,7 @@ footer a { color: var(--ui-info-text); }
 <ul>
   <li>Homes, utilities and transport buildings of the install. Shops, offices, industry and farms only when you tick the box for them (above).</li>
   <li>Parks and rewards that are only lot props in SimCity 4 (the plazas, gardens, greens, basketball court, skateboard park and both stadiums): 21 buildings, named in the page's note.</li>
-  <li>Buildings that do not fit SimCity 3000's lots: a civic look keeps the stock building's lot (3x3 for a police station), and a reward or landmark can be up to 4x4. Larger ones stay off, with the reason on the card. Of 113 buildings converted from our install, 73 are on.</li>
+  <li>Buildings that do not fit SimCity 3000's lots: a civic look keeps the stock building's lot (3x3 for a police station), and a reward or landmark can be up to 5 cells on each side. Larger ones stay off, with the reason on the card. Of 113 buildings converted from our install, 82 are on (73 when rewards and landmarks were square and at most 4x4).</li>
 </ul>
 <p>Our test, with the Steam SimCity 4 Deluxe: the page converted all 113 of its civic buildings, parks, rewards and landmarks with a model (112 at first, the Large High School since a reader fix), the same files as our Python tool to the byte. In Madison the Small Police Station, the Small Fire Station and the Gazebo each appeared in their button's list window and were placed, the Mayor's House unlocked at population 500, was listed in Rewards and Opportunities and placed, and all four stood where they were after the city was saved and loaded again. The police look drew its own circle on the crime map: bulldozing it took 180 cyan pixels away and added none.</p>
 </section>
