@@ -12,6 +12,8 @@
 //   sub      the 4-building subset (sc4conv.py --only): bldweb.buildFiles from memory = bldimport.py pack (every game
 //            file, ids.json, --frames every frame)
 //   bytes    the bytes read from the install, against its size
+//   growables  task sc4ci: SC4's own shops, offices, industry and farms (opt.growables + opt.only = sc4conv.py
+//            --growables --only), byte for byte, notes, classes (a 4x4 dirty factory 9100, a 5x5 one and a 4x4 farm none)
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -59,7 +61,8 @@ async function samePixels(a, b) {
 const g = (...p) => path.join(golden, ...p);
 const readJson = p => JSON.parse(fs.readFileSync(p, 'utf8'));
 const pyConv = g('conv'), pyFiles = walk(pyConv), subOut = fs.existsSync(g('sub', 'out')) ? walk(g('sub', 'out')) : [];
-const total = 9 + subOut.length + 1 + (wantFrames ? 1 : 0);
+const growDir = g('grow'), hasGrow = fs.existsSync(growDir);   // task sc4ci: the growables subset (sc4_install_setup.py)
+const total = 9 + subOut.length + 1 + (wantFrames ? 1 : 0) + (hasGrow ? 3 : 0);
 let k = 0, bad = 0;
 const line = (what, ok, extra = '') => { k++; bad += !ok; console.log(`[${k}/${total}] ${what} ${ok ? 'PASS' : 'FAIL'}${extra ? ' ' + extra : ''}`); };
 const log = s => console.log('  ' + s);
@@ -149,6 +152,32 @@ if (wantFrames) {
     }
   }
   line(`subset frames vs python cache (${n}, RGBA)`, nb === 0 && n > 0, nb ? `${nb} differ: ${notes.join('; ')}` : '');
+}
+// task sc4ci: SimCity 4's own shops, offices, industry and farms (opt.growables, sc4conv.py --growables), a subset
+if (hasGrow) {
+  const GROW_SUBSET = 'CS$14x14_1ChiSmallShop1_05CD,CS$$14x22_4ChiMediumStore5_05B9,CO$$$44x26_6ChiOfficeBldg9_0507,' +
+    'ID30x30_1DirtyAnchor5_07DE,ID64x46_3DirtyAnchor11_07E4,IM28x74_3ManuOut14_0829,IH28x28_1HTAnchor3_082D,' +
+    'IR30x24_1Farm1_084D,IR60x50_3Farm2_084E,CV24X24_4carLocalPrecinct_030C';
+  const cg = await W.convert(await W.sourcesFrom(installInputs()), { growables: true, only: GROW_SUBSET, log: () => {} });
+  const pyG = walk(growDir), diff = [], pix = [];
+  for (const rel of pyG) {
+    const js = cg.files.get(rel);
+    if (!js) { diff.push(rel + ' missing'); continue; }
+    if (rel.endsWith('.png')) { const d = await samePixels(fs.readFileSync(path.join(growDir, rel)), js); if (d) pix.push(rel + ': ' + d); }
+    else if (!eqBytes(fs.readFileSync(path.join(growDir, rel)), js)) diff.push(rel + ' differs');
+  }
+  line(`growables: ${pyG.length} files (OBJ / MTL / models.json byte for byte, PNG pixel for pixel), file list`,
+    !diff.length && !pix.length && cg.files.size === pyG.length, diff.concat(pix).slice(0, 6).join('; '));
+  line('growables: notes = sc4conv.py', JSON.stringify(cg.notes) === JSON.stringify(readJson(g('grow_notes.json')).notes) &&
+    cg.notes.some(l => /^For testing, 9 of its shops/.test(l)), (cg.notes.find(l => /^For testing/.test(l)) || '').slice(0, 140));
+  const by = new Map(cg.models.map(m => [m.x_sc4.exemplar, m]));
+  const cls = ex => (by.get(ex) || {}).class;
+  const grow = cg.models.filter(m => m.kind === 'growable');
+  const okc = grow.length === 9 && grow.every(m => m.enabled === false) && cls('CS$14x14_1ChiSmallShop1_05CD') === 5100 &&
+    cls('CO$$$44x26_6ChiOfficeBldg9_0507') === 6700 && cls('ID30x30_1DirtyAnchor5_07DE') === 8300 && cls('ID64x46_3DirtyAnchor11_07E4') === 9100 &&
+    cls('IM28x74_3ManuOut14_0829') === null && cls('IH28x28_1HTAnchor3_082D') === 8700 && cls('IR30x24_1Farm1_084D') === 9300 &&
+    cls('IR60x50_3Farm2_084E') === null && (by.get('CV24X24_4carLocalPrecinct_030C') || {}).enabled === true;
+  line(`growables: classes (${grow.map(m => m.x_sc4.exemplar.slice(0, 4) + '=' + m.class).join(', ')}), all off, the police look on`, okc);
 }
 console.log(`${total - bad} of ${total} passed`);
 process.exit(bad ? 1 : 0);

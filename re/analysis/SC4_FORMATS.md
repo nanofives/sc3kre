@@ -615,3 +615,29 @@ drawn textures cover 9-58% of the SC3 lot (median 34%), on SC4's own civic lots 
 - **bldrender `sc3ground`.** Faces of that group are drawn in every slot and shaded as the lawn (kind 2): the stock rim,
   no tone, saturation, grain or contrast, never a shadow caster. A sample on a transparent texel is the lawn itself (not a
   peeled layer: with props, peeling ran out and showed the canvas's empty black texels). bldweb.js does the same.
+
+## 13. SimCity 4's commercial and industrial growables (round 2026-11-20, stream sc4ci)
+
+Read in place from the Steam install, as section 10. Results and the class-rule numbers: `verify/sc4ci/RESULTS.md`.
+
+### 13.1 What files a building as C or I
+
+Purpose (0x27812833) on the install's 713 buildings with a model: 2 service commercial (95: CS $ 23, $$ 38, $$$ 34 by
+wealth 0x27812832), 3 office (124: CO $$ 60, $$$ 64), 5 agriculture (7), 6 dirty industry (34, wealth 2 on all), 7
+manufacturing (25, wealth 2), 8 high-tech (25, wealth 3). None of the 310 carries a civic / park / reward / landmark
+group (section 10.2). Capacity (0x27812834) demand groups: 0x3110 (CS$), 0x3120 (CS$$), 0x3130 (CS$$$), 0x3320 (CO$$),
+0x3330 (CO$$$), 0x4100 (IR), 0x4200 (ID), 0x4300 (IM), 0x4400 (IHT). A CS$$ building lists 0x3110 + 0x3120, a CS$$$
+one all three, a CO$$$ one 0x3320 + 0x3330 (the converter sums them). Jobs: CS 7-3,978, CO 16-21,435, ID 5-158,
+IM 18-78, IHT 18-97, IR 2-13 per building. "Pollution at center" 0x27812851 (the DiegoDL text exemplars name it) holds
+air, water, garbage, radiation: medians ID 9 / 7 / 4 / 0, IM 8 / 5 / 4 / 0, IHT 4 / 2 / 4 / 0, CS 4 / 2 / 5, CO 3 / 2 / 4.
+
+Lots naming the 310 (1,920): 2x3 559, 1x2 307, 2x2 253, 3x3 236, 3x4 185, 1x3 77, 1x1 75, 4x4 75, others up to 6x7.
+
+### 13.2 Flat atlas pieces (`views._uv_area`, `UV_FLAT`)
+
+48 of the 8,532 atlas pieces of the install's 713 models (in 18 buildings) have every vertex on one texture column
+(u = 1.0 on all, texture area 0.0). They cover 0-52 px^2 of a zoom-5 view (0.0%) and fit no offset against the view's
+projection (4-60 px off): on 11 buildings (10 C and I growables and the Large High School of section 10.4) that made the
+whole building fail. `compose_atlas` leaves out a piece whose triangles cover less than 0.5 texel^2. Without them the per-piece errors of
+the other 8,484 pieces run without a gap up to 2.16 px (5 above 2.0, 0 above 2.2): `ATLAS_FIT` 2.0 -> 2.5. All 423 civic,
+park, reward, landmark and C / I buildings of the install convert.

@@ -891,7 +891,8 @@ function SC4WEB_LIB(B) {
     8100: [1], 8300: [2], 8500: [1, 2, 3], 8700: [1, 2], 8900: [2, 3], 9100: [3, 4], 9300: [1, 2, 3] };
   const CLASS_FALLBACK = { 3100: [3700], 3300: [3900], 3500: [3500],
     5100: [5700, 6300], 5500: [6100, 6700], 5700: [6300, 5100], 6100: [6700, 5500], 6300: [5700, 5100], 6700: [6100, 5500],
-    8100: [8300, 8500], 8300: [8500, 8100], 8500: [8300, 8100], 8700: [8900, 9100], 8900: [9100, 8700], 9100: [8900, 8700] };
+    8100: [8300, 8500, 9100], 8300: [8500, 8100, 9100], 8500: [8300, 8100, 9100], 8700: [8900, 9100], 8900: [9100, 8700], 9100: [8900, 8700] };
+  const DIRTY = [8100, 8300, 8500];        // task sc4ci: no dirty class has a 4x4 base, 9100 comes last (sc4conv.DIRTY)
   const PURPOSE_NAME = { 2: 'service commercial', 3: 'office', 5: 'agriculture', 6: 'dirty industry', 7: 'manufacturing', 8: 'high-tech industry' };
   const pyReprVal = v => v === null || v === undefined ? 'None' : v === true ? 'True' : v === false ? 'False' : v instanceof PyFloat ? pyRepr(v.v)
     : Array.isArray(v) ? '[' + v.map(pyReprVal).join(', ') + ']' : typeof v === 'string' ? "'" + v + "'" : String(v);
@@ -926,7 +927,10 @@ function SC4WEB_LIB(B) {
     if (n > 4) return [null, why + '; it needs a ' + n + 'x' + n + ' lot and SC3 lots are 1x1 to 4x4'];
     if (!(CLASS_LOTS[cls] || [n]).includes(n)) {
       const alt = (CLASS_FALLBACK[cls] || []).filter(c => (CLASS_LOTS[c] || []).includes(n));
-      if (alt.length) { why += '; class ' + cls + ' has no ' + n + 'x' + n + ' base, ' + alt[0] + ' does'; cls = alt[0]; }
+      if (!alt.length) return [null, why + '; class ' + cls + ' has no ' + n + 'x' + n + " base in SC3 (bldimport's class table)"];   // task sc4ci
+      why += '; class ' + cls + ' has no ' + n + 'x' + n + ' base, ' + alt[0] + ' does';
+      if (DIRTY.includes(cls) && !DIRTY.includes(alt[0])) why += ' (SC3 has no ' + n + 'x' + n + ' dirty industry base: the clean class, its pollution is lower)';
+      cls = alt[0];
     }
     return [cls, why];
   }
@@ -1785,6 +1789,8 @@ function SC4WEB_LIB(B) {
   //   opt.old: the previous models.json text (keeps the fields the player changed since the converter wrote them)
   //   opt.all, opt.style ('baked'), opt.fill (true), opt.log, opt.progress(i, n)
   //   opt.diagonal: treat buildings set at 45 degrees as any other (sc4conv.py --diagonal; default: off, with a note)
+  //   opt.growables: from an SC4 install, also its shops, offices, industry and farms, all off (--growables, task sc4ci)
+  //   opt.only: a comma list of exemplar names or designs (sc4conv.py --only)
   async function convert(sources, opt = {}) {
     const log = opt.log || (() => {}), style = opt.style || 'baked', fill = opt.fill !== false;
     const idx = await buildIndex(sources, log);
@@ -1792,13 +1798,20 @@ function SC4WEB_LIB(B) {
     let [bs, lots] = buildings(idx);
     const report = [idx.files.length + ' DBPF files, ' + bs.length + ' buildings with S3D models, ' + lots.length + ' lots'];
     log(report[0]);
+    const nModels = bs.length;              // before opt.only, for the install report (sc4conv.py n_models)
+    if (opt.only) {                         // task sc4ci: sc4conv.py --only (exemplar names or designs, comma list)
+      const want = new Set(String(opt.only).split(',').map(x => x.trim().toLowerCase()));
+      bs = bs.filter(b => want.has(b.name.toLowerCase()) || want.has(designOf(b.name)[0].toLowerCase()));
+    }
     const rw = luaRewards(idx), services = new Map();   // task sc4civ: SC4's civic buildings, parks, rewards, landmarks
     for (const b of bs) { const sv = serviceFor(b, rw); if (sv) services.set(tgiKey(...b.tgi), sv); }
-    let states, notes, missing, versions;
+    let states, notes, missing, versions, gset = new Set();
     if (idx.install) {                      // from an install only those, by slices
-      const oth = others(idx)[0], nAll = bs.length + oth.length;
-      bs = bs.filter(b => services.has(tgiKey(...b.tgi)));
-      [notes, missing, versions] = [installNotes(nAll, bs, oth), [], new Map()];
+      const oth = others(idx)[0], nAll = nModels + oth.length;
+      const grow = opt.growables ? installGrowables(bs, services) : [];   // task sc4ci: + the growables, for testing
+      gset = new Set(grow.map(b => tgiKey(...b.tgi)));
+      [notes, missing, versions] = [installNotes(nAll, bs.filter(b => services.has(tgiKey(...b.tgi))), oth, grow), [], new Map()];
+      bs = bs.filter(b => services.has(tgiKey(...b.tgi)) || gset.has(tgiKey(...b.tgi)));
       await fetchModels(idx, buildingModels(idx, bs));
       states = new Map(bs.map(b => [b, modelState(idx, b)]));
     } else {
@@ -1830,10 +1843,11 @@ function SC4WEB_LIB(B) {
     for (let bi = 0; bi < bs.length; bi++) {
       const b = bs[bi];
       if (opt.progress) await opt.progress(bi, bs.length, b);
-      const first = pick.get(keyOf(b)) === b.tgi;
+      const first = pick.get(keyOf(b)) === b.tgi && !gset.has(tgiKey(...b.tgi));   // task sc4ci: the install's growables are off
       let e;
       try { e = writeBuilding(idx, b, files, opt.all || first, style, fill, diag.get(b), !!opt.diagonal, versions.get(b.tgi) || null, pctx); }
       catch (ex) { if (!(ex instanceof Sc4Error)) throw ex; const line = '  skip ' + b.name + ': ' + ex.message; log(line); report.push(line); continue; }
+      if (gset.has(tgiKey(...b.tgi))) e.notes += GROW_NOTE;
       const ed = editableOf(e), auto = {}; for (const k of ed) auto[k] = e[k];   // task sc4civ: + the service fields
       e.x_sc4.auto = auto;
       const pr = e.x_sc4.props || null, tx = e.x_sc4.textures || null;
@@ -2051,7 +2065,7 @@ function SC4WEB_LIB(B) {
   }
 
   // ---- views.compose_atlas: a view whose meshes are pieces of one screen render packed into textures
-  const TILE_FIT = 2.0, ATLAS_FIT = 2.0;
+  const TILE_FIT = 2.0, ATLAS_FIT = 2.5;    // task sc4ci: ATLAS_FIT 2.0 -> 2.5 (views.ATLAS_FIT)
   function atlasCovered(q, tris, w, h) {    // views._covered -> Uint8Array(h * w)
     const out = new Uint8Array(w * h);
     for (const t of tris) {
@@ -2078,14 +2092,26 @@ function SC4WEB_LIB(B) {
     }
     return out;
   }
+  const UV_FLAT = 0.5;                     // task sc4ci: views.UV_FLAT
+  function uvArea(q, tris) {               // views._uv_area
+    let s = 0.0;
+    for (const t of tris) {
+      const a = q[t[0]], b = q[t[1]], c = q[t[2]];
+      s = s + Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+    }
+    return s * 0.5;
+  }
   function composeAtlas(idx, g, meshes, label) {
     const pieces = [];
     for (const m of meshes) {
       const tid = m.mat.tex[0].id, fk = texKey(idx, g, tid);
       if (!idx.has(...fk)) throw new Sc4Error(label + ': texture ' + hexU(tid, 8) + ' not found');
       const bm = readFshFirst(idx.read(...fk));
-      pieces.push({ P: m.P, UV: m.UV, q: m.UV.map(uv => [uv[0] * bm.w, uv[1] * bm.h]), tris: m.tris, bm, tid });
+      const q = m.UV.map(uv => [uv[0] * bm.w, uv[1] * bm.h]);
+      if (uvArea(q, m.tris) < UV_FLAT) continue;   // task sc4ci: a piece on one texture column covers no texel (views._uv_area)
+      pieces.push({ P: m.P, UV: m.UV, q, tris: m.tris, bm, tid });
     }
+    if (!pieces.length) throw new Sc4Error(label + ': every atlas piece is flat in its texture');
     let ref = 0;
     pieces.forEach((pc, i) => { if (pc.P.length > pieces[ref].P.length) ref = i; });
     const [A] = fitCamera(pieces[ref].P, pieces[ref].UV, pieces[ref].bm.w, pieces[ref].bm.h);
@@ -2252,14 +2278,26 @@ function SC4WEB_LIB(B) {
     else if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 landmarks are 1x1 to 4x4.';
     return { kind: 'landmark', lot: n, ok, why, note, x, description: SC4_DESC };
   }
-  function installNotes(nAll, bs, oth) {    // sc4conv.install_notes
+  function installNotes(nAll, bs, oth, grow = []) {    // sc4conv.install_notes
     const nolook = oth.filter(o => o.groups.some(g => [G_CIVIC, G_PARK, G_REWARD, G_LANDMARK].includes(g)));
     const lines = ['SimCity 4 install: ' + bs.length + ' of its ' + nAll + ' buildings are civic buildings, parks, rewards or landmarks with a model;' +
       ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install'];
     if (nolook.length) lines.push(nolook.length + ' more civic buildings, parks, rewards or landmarks have no model of their own (their look is lot' +
       ' props), not converted: ' + nolook.map(labelOf).join(', '));
+    if (grow.length) {                      // task sc4ci
+      const cnt = GROW_PURPOSES.map(p => [p, grow.filter(b => pyEqInt(b.purpose, p)).length]);
+      lines.push('For testing, ' + grow.length + ' of its shops, offices, industry and farms (SimCity 4 growables) are converted too,' +
+        ' all off: ' + cnt.filter(([, k]) => k).map(([p, k]) => k + ' ' + GROW_LABEL[p][k !== 1 ? 1 : 0]).join(', '));
+    }
     return lines;
   }
+  // task sc4ci (2026-11-20): SimCity 4's own commercial and industrial growables (sc4conv.install_growables, --growables):
+  // converted for testing only, every entry off; whether the page offers them to players is the owner's call
+  const GROW_PURPOSES = [2, 3, 5, 6, 7, 8];
+  const GROW_LABEL = { 2: ['shop', 'shops'], 3: ['office', 'offices'], 5: ['farm', 'farms'], 6: ['dirty industry', 'dirty industry'],
+    7: ['manufacturing', 'manufacturing'], 8: ['high-tech industry', 'high-tech industry'] };
+  const GROW_NOTE = " SimCity 4's own growable from your game, converted for testing: off by default.";
+  const installGrowables = (bs, services) => bs.filter(b => !services.has(tgiKey(...b.tgi)) && GROW_PURPOSES.some(p => pyEqInt(b.purpose, p)));
 
   // ================================================================================================ inputs
   // Python's walk (catalog.dbpf_files): a folder's files sorted, then its folders sorted, depth first

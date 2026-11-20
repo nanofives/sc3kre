@@ -1154,6 +1154,9 @@ const SC4_RULE = 'SimCity 4 buildings are their authors\' work. Convert your own
 // task sc4baseprops: the SimCity 4 game opened with Open SC4 game (or its .dat files picked alone) is kept for this page
 // session, and the SC4 downloads opened after it get the game's own props (shrubs, trees, cars) on their lots
 let sc4GameSources = null;
+// task sc4ci (2026-11-20): SimCity 4's own shops, offices, industry and farms from the game, converted for testing
+// only (every entry off), when the page is opened with ?sc4growables. Whether players get them is the owner's call.
+const SC4_GROWABLES = typeof location !== 'undefined' && new URLSearchParams(location.search).has('sc4growables');
 function rememberSc4Game(sources) { if (sources && sources.install) sc4GameSources = sources; }
 async function openSc4(inputs, opt = {}) {
   setStatus('Reading the SimCity 4 files...');
@@ -1163,6 +1166,7 @@ async function openSc4(inputs, opt = {}) {
   const gameProps = sources.install ? null : sources.sc4 ? 'picked' : sc4GameSources ? 'remembered' : null;
   const t0 = performance.now();
   const r = await W4.convert(sources, { old: opt.oldText || null, log, sc4: sources.sc4 || (sources.install ? null : sc4GameSources),
+    growables: !!(opt.growables || SC4_GROWABLES) && !!sources.install,
     progress: async (i, n, b) => { if (i % 8 === 0) { setStatus(`Converting SimCity 4 building ${i + 1} of ${n}: ${b.name}`); await new Promise(res => setTimeout(res, 0)); } } });
   const all = [], models = [];
   // task sc4civ: one card per models.json entry. A building with lot props has two OBJ files, <stem>.obj (the building
