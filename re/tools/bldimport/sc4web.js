@@ -1004,7 +1004,7 @@ function SC4WEB_LIB(B) {
     const diag = !!(dg && dg.diagonal);
     const what = pyEqInt(b.purpose, 1) ? 'house' : 'building';
     const entry = {
-      file: stem + '.obj', name: title, kind: 'growable', class: cls, lot: [n, n], weight: 1,
+      file: stem + '.obj', name: title, kind: 'growable', class: cls, lot: lotWd(n), weight: 1,
       height_m: new PyFloat(pyRound(b.size_m[1], 2)), scale: new PyFloat(1.0), rotate_deg: 0, style: 'any',
       enabled: !!(enabled && cls !== null && (keepDiag || !diag)),
       notes: (diag ? diagNote(dg) : '') + why + '. SC4 lots ' + (sc4lots.join(', ') || 'none') + ', the SC3 lot keeps the ' + what + ' (' + pyFixed(b.size_m[0], 1) + ' x ' + pyFixed(b.size_m[2], 1) + ' m) and drops the yard.',
@@ -1147,8 +1147,8 @@ function SC4WEB_LIB(B) {
     const W = lot.size[0] * CELL_M, Dp = lot.size[1] * CELL_M;
     const cs = [[0.0, 0.0], [W, Dp]].map(([cx, cz]) => turn(cx - hrow.x, cz - hrow.z, -(kb - 2)));
     const L = [Math.min(cs[0][0], cs[1][0]), Math.max(cs[0][0], cs[1][0]), Math.min(cs[0][1], cs[1][1]), Math.max(cs[0][1], cs[1][1])];
-    const S = n * CELL_M;
-    const wx = windowAxis(L[0], L[1], box[0], box[1], S, false), wz = windowAxis(L[2], L[3], box[2], box[3], S, true);
+    const Sx = (Array.isArray(n) ? n[0] : n) * CELL_M, Sz = (Array.isArray(n) ? n[1] : n) * CELL_M;   // task lotshape: [w, d]
+    const wx = windowAxis(L[0], L[1], box[0], box[1], Sx, false), wz = windowAxis(L[2], L[3], box[2], box[3], Sz, true);
     const win = [wx[0], wx[1], wz[0], wz[1]], rows = [];
     lot.objects.forEach((o, k) => {
       if (o.type !== 1 || !o.ids.length) return;
@@ -1342,14 +1342,15 @@ function SC4WEB_LIB(B) {
   }
   function lotComposite(pl, rows, n, cache) {   // lottex.composite -> [RGBA image, stats]
     const [x0w, , z0w] = pl.window, hx = pl.house.x, hz = pl.house.z, q = pyMod(pl.kb - 2, 4);
-    const P = n * 16 * LOT_PX_M, NP = P * P;
+    // task lotshape: a [w, d] lot is PX = w x 128 columns (model x) by PZ = d x 128 rows (model z)
+    const PX = (Array.isArray(n) ? n[0] : n) * 16 * LOT_PX_M, PZ = (Array.isArray(n) ? n[1] : n) * 16 * LOT_PX_M, NP = PX * PZ;
     const lx = new Float64Array(NP), lz = new Float64Array(NP);
-    for (let j = 0; j < P; j++) {
+    for (let j = 0; j < PZ; j++) {
       const mz = z0w + (j + 0.5) * (1.0 / LOT_PX_M);
-      for (let i = 0; i < P; i++) {
+      for (let i = 0; i < PX; i++) {
         let ax = x0w + (i + 0.5) * (1.0 / LOT_PX_M), az = mz;
         for (let t = 0; t < q; t++) { const nx = -az, nz = ax; ax = nx; az = nz; }   // turn(model, kb - 2), QUARTER -1
-        lx[j * P + i] = ax + hx; lz[j * P + i] = az + hz;
+        lx[j * PX + i] = ax + hx; lz[j * PX + i] = az + hz;
       }
     }
     const ims = [];
@@ -1389,7 +1390,7 @@ function SC4WEB_LIB(B) {
       nSc4 += sc4; nLawn += lawn; nDrawn += d[4 * k + 3] >= 128;
     }
     const tot = NP;
-    return [{ w: P, h: P, d }, { sc4_ground: new PyFloat(pyRound(nSc4 / tot, 4)), lawn: new PyFloat(pyRound(nLawn / tot, 4)), drawn: new PyFloat(pyRound(nDrawn / tot, 4)) }];
+    return [{ w: PX, h: PZ, d }, { sc4_ground: new PyFloat(pyRound(nSc4 / tot, 4)), lawn: new PyFloat(pyRound(nLawn / tot, 4)), drawn: new PyFloat(pyRound(nDrawn / tot, 4)) }];
   }
   function lotSummary(pl, rows, stats) {    // lottex.summary
     const st = countBy(rows.map(r => r.state));
@@ -1760,7 +1761,7 @@ function SC4WEB_LIB(B) {
       if (!(vs && vs.length)) continue;
       const n = lotFor(b);
       let tail;
-      if (!LANDMARK_LOTS.includes(n)) tail = 'not converted: SC3 landmarks are 1x1 to 4x4 and this building needs ' + n + 'x' + n;
+      if (!LANDMARK_LOTS.includes(n)) tail = 'not converted: SC3 landmarks are 1x1 to 5x5 and this building needs ' + n + 'x' + n;
       else {
         const on = vs.filter(v => versionOn(vs, v, n)).map(v => v.lot), off = vs.filter(v => !versionOn(vs, v, n)).map(v => v.lot);
         tail = 'converted as ' + (vs.length > 1 ? 'SC3 landmarks' : 'an SC3 landmark') + ' for the landmark menu (kind landmark), ' + (on.join(', ') || 'none') + ' on';
@@ -1774,7 +1775,24 @@ function SC4WEB_LIB(B) {
   // ================================================================================================ SC4 landmarks (task plop2)
   // sc4conv.landmark_entry and helpers: an SC4 landmark / ploppable lot of a converted building becomes an SC3 landmark
   // entry (kind landmark) whose OBJ is a byte copy of the building's own <stem>.obj.
-  const LANDMARK_LOTS = [1, 2, 3, 4], LANDMARK_DESC = 'From SimCity 4';
+  const LANDMARK_LOTS = [1, 2, 3, 4, 5], LANDMARK_DESC = 'From SimCity 4', RECT_MAX = 5;   // task lotshape: 5x5
+  const lotWd = n => (Array.isArray(n) ? [n[0], n[1]] : [n, n]);
+  function realLot(b, lots) {               // sc4conv.real_lot (task lotshape): the SC4 lot in the model frame, or null
+    const got = lots ? chooseLot(b, lots) : null;
+    if (!got) return null;
+    const [lot, hrow] = got;
+    const [w, d] = (hrow.rot & 3) % 2 === 0 ? [lot.size[0], lot.size[1]] : [lot.size[1], lot.size[0]];
+    if (!(1 <= w && w <= RECT_MAX && 1 <= d && d <= RECT_MAX)) return null;
+    if (b.size_m[0] > w * CELL_M + 1e-6 || b.size_m[2] > d * CELL_M + 1e-6) return null;
+    return w === d ? w : [w, d];
+  }
+  function lotNote(n, sq) {                 // sc4conv.lot_note
+    if (!Array.isArray(n) && n === sq) return '';
+    const [w, d] = lotWd(n);
+    let t = ' SC3 lot ' + w + 'x' + d + ", SimCity 4's own lot (the props and lot textures of the whole lot).";
+    if (Array.isArray(n)) t += ' Not square: drawn whole in the game with the mods page row Non-square buildings on.';
+    return t;
+  }
   const LANDMARK_EDITABLE = EDITABLE.concat(['kind', 'description']);
   function versionOn(vs, v, n) {
     if (!LANDMARK_LOTS.includes(n)) return false;
@@ -1789,7 +1807,7 @@ function SC4WEB_LIB(B) {
     const n = lotFor(b), x = e.x_sc4, diag = !!x.diagonal;
     let notes = 'SC4 ' + v.kind + ' lot ' + v.lot + ' (building ' + v.building + ') as an SC3 landmark: the landmark menu, one per city, stats of a stock' +
       " landmark of the lot. The model is " + labelOf(b) + " without the SC4 lot's props.";
-    if (!LANDMARK_LOTS.includes(n)) notes += ' Off: SC3 landmarks are 1x1 to 4x4, this building needs ' + n + 'x' + n + '.';
+    if (!LANDMARK_LOTS.includes(n)) notes += ' Off: SC3 landmarks are 1x1 to 5x5, this building needs ' + n + 'x' + n + '.';
     else if (!versionOn(vs, v, n)) notes += ' Off by default: the same building as the landmark entry, and SC3 landmarks have no jobs.';
     return {
       file: landmarkFile(b, v, vs), name: v.building, kind: 'landmark', class: null, lot: [n, n], weight: 1, height_m: e.height_m,
@@ -1828,7 +1846,7 @@ function SC4WEB_LIB(B) {
       bs = bs.filter(b => want.has(b.name.toLowerCase()) || want.has(designOf(b.name)[0].toLowerCase()));
     }
     const rw = luaRewards(idx), services = new Map();   // task sc4civ: SC4's civic buildings, parks, rewards, landmarks
-    for (const b of bs) { const sv = serviceFor(b, rw); if (sv) services.set(tgiKey(...b.tgi), sv); }
+    for (const b of bs) { const sv = serviceFor(b, rw, lots); if (sv) services.set(tgiKey(...b.tgi), sv); }
     let states, notes, missing, versions, gset = new Set();
     if (idx.install) {                      // from an install only those, by slices
       const oth = others(idx)[0], nAll = nModels + oth.length;
@@ -2255,12 +2273,13 @@ function SC4WEB_LIB(B) {
     const oth = r.others.join(', ');
     return 'SC4 offers it as a reward when ' + cmp + (oth ? ' (also: ' + oth + ')' : '');
   }
-  function serviceFor(b, rw) {
+  function serviceFor(b, rw, lots) {       // task lotshape: lots = the catalog's lots (realLot)
     const gs = b.groups || [];
     let sk;
     if (gs.includes(G_LANDMARK)) sk = 'landmark'; else if (gs.includes(G_REWARD)) sk = 'reward';
     else if (gs.includes(G_PARK)) sk = 'park'; else if (gs.includes(G_CIVIC)) sk = 'civic'; else return null;
-    const n = lotFor(b), title = labelOf(b), svc = gs.filter(g => CIVIC_SERVICE.has(g)).map(g => CIVIC_SERVICE.get(g));
+    let n = lotFor(b);
+    const title = labelOf(b), svc = gs.filter(g => CIVIC_SERVICE.has(g)).map(g => CIVIC_SERVICE.get(g));
     const r = rw.get(b.tgi[2]) || null;
     const x = { sc4_kind: sk, groups: groupsHex(gs) };
     if (r) x.reward = { advisor: r.advisor, compares: r.compares.map(([m, v]) => [m, v]), others: r.others };
@@ -2284,22 +2303,27 @@ function SC4WEB_LIB(B) {
       if (rwn) note += ' ' + rwn + '; in SC3 it is a look like the others.';
       return { kind: 'civic', base, lot: bl, ok, why, note, x };
     }
+    const sq = n;
+    if ((sk === 'reward' || sk === 'landmark') && !why0) n = realLot(b, lots) || n;   // task lotshape: SC4's own lot
+    const fits = lotWd(n).every(v => LANDMARK_LOTS.includes(v));
     if (sk === 'reward') {
       const pop = r && r.population !== null ? r.population : null;
       let why = 'SC4 reward (group 150B)';
       if (svc.length) why += ', also SC4 ' + svc.join('/') + ' service';
-      const ok = LANDMARK_LOTS.includes(n);
+      const ok = fits;
       const popw = pop !== null ? 'SC3 population ' + pop + ' (' + r.measure + ')'
         : 'SC3 population ' + REWARD_POP + ', the default: ' + (r ? 'no SC4 condition counts the whole city' : 'no SC4 reward condition found');
       let note = why + '. ' + (rwn || 'No SC4 reward record') + '. ' + popw + ', year 0 (no SC4 reward condition reads the year).';
       if (svc.length && svc[0] in CIVIC_LOT) note += ' As a look of the SC3 ' + CIVIC_LABEL[svc[0]] + ' button instead: kind civic, base ' + svc[0] + '.';
-      if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 rewards are 1x1 to 4x4.';
+      if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 rewards are 1x1 to 5x5.';
+      note += lotNote(n, sq);
       return { kind: 'reward', lot: n, ok, why, note, x, population: pop !== null ? pop : REWARD_POP, year: 0, description: SC4_DESC };
     }
-    const why = why0 || 'SC4 landmark (group 150A)', ok = LANDMARK_LOTS.includes(n) && !why0;
+    const why = why0 || 'SC4 landmark (group 150A)', ok = fits && !why0;
     let note = why + ': an SC3 landmark (the landmark menu, one per city).';
     if (why0) note += ' Off: SC3 has no button for it.';
-    else if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 landmarks are 1x1 to 4x4.';
+    else if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 landmarks are 1x1 to 5x5.';
+    note += lotNote(n, sq);
     return { kind: 'landmark', lot: n, ok, why, note, x, description: SC4_DESC };
   }
   function installNotes(nAll, bs, oth, grow = []) {    // sc4conv.install_notes

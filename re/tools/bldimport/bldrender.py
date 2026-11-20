@@ -22,6 +22,13 @@ zoom 4 = zoom 3 doubled, 255-colour palette per frame, stock contrast / saturati
 darker front lawn edge), `stock_sharp` (the same with a native zoom 4), `clean` (the 2026-11-18b look, byte for
 byte). Pick one with render_model(..., style=) or $SC3BLD_STYLE.
 
+Non-square lots (task lotshape, 2026-11-20): every `n` below may also be a pair (w, d) = SizeInCellsX, SizeInCellsZ
+(prop 0x66 values 0 and 2). Slot 0 has u = 0..w and v = 0..d (u runs along the world x axis, v along z: the probe's view
+transform, re/analysis/LOT_SHAPES.md 2); each slot step turns (u, v) -> (v, e_u - u) with e_u the u extent before the
+step, so slots 1 and 3 are d x w. Frame width (e_u + e_v) * W / 2, B = e_v * W / 4 + 1, anchor (0, T) at the lot's
+left vertex, which is where sc3perf LOTRECT registers a non-square sprite in every view rotation (LOT_SHAPES.md 8.4).
+A square n and (n, n) give the same bytes.
+
 Public: load_obj, place, render_model -> {(z, r): (RGBA image, (L, T))}, CALIB, STYLES, DEFAULT_STYLE.
 """
 import math
@@ -50,7 +57,22 @@ CALIB = {0: (0.0, 0.75, {1: 0.5, 2: 0.5, 3: 0.25, 4: 0.5}),
          4: (0.0, 1.0, {1: 0.25, 2: 0.5, 3: 0.5, 4: 0.5})}
 
 
+def lot_ext(n):
+    """Lot size -> (w, d): an int n is (n, n) (task lotshape)."""
+    if isinstance(n, (tuple, list)):
+        return int(n[0]), int(n[1])
+    return n, n
+
+
+def slot_ext(n, r):
+    """(u, v) extents of the lot in rotation slot r: (w, d) in slots 0 and 2, (d, w) in 1 and 3."""
+    w, d = lot_ext(n)
+    return (w, d) if r % 2 == 0 else (d, w)
+
+
 def _growth(g, n):
+    if isinstance(n, (tuple, list)):
+        n = max(lot_ext(n))           # task lotshape: the longer side [UNCERTAIN: no stock non-square lot to fit]
     if not isinstance(g, dict):
         return g
     ks = [k for k in sorted(g) if k <= n]
@@ -270,8 +292,12 @@ def bbox(mesh):
 
 def place(mesh, n, cell_m=16.0, scale=1.0, rotate_deg=0.0):
     """Metres (Y up) -> tile coordinates (u, v, h) in cells, footprint centred on the n x n lot, base on the ground.
-    rotate_deg turns the model counter-clockwise seen from above (about +Y) before it is placed.
+    rotate_deg turns the model counter-clockwise seen from above (about +Y) before it is placed. Task lotshape: n =
+    (w, d) centres the model's x on w and its z on d.
     -> (mesh copy with tri in (u, v, h), info dict)."""
+    if isinstance(n, (tuple, list)) and n[0] != n[1]:
+        return _place_rect(mesh, lot_ext(n), cell_m, scale, rotate_deg)
+    n = lot_ext(n)[0]
     p = mesh["tri"].reshape(-1, 3) * float(scale)
     a = math.radians(rotate_deg)
     c, s = math.cos(a), math.sin(a)
@@ -289,11 +315,38 @@ def place(mesh, n, cell_m=16.0, scale=1.0, rotate_deg=0.0):
     return out, info
 
 
+def _place_rect(mesh, wd, cell_m, scale, rotate_deg):
+    """place() for a w x d lot (task lotshape): the same steps, u centred on w / 2 and v on d / 2."""
+    w, d = wd
+    p = mesh["tri"].reshape(-1, 3) * float(scale)
+    a = math.radians(rotate_deg)
+    c, s = math.cos(a), math.sin(a)
+    x = p[:, 0] * c + p[:, 2] * s
+    zz = -p[:, 0] * s + p[:, 2] * c
+    y = p[:, 1]
+    x0, x1, z0, z1, y0, y1 = x.min(), x.max(), zz.min(), zz.max(), y.min(), y.max()
+    u = (x - (x0 + x1) / 2.0) / cell_m + w / 2.0
+    v = (zz - (z0 + z1) / 2.0) / cell_m + d / 2.0
+    h = (y - y0) / cell_m
+    out = dict(mesh)
+    out["tri"] = np.stack([u, v, h], 1).reshape(-1, 3, 3)
+    info = {"size_m": [float(x1 - x0), float(y1 - y0), float(z1 - z0)], "lot_m": [w * cell_m, d * cell_m],
+            "fits": bool(x1 - x0 <= w * cell_m + 1e-6 and z1 - z0 <= d * cell_m + 1e-6)}
+    return out, info
+
+
 # ============================================================================================== raster core
 
 def _rot_slot(t, n, r):
-    """(u, v, h) of slot 0 -> slot r: r x (u, v) -> (v, n - u)."""
+    """(u, v, h) of slot 0 -> slot r: r x (u, v) -> (v, n - u). Task lotshape: n = (e_u, e_v), the extents of the slot
+    the points are in; each step uses the current u extent, and the extents swap."""
     u, v, h = t[..., 0], t[..., 1], t[..., 2]
+    if isinstance(n, (tuple, list)):
+        eu, ev = n
+        for _ in range(r % 4):
+            u, v = v, eu - u
+            eu, ev = ev, eu
+        return np.stack([u, v, h], -1)
     for _ in range(r % 4):
         u, v = v, n - u
     return np.stack([u, v, h], -1)
@@ -382,7 +435,13 @@ GRASS_TEXELS_PER_CELL = 90.0
 
 
 def ground_mesh(n, g, kind="grass", paved=None):
-    """Two triangles over the lot [-g, n+g]^2 at h = -1e-4, uv = lot coordinates."""
+    """Two triangles over the lot [-g, n+g]^2 at h = -1e-4, uv = lot coordinates. n = (w, d): [-g, w+g] x [-g, d+g]."""
+    if isinstance(n, (tuple, list)):
+        w, d = n
+        a, bu, bv = -g, w + g, d + g
+        tri = np.array([[[a, a, -1e-4], [bu, a, -1e-4], [bu, bv, -1e-4]],
+                        [[a, a, -1e-4], [bu, bv, -1e-4], [a, bv, -1e-4]]], dtype=np.float64)
+        return tri, tri[..., :2].copy()
     a, b = -g, n + g
     tri = np.array([[[a, a, -1e-4], [b, a, -1e-4], [b, b, -1e-4]],
                     [[a, a, -1e-4], [b, b, -1e-4], [a, b, -1e-4]]], dtype=np.float64)
@@ -483,11 +542,18 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
     """One frame. mesh tri in slot-0 tile coords (u, v, h). -> (RGBA PIL image, (L, T))."""
     sname, st = style_of(style)
     mesh = slot_mesh(mesh, r)
+    # task lotshape: a non-square lot (w, d) keeps its extents per slot (ex0 slot 0, exr slot r); a square one is n
+    rect = isinstance(n, (tuple, list)) and n[0] != n[1]
+    if isinstance(n, (tuple, list)) and not rect:
+        n = lot_ext(n)[0]
+    ex0 = lot_ext(n) if rect else n
+    exr = slot_ext(n, r) if rect else n
+    eu, ev = lot_ext(exr)
     W = 8 << z
     dx, dy, g_px = (calib or CALIB)[z]
     g_px = _growth(g_px, n)
     g = g_px / (W / 2.0)                                         # px of growth -> tile units along u / v
-    parts = [_rot_slot(mesh["tri"], n, r)]
+    parts = [_rot_slot(mesh["tri"], ex0, r)]
     parts0 = [mesh["tri"]]
     # kind 0 model, 1 the lawn, 2 ground art of the model (sc3ground faces, task sc4lottex)
     gf = mesh.get("ground")
@@ -495,18 +561,18 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
     n_ground = int((kinds[0] == 2).sum())
     gmesh = gf if n_ground else None
     if ground:
-        gt, guv = ground_mesh(n, g)
-        parts.append(_rot_slot(gt, n, r))
+        gt, guv = ground_mesh(ex0, g)
+        parts.append(_rot_slot(gt, ex0, r))
         parts0.append(gt)
         kinds.append(np.ones(2, dtype=np.int8))
     t = np.concatenate(parts)
     t0 = np.concatenate(parts0)                                  # the same triangles in slot 0 (model axes)
     kind = np.concatenate(kinds)
     X, Y = _screen(t, W)
-    B = n * W // 4 + 1
-    top = max(int(math.ceil(-Y.min() + 1)), n * W // 4)
+    B = ev * W // 4 + 1
+    top = max(int(math.ceil(-Y.min() + 1)), eu * W // 4)
     Hh = top + B
-    Ww = n * W
+    Ww = (eu + ev) * W // 2
     sx = (X + dx) * ss
     sy = (Y + top + dy) * ss
     dep = depth_of(t)
@@ -588,16 +654,16 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
             # of the frame, in every slot): a patchy band about rim["width"] cells deep (BUILDING_ART.md 4.1)
             ig = is_g | is_l
             pg = pts[ig]
-            d = np.minimum(pg[:, 0], n - pg[:, 1])
+            d = np.minimum(pg[:, 0], ev - pg[:, 1])
             fall = np.clip(1.0 - d / rim["width"], 0, 1) ** 1.5
-            patch = np.clip(0.55 + 0.6 * _value_noise(_rot_slot(pg, n, (4 - r) % 4), 4.0, 11), 0, 1)
+            patch = np.clip(0.55 + 0.6 * _value_noise(_rot_slot(pg, exr, (4 - r) % 4), 4.0, 11), 0, 1)
             lg = light[ig] * (1.0 - _pz(rim["dark"], z) * fall * patch)
             light = light.copy()
             light[ig] = lg
         if is_g.any():
             gtex = ground_tex if ground_tex is not None else grass_texture(**_grass_args(st, z))
             # ground uv in slot-0 lot coordinates: undo the slot rotation of the sample position
-            p0 = _rot_slot(pts[is_g], n, (4 - r) % 4)
+            p0 = _rot_slot(pts[is_g], exr, (4 - r) % 4)
             k_uv = GRASS_TEXELS_PER_CELL / gtex.shape[0]
             alb[is_g] = _sample_tex(gtex, np.stack([p0[:, 0] * k_uv, p0[:, 1] * k_uv], 1))
         if is_l.any():                                            # task sc4lottex: ground art, its texture as it is
@@ -637,7 +703,7 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
                 k = 1.0 + (_pz(st["sat"], z) - 1.0) * (1.0 - s0)
                 a2 = np.clip(y + (a2 - y) * k, 0, 1)
             if _pz(st["grain"], z):                                      # surface grain of the stock textures
-                nz = _grain(_rot_slot(pts[mi], n, (4 - r) % 4), W)
+                nz = _grain(_rot_slot(pts[mi], exr, (4 - r) % 4), W)
                 a2 = np.clip(a2 * (1.0 + _pz(st["grain"], z) * nz)[:, None], 0, 1)
             alb[mi] = a2
         if _pz(st["edge"], z):

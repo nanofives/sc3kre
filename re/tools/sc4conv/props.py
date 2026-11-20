@@ -31,7 +31,8 @@ Steps (all plain float arithmetic in a fixed order; sc4web.js runs the same step
    lots a house with kb = 2 faces the lot's +z edge (the street: the front setback is 13.3-13.7 m on every 1x2 and
    1x3 lot, the back yard 9-25 m), and the house model's front is +Z, so the lot frame turned by kb - 2 quarter turns
    is the model frame. A prop with rotation kp is turned kp - kb quarter turns (QUARTER below) and moved to its centre.
-4. The SC3 lot window: an n x n x 16 m square in the model frame holding the house. Per axis: when the SC4 lot is no
+4. The SC3 lot window: an n x n x 16 m square in the model frame holding the house (task lotshape: a w x d lot, w
+   along model x and d along z, for a landmark or reward on its SC4 lot, sc4conv.real_lot). Per axis: when the SC4 lot is no
    longer than the window, the window is centred on the SC4 lot (a 1-tile-wide lot keeps its exact width, the house
    off-centre as SC4 draws it); else across the street (x) the window is centred on the house and slid into the lot,
    along the depth (z) it starts at the house's back wall and keeps the front yard up to the street (the cars, the
@@ -310,9 +311,12 @@ def plan(b, lots, sources, house_box, n):
     corners = [turn(cx - hrow['x'], cz - hrow['z'], -(kb - 2)) for cx, cz in ((0.0, 0.0), (W, Dp))]
     L = [min(corners[0][0], corners[1][0]), max(corners[0][0], corners[1][0]),
          min(corners[0][1], corners[1][1]), max(corners[0][1], corners[1][1])]
-    S = n * CELL_M
-    wx = window_axis(L[0], L[1], house_box[0], house_box[1], S, False)
-    wz = window_axis(L[2], L[3], house_box[2], house_box[3], S, True)
+    if isinstance(n, (tuple, list)):      # task lotshape: (w, d) cells
+        Sx, Sz = n[0] * CELL_M, n[1] * CELL_M
+    else:
+        Sx = Sz = n * CELL_M
+    wx = window_axis(L[0], L[1], house_box[0], house_box[1], Sx, False)
+    wz = window_axis(L[2], L[3], house_box[2], house_box[3], Sz, True)
     win = (wx[0], wx[1], wz[0], wz[1])
     rows = []
     for k, o in enumerate(lot['objects']):

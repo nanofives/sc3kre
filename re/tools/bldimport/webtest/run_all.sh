@@ -20,6 +20,8 @@
 # into Apps/PlugIn, the 2000 art converted).
 # civmod (2026-11-19j): golden case civic (kinds civic and reward: two plugins + the sc3resize ini files) and the page
 # installing it (pagetest.mjs civic).
+# lotshape (2026-11-20): golden case lotshape (non-square landmarks and rewards, 5x5; make_testmodels.py --lotshape) in
+# golden_setup / golden.mjs and the page installing it (pagetest.mjs lotshape).
 # plop2 (2026-11-19i): golden case landmarkdesc and the page's Description box (pagetest.mjs --edit-desc: blanked, typed
 # in the panel, installed from the page's own models.json = bldimport.py); the SC4 tower's landmark / ploppable lots as
 # kind landmark entries and a rerun that keeps their description (sc4_packs.mjs, in the 6th argument's steps).
@@ -45,7 +47,7 @@ if [ -z "${SC3PACK_PACKS:-}" ] && [ ! -d "$packs" ]; then
     common="$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
     [ -n "$common" ] && [ -d "$(dirname "$common")/stage/st_packs" ] && packs="$(dirname "$common")/stage/st_packs"
 fi
-steps=22; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
+steps=23; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=$((steps + 4))
 # sc4props (2026-11-19g): SC4 lot props from the BSC Common Dependencies Pack, when the 6th argument's folder holds it
 # (and the JMyers .zip + folder are given): sc4_props_setup.py (sc4conv.py --deps) + sc4_props.mjs (sc4web.js streams
 # the 1.7 GB zip as the page does: slices and a stream, never read whole)
@@ -70,11 +72,11 @@ sc4base=""; [ -n "${SC4INSTALL:-}" ] && [ -n "$bsc" ] && sc4base=1 && steps=$((s
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
 step() { n=$((n + 1)); local name="$1"; shift; if "$@"; then echo "[$n/$steps] $name PASS"; else echo "[$n/$steps] $name FAIL"; bad=$((bad + 1)); fi; }
-step "golden_setup (bldimport.py pack, 8 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
-step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles,ports,landmarks,civic --frames
+step "golden_setup (bldimport.py pack, 9 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
+step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles,ports,landmarks,civic,lotshape --frames
 step "install_golden.mjs (install, re-install, restore)" node "$here/install_golden.mjs" --golden "$work" --game "$game" --case kenney
 step "zip_golden.mjs (.zip route)" node "$here/zip_golden.mjs" --golden "$work" --game "$game" --case kenney
-for c in kenney bld styles ports landmarks civic; do
+for c in kenney bld styles ports landmarks civic lotshape; do
   step "pagetest.mjs $c (the page in headless Chrome)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case "$c"
 done
 step "pagetest.mjs landmarkdesc (the Description box typed in the page, installed = bldimport.py)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case landmarkdesc --edit-desc "obelisk_2x2.obj=Typed in the page, Córdoba"
@@ -121,9 +123,10 @@ if [ -n "${SC4INSTALL:-}" ]; then
   step "sc4_install_setup.py (sc4conv.py on the SC4 install: civic, parks, rewards, landmarks; rerun; subset packed)" $py "$here/sc4_install_setup.py" --install "$SC4INSTALL" --game "$game" --out "$work/sc4install"
   step "sc4_install.mjs (sc4web.js on the SC4 install by slices: files, kinds, rerun, subset pack, frames)" node "$here/sc4_install.mjs" --golden "$work/sc4install" --install "$SC4INSTALL" --game "$game" --frames
   # sc4ci (2026-11-20): 113 cards, the Large High School converts since flat atlas pieces are left out (off: 6x6)
-  step "pagetest.mjs sc4install (the page opens the install's .dat files: 113 cards, 73 on, read only)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 113,73
+  # lotshape (2026-11-20): 82 on (73 before): rewards and landmarks keep their SC4 lot up to 5x5, and 5x5 is allowed
+  step "pagetest.mjs sc4install (the page opens the install's .dat files: 113 cards, 82 on, read only)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 113,82
   # owner 2026-11-20: the page's "with shops, offices, industry and farms" box ticked: 310 more cards, all off
-  step "pagetest.mjs sc4install --sc4grow (the box ticked: 423 cards, the 310 growables off, 73 on)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 423,73 --sc4grow --expect-grow 310
+  step "pagetest.mjs sc4install --sc4grow (the box ticked: 423 cards, the 310 growables off, 82 on)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 423,82 --sc4grow --expect-grow 310
 fi
 if [ -n "$sc4base" ]; then
   step "sc4_baseprops_setup.py (sc4conv.py --sc4: JMyers with SC4's own props, with and without the BSC pack, bldimport.py pack)" $py "$here/sc4_baseprops_setup.py" --sc4 "$sc4dir" --deps "$bsc" --install "$SC4INSTALL" --game "$game" --out "$work/sc4baseprops"

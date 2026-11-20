@@ -46,8 +46,11 @@ models.json 'file' follows the two switches x_sc4.props.on and x_sc4.textures.on
 Civic buildings, parks, rewards and landmarks (task sc4civ, 2026-11-19l, re/analysis/SC4_FORMATS.md 10): a building
 SC4 files under OccupantGroups 0x1005 (civic), 0x1006 (park), 0x150B (reward) or 0x150A (landmark) is written as the
 matching bldimport plugin kind instead of a growable (service_for): civic and parks as "civic" looks of the SC3 button
-for the same service (base, the base's lot), rewards as "reward" (lot = the smallest square, population from SC4's own
-Lua reward condition when it counts the whole city, else REWARD_POP; year 0), landmarks as "landmark". The player's own
+for the same service (base, the base's lot), rewards as "reward" (population from SC4's own Lua reward condition when it
+counts the whole city, else REWARD_POP; year 0), landmarks as "landmark". Task lotshape (2026-11-20): a reward or
+landmark keeps its SC4 lot (real_lot: the props' lot, w along model x and d along z) when both sides are 1 to 5 and the
+footprint fits it, a non-square one too (bldimport [w, d], drawn whole with sc3perf LOTRECT, mods page row "Non-square
+buildings"); else the smallest square, 1x1 to 5x5. Its props and lot textures are cropped to that lot. The player's own
 SC4 install (a folder holding SimCity_1.dat) is a source too: the game's 7 data files are read (memory-mapped, entries
 read one by one) and only those buildings are converted.
 
@@ -254,7 +257,7 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
     diag = bool(dg and dg['diagonal'])
     what = 'house' if b['purpose'] == 1 else 'building'
     entry = {
-        'file': stem + '.obj', 'name': title, 'kind': 'growable', 'class': cls, 'lot': [n, n], 'weight': 1,
+        'file': stem + '.obj', 'name': title, 'kind': 'growable', 'class': cls, 'lot': list(lot_wd(n)), 'weight': 1,
         'height_m': round(b['size_m'][1], 2), 'scale': 1.0, 'rotate_deg': 0, 'style': 'any',
         'enabled': bool(enabled and cls is not None and (keep_diag or not diag)),
         'notes': (diag_note(dg) if diag else '') + '%s. SC4 lots %s, the SC3 lot keeps the %s (%.1f x %.1f m) and drops the yard.'
@@ -638,7 +641,7 @@ def pack_notes(idx, bs, states, lots, deps):
         if vs:
             n = lot_for(b)
             if n not in LANDMARK_LOTS:
-                tail = 'not converted: SC3 landmarks are 1x1 to 4x4 and this building needs %dx%d' % (n, n)
+                tail = 'not converted: SC3 landmarks are 1x1 to 5x5 and this building needs %dx%d' % (n, n)
             else:
                 on = [v['lot'] for v in vs if version_on(vs, v, n)]
                 off = [v['lot'] for v in vs if not version_on(vs, v, n)]
@@ -690,9 +693,41 @@ def reward_words(r):
     return 'SC4 offers it as a reward when %s%s' % (cmp_, (' (also: %s)' % oth) if oth else '')
 
 
-def service_for(b, rw):
+def real_lot(b, lots):
+    """Task lotshape: the building's SC4 lot (props.choose_lot, the lot its props come from) in the model frame: (w, d)
+    cells, w along model x, d along z (the lot frame turned by kb - 2 quarter turns, props.plan), as an int when square.
+    None when the building has no lot, a side is longer than RECT_MAX, or the footprint does not fit it."""
+    got = PR.choose_lot(b, lots) if lots else None
+    if got is None:
+        return None
+    lot, hrow = got
+    sx, sz = lot['size']
+    w, d = (sx, sz) if (hrow['rot'] & 3) % 2 == 0 else (sz, sx)
+    if not (1 <= w <= RECT_MAX and 1 <= d <= RECT_MAX):
+        return None
+    if b['size_m'][0] > w * CELL_M + 1e-6 or b['size_m'][2] > d * CELL_M + 1e-6:
+        return None
+    return w if w == d else (w, d)
+
+
+def lot_wd(n):
+    return (n[0], n[1]) if isinstance(n, (tuple, list)) else (n, n)
+
+
+def lot_note(n, sq):
+    """Task lotshape: the note when a reward / landmark keeps its SC4 lot n instead of the smallest square sq ('' when
+    they are the same)."""
+    if n == sq:
+        return ''
+    t = " SC3 lot %dx%d, SimCity 4's own lot (the props and lot textures of the whole lot)." % lot_wd(n)
+    if isinstance(n, tuple):
+        t += ' Not square: drawn whole in the game with the mods page row Non-square buildings on.'
+    return t
+
+
+def service_for(b, rw, lots=None):
     """-> None (not a civic / park / reward / landmark building: the growable rules) or {kind, lot, ok, why, note, x,
-    base | population + year | description}."""
+    base | population + year | description}. Task lotshape: lots = the catalog's lots (real_lot)."""
     gs = b.get('groups') or []
     if G_LANDMARK in gs:
         sk = 'landmark'
@@ -738,12 +773,15 @@ def service_for(b, rw):
         if rwn:
             note += ' %s; in SC3 it is a look like the others.' % rwn
         return {'kind': 'civic', 'base': base, 'lot': bl, 'ok': ok, 'why': why, 'note': note, 'x': x}
+    sq = n
+    if sk in ('reward', 'landmark') and not why0:
+        n = real_lot(b, lots) or n        # task lotshape: SC4's own lot when it fits 5x5, else the smallest square
     if sk == 'reward':
         pop = r['population'] if r and r['population'] is not None else None
         why = 'SC4 reward (group 150B)'
         if svc:
             why += ', also SC4 %s service' % '/'.join(svc)
-        ok = n in LANDMARK_LOTS
+        ok = all(x in LANDMARK_LOTS for x in lot_wd(n))
         if pop is not None:
             popw = 'SC3 population %d (%s)' % (pop, r['measure'])
         else:
@@ -754,16 +792,18 @@ def service_for(b, rw):
         if svc and svc[0] in CIVIC_LOT:
             note += ' As a look of the SC3 %s button instead: kind civic, base %s.' % (CIVIC_LABEL[svc[0]], svc[0])
         if not ok:
-            note += ' Off: its %s needs %dx%d and SC3 rewards are 1x1 to 4x4.' % (size, n, n)
+            note += ' Off: its %s needs %dx%d and SC3 rewards are 1x1 to 5x5.' % (size, n, n)
+        note += lot_note(n, sq)
         return {'kind': 'reward', 'lot': n, 'ok': ok, 'why': why, 'note': note, 'x': x,
                 'population': pop if pop is not None else REWARD_POP, 'year': 0, 'description': SC4_DESC}
     why = why0 or 'SC4 landmark (group 150A)'
-    ok = n in LANDMARK_LOTS and not why0
+    ok = all(x in LANDMARK_LOTS for x in lot_wd(n)) and not why0
     note = '%s: an SC3 landmark (the landmark menu, one per city).' % why
     if why0:
         note += ' Off: SC3 has no button for it.'
     elif not ok:
-        note += ' Off: its %s needs %dx%d and SC3 landmarks are 1x1 to 4x4.' % (size, n, n)
+        note += ' Off: its %s needs %dx%d and SC3 landmarks are 1x1 to 5x5.' % (size, n, n)
+    note += lot_note(n, sq)
     return {'kind': 'landmark', 'lot': n, 'ok': ok, 'why': why, 'note': note, 'x': x, 'description': SC4_DESC}
 
 
@@ -816,7 +856,8 @@ def install_growables(bs, services):
 # (bldimport kind landmark: the game's landmark menu, a plugin in Apps\PlugIn\bldimport). Its OBJ is a byte copy of
 # the building's own <stem>.obj (same MTL and textures; bldimport keys ids by file, so each entry has its own file),
 # without the SC4 lot's props. On: the landmark lot; when a building has no landmark lot, its first ploppable lot.
-LANDMARK_LOTS = (1, 2, 3, 4)
+LANDMARK_LOTS = (1, 2, 3, 4, 5)        # task lotshape: 5x5 (was 1x1 to 4x4)
+RECT_MAX = 5
 LANDMARK_DESC = 'From SimCity 4'
 LANDMARK_EDITABLE = EDITABLE + ('kind', 'description')
 
@@ -844,7 +885,7 @@ def landmark_entry(b, e, v, vs, style, keep_diag):
              " landmark of the lot. The model is %s without the SC4 lot's props."
              % (v['kind'], v['lot'], v['building'], label_of(b)))
     if n not in LANDMARK_LOTS:
-        notes += ' Off: SC3 landmarks are 1x1 to 4x4, this building needs %dx%d.' % (n, n)
+        notes += ' Off: SC3 landmarks are 1x1 to 5x5, this building needs %dx%d.' % (n, n)
     elif not version_on(vs, v, n):
         notes += ' Off by default: the same building as the landmark entry, and SC3 landmarks have no jobs.'
     return {
@@ -901,7 +942,7 @@ def main(argv):
     rw = RW.lua_rewards(idx)              # task sc4civ: SC4's own reward conditions (an install; a download has none)
     services = {}
     for b in bs:
-        sv = service_for(b, rw)
+        sv = service_for(b, rw, lots)
         if sv is not None:
             services[b['tgi']] = sv
     if idx.install:                       # task sc4civ: from an install only the civic, park, reward, landmark buildings
@@ -936,7 +977,7 @@ def main(argv):
             print('  %-32s %-30s %s lot %dx%d %s' % (b['name'], label_of(b)[:30],
                                                     ('%s %s' % (sv['kind'], sv.get('base') or sv.get('population') or ''))
                                                     if sv else 'class %s' % class_for(b)[0],
-                                                    sv['lot'] if sv else lot_for(b), sv['lot'] if sv else lot_for(b),
+                                                    *lot_wd(sv['lot'] if sv else lot_for(b)),
                                                           'foundation not read' if dg is None else
                                                           '%s 45-degree outline %.2f%s' % (dg['foundation'], dg['share_45'],
                                                                                            ', DIAGONAL' if dg['diagonal'] else '')))

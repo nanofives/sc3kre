@@ -67,7 +67,7 @@ def main():
     ap.add_argument("--game", required=True)
     ap.add_argument("--kits", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks,landmarkdesc,civic")
+    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks,landmarkdesc,civic,lotshape")
     ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
     ap.add_argument("--bld1999", help="folder of 1999 Building Architect .bld files for case bld1999 (sc3compat-a)")
     ap.add_argument("--bldside", help="folder of .bld files + the bld_frames.ixf render_bld.ps1 wrote, for case bldside")
@@ -85,6 +85,10 @@ def main():
             # locked, a landmark, three refused entries): the plugins Apps/PlugIn/bldimport (+ bldimport_civic.ini) and
             # Apps/PlugIn/bldimport_rewards (.pin, .dat, bldimport_rewards.ini, bldimport_types.ini)
             subprocess.run([sys.executable, MAKE, "--civmod", d], check=True, capture_output=True)
+        elif c == "lotshape":
+            # task lotshape (2026-11-20): non-square landmarks and rewards (2x3, 3x2, 1x4, 5x4), a 5x5 reward, an
+            # overhanging 2x3, four refused entries (make_testmodels.py --lotshape)
+            subprocess.run([sys.executable, MAKE, "--lotshape", d], check=True, capture_output=True)
         elif c == "ports":
             # task airsea: kinds airport / seaport (make_testmodels.py --ports: fuel depot 1x1 airport x5 copies,
             # container stack 1x1 + warehouse 2x2 seaport, two refused entries) + a .bld file as a 2x2 seaport
@@ -105,7 +109,7 @@ def main():
             json.dump(j, open(os.path.join(d, "models.json"), "w"), indent=1)
         elif c in ("landmarks", "landmarkdesc"):
             # task plop: kind landmark (make_testmodels.py --landmarks: obelisk 2x2 with a description, pavilion 3x3,
-            # a refused 5x5 and a refused kind ploppable) + a .bld file as a landmark
+            # a 5x5 (refused until task lotshape) and a refused kind ploppable) + a .bld file as a landmark
             # plop2 (2026-11-19): case landmarkdesc = the same models, entries in the order the page saves them (by file
             # name), and the obelisk's description as typed in the page's Description box (pagetest.mjs --edit-desc
             # blanks it, types it, installs from the page's own models.json and compares with this case's output)

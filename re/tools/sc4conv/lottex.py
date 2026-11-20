@@ -115,13 +115,17 @@ def texture(r, cache):
 def composite(pl, rows, n, cache):
     """-> (RGBA uint8 (P, P, 4), stats) with P = n x 16 x PX_PER_M: column i = model x, row j = model z, both from the
     window's low corner, pixel centre (i + 0.5) / PX_PER_M metres. Rows drawn: state 'ok' and 'cut'; a texture that
-    cannot be read becomes 'unreadable'."""
+    cannot be read becomes 'unreadable'. Task lotshape: n = (w, d) gives (d x 128, w x 128, 4): rows z, columns x."""
     lot, hrow, kb = pl['lot'], pl['house'], pl['kb']
     x0w, _x1w, z0w, _z1w = pl['window']
-    P = int(n * 16 * PX_PER_M)
-    k = (np.arange(P, dtype=np.float64) + 0.5) * (1.0 / PX_PER_M)
-    mx = x0w + k[None, :] + np.zeros((P, 1))
-    mz = z0w + k[:, None] + np.zeros((1, P))
+    if isinstance(n, (tuple, list)):
+        PX, PZ = int(n[0] * 16 * PX_PER_M), int(n[1] * 16 * PX_PER_M)
+    else:
+        PX = PZ = int(n * 16 * PX_PER_M)
+    kx = (np.arange(PX, dtype=np.float64) + 0.5) * (1.0 / PX_PER_M)
+    kz = (np.arange(PZ, dtype=np.float64) + 0.5) * (1.0 / PX_PER_M)
+    mx = x0w + kx[None, :] + np.zeros((PZ, 1))
+    mz = z0w + kz[:, None] + np.zeros((1, PX))
     # model -> lot frame: the inverse of props' turn(lot - house, -(kb - 2))
     q = (kb - 2) % 4
     ax, az = mx, mz
@@ -143,8 +147,8 @@ def composite(pl, rows, n, cache):
         ims.append((r, im))
     opq = [(r, im) for r, im in ims if bool((im[..., 3] == 255).all())]
     order = opq + [(r, im) for r, im in ims if not bool((im[..., 3] == 255).all())]
-    ca = np.zeros((P, P), dtype=np.float64)
-    cc = np.zeros((P, P, 3), dtype=np.float64)
+    ca = np.zeros((PZ, PX), dtype=np.float64)
+    cc = np.zeros((PZ, PX, 3), dtype=np.float64)
     for r, im in order:
         b = r['bounds']
         u = (lx - b[0]) / (b[2] - b[0])
@@ -169,14 +173,14 @@ def composite(pl, rows, n, cache):
         nc = np.where(oa[:, None] > 0.0, num / np.where(oa > 0.0, oa, 1.0)[:, None], 0.0)
         ca[ins] = oa
         cc[ins] = nc
-    out = np.zeros((P, P, 4), dtype=np.uint8)
+    out = np.zeros((PZ, PX, 4), dtype=np.uint8)
     out[..., :3] = np.clip(np.floor(cc + 0.5), 0, 255).astype(np.uint8)
     a8 = np.clip(np.floor(ca * 255.0 + 0.5), 0, 255).astype(np.uint8)
     sc4 = a8 >= 128
     lawn = sc4 & grass_mask(out[..., :3])
     out[..., 3] = np.where(lawn, 0, a8).astype(np.uint8)
     drawn = out[..., 3] >= 128
-    tot = float(P * P)
+    tot = float(PX * PZ)
     stats = {'sc4_ground': round(float(sc4.sum()) / tot, 4), 'lawn': round(float(lawn.sum()) / tot, 4),
              'drawn': round(float(drawn.sum()) / tot, 4)}
     return out, stats

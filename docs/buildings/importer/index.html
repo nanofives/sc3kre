@@ -498,7 +498,7 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:var(--ui-type-row);li
         <button id="btnInstall" class="primary" disabled>Install into the game</button>
         <button id="btnRemove" disabled>Remove from the game</button>
       </div>
-      <div class="hint" id="gameHint">Open the models folder, choose the game folder, then Install. Close the game first. The page renders every enabled model (20 pictures each), adds them to the road mod's files in <code>mods\netmod\overlay</code> with backups, and keeps the building ids in <code>sc3build\ids.json</code> next to the models. Landmarks and civic looks go to <code>Apps\PlugIn\bldimport</code>, rewards to <code>Apps\PlugIn\bldimport_rewards</code> (they need the mods loader: <code>sc3mods_patch -Restore</code> moves them out for the stock game). Remove puts every file back as it was, plugins included.</div>
+      <div class="hint" id="gameHint">Open the models folder, choose the game folder, then Install. Close the game first. The page renders every enabled model (20 pictures each), adds them to the road mod's files in <code>mods\netmod\overlay</code> with backups, and keeps the building ids in <code>sc3build\ids.json</code> next to the models. Landmarks and civic looks go to <code>Apps\PlugIn\bldimport</code>, rewards to <code>Apps\PlugIn\bldimport_rewards</code> (they need the mods loader: <code>sc3mods_patch -Restore</code> moves them out for the stock game). Landmarks and rewards can be 1x1 to 5x5, or a lot that is not square (2x3, 1x4, 4x5, up to 5 cells on each side): such a building needs the mods page row <b>Non-square buildings</b> on in the game, off it draws as one square over bare ground. Remove puts every file back as it was, plugins included.</div>
       <details id="zipBox"><summary>No folder access (other browsers, or a game folder the browser refuses)?</summary>
         <p class="hint">The page reads the game folder (the browser asks first, nothing leaves the computer) and downloads a .zip of the files to put into it: unpack it into the game folder and let it replace files. A folder the page cannot write to also gets <code>ids.json</code> as a download: put it in the models folder's <code>sc3build</code> folder so the next install keeps the same building ids.</p>
         <div class="btnrow"><button id="btnZipInstall">Make the install .zip</button><button id="btnZipRemove">Make the removal .zip</button></div>
@@ -585,8 +585,12 @@ const PORT_KINDS = {
   seaport: { sizes: [1, 2], maxWeight: 1000, what: 'seaport zones (dockyard, beside the piers, stats of Seaport Crane or Loading Bay)' },
 };
 // task plop (2026-11-19): bldimport.py / bldweb.js LANDMARK: a landmark is placed by the player from the game's landmark
-// menu, once per city (re/analysis/PLOPPABLES.md); lots 1x1 to 4x4, the weight is not used
-const LANDMARK_KIND = { sizes: [1, 2, 3, 4], what: "the game's landmark menu (placed by the player, one per city; stats of a stock landmark of that lot: Big Ben, Coit Tower, Arc de Triomphe, Palace of Fine Arts)" };
+// menu, once per city (re/analysis/PLOPPABLES.md); lots 1x1 to 4x4, the weight is not used. Task lotshape (2026-11-20):
+// landmarks and rewards 1x1 to 5x5, and lots that are not square (w x d, 1 to 5 each: bldimport RECT_KINDS)
+const LANDMARK_KIND = { sizes: [1, 2, 3, 4, 5], what: "the game's landmark menu (placed by the player, one per city; stats of a stock landmark of that lot: Big Ben, Coit Tower, Arc de Triomphe, Palace of Fine Arts, San Francisco City Hall)" };
+const RECT_KINDS = ['landmark', 'reward'], RECT_MAX = 5;
+const NONSQUARE_NOTE = "A landmark or reward on a lot that is not square (2x3, 1x4, ...) needs the mods page row Non-square buildings on in the game; off, it draws as one square over bare ground";
+const lotText = l => (Array.isArray(l) ? l[0] + 'x' + l[1] : l + 'x' + l);
 // task civmod (2026-11-19): bldimport.py / bldweb.js CIVIC and REWARD (re/analysis/CIVIC_REWARD.md 5). A civic look is a
 // copy of the stock building one civic button places (same type, coverage, price, lot): each press of that button builds
 // the next look (sc3resize). A reward joins Rewards and Opportunities once the city reaches its population (and year).
@@ -599,7 +603,7 @@ const CIVIC_BASES = [
   ['pond', 'Pond', 2, ['pond']], ['fountain', 'Fountain', 1, ['fountain']], ['bus_stop', 'Bus Stop', 1, ['bus']],
   ['train_station', 'Train Station', 2, ['train', 'railway']]];
 const CIVIC_BY = new Map(CIVIC_BASES.map(b => [b[0], b]));
-const REWARD_KIND = { sizes: [1, 2, 3, 4], population: 20000, year: 0, what: "Rewards and Opportunities (placed by the player once the city has that many people; stats of a stock reward of that lot: Historic Statue, Mayor's House, City Hall, Stock Exchange)" };
+const REWARD_KIND = { sizes: [1, 2, 3, 4, 5], population: 20000, year: 0, what: "Rewards and Opportunities (placed by the player once the city has that many people; stats of a stock reward of that lot: Historic Statue, Mayor's House, City Hall, Stock Exchange, Country Club)" };
 
 const DEFAULT_RULES = {
   cell_m: 16,
@@ -1004,6 +1008,15 @@ function suggest(rec) {
     why.push(`a second look for the ${b[1]} button: lot ${b[2]}x${b[2]}, the stock one's (it keeps its coverage and price)`);
     return { set, why: why.join('. ') };
   }
+  if (kind === 'landmark') {   // task lotshape: each side from the footprint, 1 to 5 cells (not square when the model is not)
+    const side = f => Math.max(1, Math.min(RECT_MAX, Math.ceil(f / cell - 0.15)));
+    const lw = side(m.fx), ld = side(m.fz);
+    set.class = null; set.lot = [lw, ld];
+    why.push(`lot ${lw}x${ld} from footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m at ${cell} m per cell`);
+    if (lw !== ld) why.push(NONSQUARE_NOTE);
+    why.push('placed from ' + LANDMARK_KIND.what);
+    return { set, why: why.join('. ') };
+  }
   if (kind !== 'growable') {
     const pk = PORT_KINDS[kind] || (kind === 'landmark' ? LANDMARK_KIND : null);
     const lotN = pk ? (pk.sizes.includes(want) ? want : pk.sizes.filter(s => s <= want).pop() || pk.sizes[0]) : want;
@@ -1042,6 +1055,7 @@ function zoneOf(c) { return c[0] === 9300 ? 'F' : c[1]; }
 function warnings(rec) {
   const w = [], m = rec.meta, cell = rules.cell_m || 16;
   if (rec.err) w.push('could not load: ' + rec.err);
+  if (!RECT_KINDS.includes(m.kind) && m.kind !== 'ploppable' && !rec.bld && m.lot && m.lot[0] !== m.lot[1]) w.push(`only landmarks and rewards can have a lot that is not square (${m.lot[0]}x${m.lot[1]}): bldimport skips this one`);
   if (m.kind === 'growable') {
     if (m.class == null) w.push('growable without a class');
     else if (!CLS.has(m.class)) w.push('class ' + m.class + ' is not in the lot class table');
@@ -1053,9 +1067,10 @@ function warnings(rec) {
     if (!pk.sizes.includes(n) || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`${m.kind} buildings grow as ${pk.sizes.map(s => s + 'x' + s).join(' or ')} only: bldimport skips this one`);
     if (m.kind === 'airport' && m.weight > pk.maxWeight) w.push(`an airport's weight is the number of copies in the airpark's list, at most ${pk.maxWeight}: bldimport skips this one`);
   }
+  const rectBad = l => !(Array.isArray(l) && l.every(x => Number.isInteger(x) && x >= 1 && x <= RECT_MAX));
+  if (RECT_KINDS.includes(m.kind) && !rec.bld && m.lot && !rectBad(m.lot) && m.lot[0] !== m.lot[1]) w.push(NONSQUARE_NOTE);
   if (m.kind === 'landmark') {
-    const n = rec.bld ? rec.bld.lot : (m.lot ? m.lot[0] : 1);
-    if (!LANDMARK_KIND.sizes.includes(n) || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`landmarks are ${LANDMARK_KIND.sizes.map(s => s + 'x' + s).join(', ')} only: bldimport skips this one`);
+    if (rec.bld ? !LANDMARK_KIND.sizes.includes(rec.bld.lot) : (m.lot && rectBad(m.lot))) w.push(`landmarks are 1 to ${RECT_MAX} cells on each side (1x1 to 5x5, or a lot that is not square such as 2x3): bldimport skips this one`);
     if (m.description && BW.cp1252Encode(m.description.trim()) === null) w.push("the description has characters the game's text files cannot hold (Windows-1252): bldimport skips this one");
   }
   if (m.kind === 'civic') {   // civmod: bldimport.py plan
@@ -1068,8 +1083,7 @@ function warnings(rec) {
     if (m.description && BW.cp1252Encode(m.description.trim()) === null) w.push("the description has characters the game's text files cannot hold (Windows-1252): bldimport skips this one");
   }
   if (m.kind === 'reward') {
-    const n = rec.bld ? rec.bld.lot : (m.lot ? m.lot[0] : 1);
-    if (!REWARD_KIND.sizes.includes(n) || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`rewards are ${REWARD_KIND.sizes.map(s => s + 'x' + s).join(', ')} only: bldimport skips this one`);
+    if (rec.bld ? !REWARD_KIND.sizes.includes(rec.bld.lot) : (m.lot && rectBad(m.lot))) w.push(`rewards are 1 to ${RECT_MAX} cells on each side (1x1 to 5x5, or a lot that is not square such as 2x3): bldimport skips this one`);
     if (!(Number.isInteger(m.population) && m.population >= 0 && m.population <= 100000000)) w.push('the population is not a whole number from 0 to 100000000: bldimport skips this one');
     if (!(Number.isInteger(m.year) && m.year >= 0 && m.year <= 9999)) w.push('the year is not a whole number from 0 to 9999 (0 = any year): bldimport skips this one');
     if (/[;=\r\n]/.test(String(m.name).trim())) w.push('a reward name cannot hold ; or =: bldimport skips this one');
@@ -1466,7 +1480,8 @@ function buildForm() {
   }
   row('Class', el.class);
   el.lot = document.createElement('select');
-  [1, 2, 3, 4].forEach(n => el.lot.add(new Option(n + 'x' + n, n + ',' + n))); row('Lot', el.lot);
+  fillLots(false); row('Lot', el.lot);
+  el.lot.title = 'Lot in cells (16 m), width x depth along the model\'s x and z. Landmarks and rewards: 1 to 5 cells on each side; a lot that is not square needs the mods page row Non-square buildings on in the game.';
   for (const [k, lab, step] of [['weight', 'Weight', 1], ['height_m', 'Height (m)', 0.1], ['scale', 'Scale', 0.05], ['rotate_deg', 'Rotate (deg)', 90]]) {
     el[k] = Object.assign(document.createElement('input'), { type: 'number', step }); row(lab, el[k]);
   }
@@ -1513,6 +1528,19 @@ function buildForm() {
   el.notes.onchange = edit('notes', (r, t) => { r.meta.notes = t.value; });
   el.description.onchange = edit('description', (r, t) => { r.meta.description = t.value.trim(); });
 }
+// task lotshape: the Lot choices. Squares 1x1 to 4x4 for every kind; landmarks and rewards also 5x5 and every w x d with w
+// and d from 1 to 5 (bldimport RECT_KINDS)
+function fillLots(rect) {
+  if (el.lot.dataset.rect === String(rect)) return;
+  el.lot.dataset.rect = String(rect);
+  [...el.lot.options].forEach(o => o.remove());
+  const sq = rect ? [1, 2, 3, 4, 5] : [1, 2, 3, 4];
+  sq.forEach(n => el.lot.add(new Option(n + 'x' + n, n + ',' + n)));
+  if (!rect) return;
+  const g = document.createElement('optgroup'); g.label = 'not square (Non-square buildings on)';
+  for (let a = 1; a <= RECT_MAX; a++) for (let b = 1; b <= RECT_MAX; b++) if (a !== b) g.appendChild(new Option(a + 'x' + b, a + ',' + b));
+  el.lot.appendChild(g);
+}
 function common(recs, get) {
   const vals = new Set(recs.map(r => JSON.stringify(get(r))));
   return vals.size === 1 ? { one: true, v: get(recs[0]) } : { one: false };
@@ -1554,6 +1582,7 @@ function refreshPanel(skip) {
   set('population', common(recs, r => r.meta.population)); set('year', common(recs, r => r.meta.year));
   setSel(el.kind, common(recs, r => r.meta.kind), v => v);
   setSel(el.class, common(recs, r => r.meta.class), v => v == null ? '' : String(v));
+  fillLots(recs.every(r => RECT_KINDS.includes(r.meta.kind) && !r.bld));
   setSel(el.lot, common(recs, r => r.meta.lot), v => v ? v.join(',') : '1,1');
   const ce = common(recs, r => r.meta.enabled);
   el.enabled.indeterminate = !ce.one; el.enabled.checked = ce.one && ce.v;
@@ -1695,7 +1724,7 @@ async function installWith(folder, game, opt = {}) {
     const r = await BW.install(folder, game, {
       renderer, envStyle: opt.style || $('styleSel').value, log,
       onModel: (i, n, e) => { installWith.cur = { i, n }; setProgress((i - 1) / n, `Model ${i} of ${n}: ${e.file}`); },
-      onFrames: (e, frames, info) => resultRow(`${e.name} (${e.id})`, `${e.file}: class ${e.class}, ${BW.CLASS_LABEL[e.class]}, lot ${e.lot}x${e.lot}, weight ${e.weight}. ${BW.describe(info)}`, frames),
+      onFrames: (e, frames, info) => resultRow(`${e.name} (${e.id})`, `${e.file}: class ${e.class}, ${BW.CLASS_LABEL[e.class]}, lot ${lotText(e.lot)}, weight ${e.weight}. ${BW.describe(info)}`, frames),
     });
     let off = 0;
     for (const line of r.rep) {
