@@ -735,6 +735,7 @@ resize.mt_sandbox=Bac à sable : sans abandon
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: Building style mix
 resize.mt_stylemix=Mélange des styles
+resize.mt_lotrect=Bâtiments non carrés
 resize.mt_hwyspeed=Autoroutes plus rapides
 
 # ---- added by sc3lang.py merge (machine translation, needs native review)

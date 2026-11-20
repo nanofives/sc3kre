@@ -1,4 +1,11 @@
-# LOT_SHAPES: non-square building lots (2x3) in SC3U (lot2x3, round 2026-11-20d)
+# LOT_SHAPES: non-square building lots (2x3) in SC3U (lot2x3, round 2026-11-20d; patch: lotdraw, round 2026-11-20e)
+
+> **2026-11-20e (lotdraw): the drawing patch exists.** sc3perf block LOTRECT (`re/harness/src/sc3perf_lotrect.c`,
+> switch `lot_rect` / `SC3PERF_LOT_RECT=0`, mods page row "Edificios no cuadrados") draws X x Z buildings whole in both
+> orientations and saves the true footprint. Sections 1-7 describe the shipped game; section 8 is the patch, with three
+> corrections to the text below: the save of a landmark goes through SIMMISC's copy of the descriptor filler, not
+> SIMGEOM `0x1001cd38`; the Z call to change is the one at `0x1001cd9a` (bits 6-11), not `0x1001cda8`; and the cell
+> record has no free byte in the shipped mod set (sc3bigcity ANCHOR16 uses `+0x12/+0x13`).
 
 Owner request (2026-11-20): "Test a 2x3 lot, and then Allow 5x5". SimCity 4's Small Police Station sits on a 2x3 lot, and
 the converter puts SC4 buildings on the smallest SC3 square. Question: can SC3U place, draw, rotate, save, load,
@@ -47,7 +54,7 @@ never turns. A placed landmark has rotation 0 (measured, section 6), and the pla
 | draw list + clip | SIMSPR `sc3_iso_build_displaylist_lowzoom` `0x1000be25` | clip width `n << (zoom + 3)` from the registration point (line 120), depth bounds from n (lines 163-170) | **yes** |
 | sprite change | SIMSPR `ChangeCellAlignedSprite` `0x10019899` (`0x100199b6` vt+0xd4), `RemoveAndInsertCellAlignedSprites` `0x10019830` (`0x10019848`, `0x10019856` vt+0xd4) | X only | **yes** |
 | sprite remove | SIMSPR `RemoveCellAlignedSprite` `0x100196b7` | GetBounds (vt+0xcc, X x Z), then `0x1001a25d` rebuilds each cell of that rect (`sc3_occbridge_rebuild_tile` `0x1001a291`) | no, but it does not match the insert when X != Z |
-| save | SIMGEOM `sc3_record_fill_descriptor` `0x1001cd38` | `0x1001cd9a` and `0x1001cda8` both vt+0xd4, `0x1001cdb4` SetSizeInCells(X, X) (`0x1001dd82`: bits 0-5 / 6-11 of record `+8`) | **yes** |
+| save | the occupant descriptor filler, one copy per module (SIMGEOM `sc3_record_fill_descriptor` `0x1001cd38`; a landmark is a SIMMISC class and saves through SIMMISC's copy at `0x100359f6`, section 8) | `0x1001cd9a` and `0x1001cda8` both vt+0xd4, `0x1001cdb4` SetSizeInCells(a, b) (`0x1001dd82`: bits 0-5 = a = the `0x1001cda8` value, bits 6-11 = b = the `0x1001cd9a` value, of record `+8`) | **yes** |
 | load | SIMGEOM `sc3_geom_load_dispatch_by_shape` `0x10002cc2` | `0x1000320c` GetSizeInCells (`0x1001dcde`) -> [ebp-0x40] X, [ebp-0x44] Z; only X is passed on (`0x1000324a`, create call vt+0x18 at `0x10003252`); Z is never read. The occupant's size then comes from its attrib | no effect in game |
 | zone developer | SIMRCI `sc3_resdev_place_lots` `0x10027699` | attrib vt+0x40 at `0x10027964`, `0x10027c2d`, `0x10027d43`; no vt+0x44 call in the function; n x n checks and an n x n fill (`0x1010101` stores at `0x10027bac`, `0x10027c73`) | **yes** |
 | BAT list | SIMINIT `0x100053be`, SIMUI `0x1001bb56` | filtered by SizeInCellsX (BUILDING_PICK.md) | yes, growables only |
@@ -117,7 +124,8 @@ Every site in the "yes" rows of section 1:
 - `0x1000be25`: clip width (X + Z) x W / 2 and the depth bounds (lines 163-170), and GetCellSizeOfSprite (cell map
   vt+0xa8) for its callers.
 - `0x10019899`, `0x10019830`: the same X / Z pair.
-- SIMGEOM `0x1001cda8`: `call [eax+0xd4]` -> `call [eax+0xd8]` (one byte) so saves record X x Z.
+- SIMGEOM `0x1001cda8`: `call [eax+0xd4]` -> `call [eax+0xd8]` (one byte) so saves record X x Z. **Corrected in section
+  8:** the Z argument is the `0x1001cd9a` call, and every module has its own copy of the filler.
 
 Risk: this is the draw loop and every building insert / change / remove, shared with sc3resize's repaint and zoom work
 (REPAINT8, cityzoom); a mistake shows on every building in the city, not only on 2x3 ones. Each site needs its own off
@@ -152,3 +160,68 @@ rotations; after a bulldoze the three extra cells still pointed at the removed s
 - The highlighter path that leaves the third-row highlight (section 4).
 - The free bytes of the 0x14-byte cell record (5.2).
 - Load without the plugin of a city holding a 2x3 (landmarks: empty lot, plop) was not run for the 2x3.
+
+## 8. The LOTRECT patch (lotdraw, round 2026-11-20e)
+
+Code: `re/harness/src/sc3perf_lotrect.c` (included by `sc3perf.c`), installed by sc3perf's SIMSPR watcher the moment
+SIMSPR maps, all-or-nothing after a byte check of every site. Results and pictures: `verify/lotdraw/RESULTS.md`.
+
+### 8.1 Where X and Z live
+
+- **No free byte in the cell record.** `+0x12/+0x13` are padding in stock SIMSPR (no instruction below `0x10011000`
+  touches a record's `+0x12/+0x13`; Init `0x10005e7c` clears up to the `+0x10` word), but sc3bigcity's ANCHOR16 stores
+  the registration cell's high bytes there (`re/harness/src/anchor16_sites.h`, 43 sites). A first build that wrote Z to
+  `+0x12` was refused at load: bigcity had already detoured `0x10007be6`.
+- **Flag bit 0x400 of `+0x10`** marks every cell of a non-square sprite. Flag word use over all of SIMSPR (static):
+  bits 0-3 Insert's last argument, `0x10..0x100` per-zoom prepared masks (`DAT_100624f0..0x10062500`), `0x800..0x4000`
+  corners (byte `+0x11` & 8 / 0x10 / 0x20 / 0x40), `0x8000` visited; no instruction sets or tests `0x200` or `0x400`.
+- **Z in a side grid**, one byte per cell, indexed by the 16-bit registration cell (`rec[8] | rec[0x12] << 8`,
+  `rec[9] | rec[0x13] << 8`). Without sc3bigcity those high bytes stay 0 because the patch turns Remove's
+  (`0x10007fea`) and Init's (`0x10005ed9`) `mov word [rec+0x10], 0` into dword stores, the same bytes bigcity clears.
+- X stays the record's size byte `+0xa`, so every stock reader that uses n as the x extent, the placeholder index or
+  GetCellSizeOfSprite keeps working.
+
+### 8.2 Sites
+
+| what | where | change |
+|---|---|---|
+| sprite insert | `0x10019341` | X = vt+0xd4, Z = vt+0xd8; pre-insert removal X x Z; size passed to Insert = X, or X, Z << 8 and the tag 0x5A3C0000 when Z != X |
+| cell map Insert | `0x10007b58`, `0x10007c52`, `0x10007c9d`, `0x10007d02`, `0x10007d27` | decode; z loop and +z corners use Z; flag 2 (multi-cell) from the longest side; 0x400 on the X x Z cells + side grid before the bucket registration (`0x10007da5`) and the dirty rect (`0x10007dbe`) |
+| registration view cell | `0x1000c678`, `0x1000f6f4` | C copies, 16-bit anchors: r1 vz += 1 - X, r2 vx += X - 1 and vz += 1 - Z, r3 vx += Z - 1 (the lot's left vertex) |
+| sort key | `0x1000c14b` (low zooms), `0x1000d63f` (high zooms) | key - (B - A) * 0x2000 (A, B = view extents; section 8.3) |
+| depth boxes | `0x1000c15d`, `0x1000d64c`, do_pick `0x10009afd` | z end = z0 + Z |
+| pixel widths | `0x1000bffb`, `0x1000d506`, `0x1000cadc`, `0x100092e5`, `0x10009433`, `0x100099a6`, `0x10009bd9`, `0x1000ae86`, `0x1000f7ec` | longest side instead of n (the lot is (X + Z) / 2 cells wide; max(X, Z) is never smaller) |
+| single-cell tests | `0x1000bf8d`, `0x1000d4aa`, `0x1000ca88` | a 0x400 record takes the multi-cell path (1 x Z lots) |
+| other Z uses | GetHeightOfSprite `0x1000b303`, pixel-bounds fill `0x10008116` | (X + Z) / 2 diamond height; z loop with Z |
+| save | the `0x1001cd9a` call in all 9 copies of the filler (pattern addresses): SIMGEOM `0x1001cd94`, SIMMISC `0x100359f6`, SIMRCI `0x1003d498`, SIMNTWRK `0x10023b96`, SIMDSTR `0x1002dfa9`, SIMECO `0x10014b7c`, SIMSERV `0x10014f14`, SIMUTIL `0x100199b4`, SimTransit `0x10015e04` | vt+0xd4 -> vt+0xd8 (pattern byte +8): bits 6-11 = Z |
+
+Not changed: ChangeSprite `0x1000f2c2` (its block loop rewrites the registration record only, stock), the placeholder
+sprite `this+0x48c + n * 4` (uses X), GetCellSizeOfSprite `0x10008f8a` (returns X), and the effect anchors that centre
+on an occupant with SizeInCellsX only (SIMSPR `0x10032e3e`, `0x10039850`, `0x1003ccbd`, `0x1002249b`) `[not run]`.
+
+### 8.3 Draw order
+
+The display list sorter (`0x1000c6f0`, comparator `0x1000c7a6`) orders two cell sprites by the key `+0x14 =
+-(vx + vz) * 0x4000 - (alt >> 2) * 0x100 + 0x3fffc000` of their registration view cell alone (world boxes only decide
+between a cell sprite and a dynamic sprite). For a square that cell is the block's centre depth. For an A x B view block
+the centre is (B - A) / 2 cells further. Measured on the first build: a park on the 2x3's +x side drew over the
+building's front face in rotation 2 (and on the 3x2 in rotation 3), the keys tied. B - A = Z - X in rotations 0 and 2,
+X - Z in 1 and 3. With the correction the order against square neighbours is exact for |X - Z| = 1 (2x3, 3x2, 3x4,
+4x5, 1x2). For |X - Z| >= 2 one neighbour cell behind the far end and one in front of the near end share the centre
+depth and no single key orders both (derivation in `sc3perf_lotrect.c`, K). The 1x3 test showed no wrong overlap at
+zoom 4 in any rotation.
+
+### 8.4 Art anchors (for the importer)
+
+LOTRECT registers the sprite at the **true X x Z lot's left vertex** in every view rotation. So the anchor of every frame
+of a w x d building is that vertex: L = 0 in all four slots, T from the same point (the probe's L = (d - w) x W / 2 in
+slots 2 and 3 was for the stock X x X registration). `verify/lotdraw/work/make_lotrect.py` writes these anchors
+(`LOTRECT_STOCK_ANCHOR=1` writes the probe's). Without LOTRECT such art is placed (d - w) x W / 2 px off in two of the
+four rotations and cut, so a non-square exemplar needs the switch on (`SC3PERF_LOT_RECT`, sc3perf loaded).
+
+### 8.5 Answers to section 7
+
+- The 3x2 ghost: the stock Insert wrote a 3x3 block, and the bulldoze rebuilt only the occupant's 3x2 rect, so the third
+  row kept the sprite pointer. With LOTRECT the block is 3x2 and nothing is left (measured).
+- The third-row highlight colour: with the whole lot under the sprite no highlight colour stays after placement
+  (measured); the highlighter path itself was not read.

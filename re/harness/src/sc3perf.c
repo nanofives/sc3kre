@@ -104,7 +104,7 @@
  *    (node+8 == object, next->prev == node, prev->next == node) drops the index and falls back to the walk.
  *
  * Config: perf.ini beside the DLL, [perf] overlay=1 profile=0 sysmem=0 clock_ms=50 spr_budget=40
- * spr_sleep_us=1000 spr_follow=1 spr_imgref=1 transit_clear=1 fast_ftol=1 busy=1 busy_show=1; overlay and busy_show are also
+ * spr_sleep_us=1000 spr_follow=1 spr_imgref=1 lot_rect=1 transit_clear=1 fast_ftol=1 busy=1 busy_show=1; overlay and busy_show are also
  * written by the Preferences checkboxes (PERFPREFS, sc3perf_show_set). Env SC3PERF_<KEY> overrides any key at
  * startup (SC3PERF_OVERLAY, SC3PERF_BUSY_SHOW, SC3PERF_PROFILE, ...); SC3PERF_LOG=<path> (default sc3perf.log beside the DLL).
  */
@@ -2672,6 +2672,8 @@ static DWORD WINAPI rr_watcher(LPVOID unused) {
     }
     return 0;
 }
+#include "sc3perf_lotrect.c"   /* LOTRECT: X x Z building sprites draw whole (SC3PERF_LOT_RECT=0) */
+
 static DWORD WINAPI spr_watcher(LPVOID p) {
     DWORD spr = 0;
     int ms = 0;
@@ -2683,6 +2685,8 @@ static DWORD WINAPI spr_watcher(LPVOID p) {
     if (g_sprref) patch_sprrefcount(spr);
     if (g_imgref) patch_imgref(spr);   /* SPR_IMGREF block: rotation / zoom sprite leak */
     else logf("SPR_IMGREF> off (spr_imgref=0): shipped PrepareImage, sprite images leak on rotation / zoom");
+    if (g_lotrect) patch_lotrect(spr);   /* LOTRECT block: non-square building sprites */
+    else logf("LOTRECT> off (lot_rect=0): shipped square sprite registration, X x Z buildings draw as X x X");
     return 0;
 }
 
@@ -3763,6 +3767,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_fastceil = cfg("fast_ceil", 1);
         g_sprref = cfg("spr_refcount", 1);
         g_imgref = cfg("spr_imgref", 1);    /* SPR_IMGREF, SC3PERF_SPR_IMGREF=0 */
+        g_lotrect = cfg("lot_rect", 1);     /* LOTRECT, SC3PERF_LOT_RECT=0 */
         g_layerref = cfg("layer_refcount", 1);
         g_rczero = cfg("rc_zero", 1);           /* RCZERO, SC3PERF_RC_ZERO=0 */
         g_valveguard = cfg("valve_guard", 1);   /* VALVESHUT parts, SC3PERF_VALVE_GUARD / _HOLD / _LOCK=0 */
@@ -3804,7 +3809,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
              g_overlay, g_profile, g_sysmem, g_cap, g_clock_ms, g_spr_budget, g_spr_sleep_us, g_busy, g_busy_show);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
         if (g_clock_ms || g_busy || g_listcount || g_listfind) CreateThread(NULL, 0, clock_watcher, NULL, 0, NULL);
-        if (g_spr_budget > 0 || g_spr_follow || g_sprref || g_imgref) CreateThread(NULL, 0, spr_watcher, NULL, 0, NULL);
+        if (g_spr_budget > 0 || g_spr_follow || g_sprref || g_imgref || g_lotrect) CreateThread(NULL, 0, spr_watcher, NULL, 0, NULL);
+        if (g_lotrect) CreateThread(NULL, 0, lr_geom_watcher, NULL, 0, NULL);
         if (g_sprref) CreateThread(NULL, 0, ss_watcher, NULL, 0, NULL);
         if (g_layerref) CreateThread(NULL, 0, rc_watcher, NULL, 0, NULL);
         logf("CRASHGUARD> rc_zero=%d (with layer_refcount=%d) valve_guard=%d valve_hold=%d valve_lock=%d",
