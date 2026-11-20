@@ -469,8 +469,8 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:var(--ui-type-row);li
 <header>
   <h1>SC3 Model Classifier</h1>
   <button id="btnOpen" class="primary">Open folder</button>
-  <button id="btnSc4" title="A SimCity 4 download as you got it: the .zip, or the .jar installer inside it (LEX), or its .dat files">Open SC4 .zip</button>
-  <button id="btnSc4Game" title="Your own SimCity 4 installation (the folder holding SimCity_1.dat, or its .dat files picked with Open SC4 .zip): its civic buildings, parks, rewards and landmarks. The game files are read on this PC, nothing is written into them">Open SC4 game</button>
+  <button id="btnSc4" title="A SimCity 4 download as you got it: the .zip, or the .jar installer inside it (LEX), or its .dat files. Pick the BSC Common Dependencies Pack .zip and your SimCity 4 game's .dat files with it for the lot props">Open SC4 .zip</button>
+  <button id="btnSc4Game" title="Your own SimCity 4 installation (the folder holding SimCity_1.dat, or its .dat files picked with Open SC4 .zip): its civic buildings, parks, rewards and landmarks, and its own props (shrubs, trees, cars) for the SC4 downloads you open next. The game files are read on this PC, nothing is written into them">Open SC4 game</button>
   <button id="btnPack" title="A SimCity 3000 building pack as you downloaded it (.zip): what is in it, which Building Architect parts each .bld needs, and those parts installed into Apps\BACustom">Open SC3 pack</button>
   <button id="btnSave" disabled>Save models.json</button>
   <span id="status">Open a folder with OBJ, glTF, GLB or FBX models or Building Architect .bld files. An existing models.json is read back.</span>
@@ -1151,12 +1151,18 @@ async function openFiles(files, jsonFile) {
 const W4 = window.SC4WEB;
 const SC4_INSTALL_RULE = "These are EA's buildings from your own copy of SimCity 4: convert them for your own game, never share the converted files.";
 const SC4_RULE = 'SimCity 4 buildings are their authors\' work. Convert your own downloads for your own game, and never share the converted buildings without the author\'s permission.';
+// task sc4baseprops: the SimCity 4 game opened with Open SC4 game (or its .dat files picked alone) is kept for this page
+// session, and the SC4 downloads opened after it get the game's own props (shrubs, trees, cars) on their lots
+let sc4GameSources = null;
+function rememberSc4Game(sources) { if (sources && sources.install) sc4GameSources = sources; }
 async function openSc4(inputs, opt = {}) {
   setStatus('Reading the SimCity 4 files...');
   const sources = await W4.sourcesFrom(inputs);
   if (!sources.length) { setStatus('No SimCity 4 files (.dat, .SC4Desc, .SC4Lot, .SC4Model) in ' + (opt.name || 'that') + '.'); return false; }
+  rememberSc4Game(sources);
+  const gameProps = sources.install ? null : sources.sc4 ? 'picked' : sc4GameSources ? 'remembered' : null;
   const t0 = performance.now();
-  const r = await W4.convert(sources, { old: opt.oldText || null, log,
+  const r = await W4.convert(sources, { old: opt.oldText || null, log, sc4: sources.sc4 || (sources.install ? null : sc4GameSources),
     progress: async (i, n, b) => { if (i % 8 === 0) { setStatus(`Converting SimCity 4 building ${i + 1} of ${n}: ${b.name}`); await new Promise(res => setTimeout(res, 0)); } } });
   const all = [], models = [];
   // task sc4civ: one card per models.json entry. A building with lot props has two OBJ files, <stem>.obj (the building
@@ -1176,7 +1182,9 @@ async function openSc4(inputs, opt = {}) {
   const note = $('sc4Note'); note.hidden = false;
   note.textContent = sources.install
     ? `${r.report.join('. ').replace(/\s+/g, ' ')}, converted on this PC in ${((performance.now() - t0) / 1000).toFixed(1)} s. Civic buildings and parks become looks of the SC3 button for the same service, rewards come with the population SimCity 4 asks for, landmarks go to the landmark menu. Of buildings that share a name one is on. ${SC4_INSTALL_RULE}`
-    : `SimCity 4 download ${S.folderName}: ${r.report.join('. ').replace(/\s+/g, ' ')}, converted on this PC in ${((performance.now() - t0) / 1000).toFixed(1)} s. One colour of each straight design is on, the others are off: switch them in the panel. ${SC4_RULE}`;
+    : `SimCity 4 download ${S.folderName}: ${r.report.join('. ').replace(/\s+/g, ' ')}, converted on this PC in ${((performance.now() - t0) / 1000).toFixed(1)} s. One colour of each straight design is on, the others are off: switch them in the panel. ` +
+      (gameProps ? `SimCity 4's own props came from your SimCity 4 game (${gameProps === 'picked' ? 'its .dat files picked with the download' : 'opened with Open SC4 game'}). `
+        : r.report.some(l => /^Props not found/.test(l)) ? "For SimCity 4's own props, open your SimCity 4 game with Open SC4 game first, or pick its .dat files with the download. " : '') + SC4_RULE;
   setStatus(`${S.recs.length} SimCity 4 buildings from ${S.folderName} (${S.recs.filter(x => x.meta.enabled).length} on). ` +
     (S.dirHandle ? 'Your choices are saved as models.json in that folder.' : sources.install ? 'Save downloads your choices as models.json: next time pick it with Open SC4 .zip together with the game\'s .dat files.'
       : 'Save downloads your choices as models.json: pick it together with the .zip next time.'));
@@ -1794,7 +1802,7 @@ async function roundTrip() {
   res.savedText = saved;
   return res;
 }
-window.bc = { S, openPack, PK, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW, openSc4, modelsFolder, openFiles };
+window.bc = { S, openPack, PK, suggest, warnings, toJSONText, applyJSON, loadDemo, roundTrip, rules: () => rules, CLASSES, installWith, BW, openSc4, modelsFolder, openFiles, rememberSc4Game };
 
 // ---------------------------------------------------------------- start
 buildForm(); showRules(); sizeView(); applySceneColours(); refreshPanel(); loop();

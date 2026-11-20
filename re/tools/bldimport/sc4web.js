@@ -21,6 +21,9 @@
 //                        (catalog.install_files, read by slices), SC4's civic buildings, parks, rewards and landmarks as
 //                        bldimport kinds civic / reward / landmark (sc4conv.service_for), SC4's atlas views
 //                        (views.compose_atlas), cohort parents (catalog.Index.full)
+//   sc4conv.py --sc4     task sc4baseprops: the install as the last prop source of a download (installSource: picked
+//                        with the download, or remembered from Open SC4 game), families pooled over all sources,
+//                        a prop's model from the first source holding its views (props.resolve / plan)
 //
 // Byte identity (webtest/sc4_golden.mjs): the OBJ, MTL and models.json text equal sc4conv.py's to the byte, the
 // textures equal its PNGs pixel for pixel (alpha too; the PNG bytes differ: PIL deflates, this file stores), and
@@ -1074,13 +1077,18 @@ function SC4WEB_LIB(B) {
     if (propValue(src, inst, P_RKT0) !== null) return [null, 'resource key type 0 (not read)'];
     return [null, 'no model key'];
   }
+  const propOwner = (sources, inst) => sources.find(s => s.props.has(inst)) || null;   // props.owner
   function resolveProp(sources, pid, row) {   // props.resolve -> [src, inst, null] or [null, null, why]
-    for (const s of sources) if (s.props.has(pid)) return propActive(s, pid) ? [s, pid, null] : [null, null, 'season'];
-    for (const s of sources) {
-      const ms = familyMembers(s, pid);
-      if (ms.length) { const live = ms.filter(m => propActive(s, m)); return live.length ? [s, live[row % live.length], null] : [null, null, 'season']; }
-    }
-    return [null, null, 'missing'];
+    const o = propOwner(sources, pid);
+    if (o) return propActive(o, pid) ? [o, pid, null] : [null, null, 'season'];
+    const cand = new Set();                 // task sc4baseprops: a family's members pooled over all sources
+    for (const s of sources) for (const m of familyMembers(s, pid)) cand.add(m);
+    if (!cand.size) return [null, null, 'missing'];
+    const live = [];
+    for (const m of [...cand].sort((a, b) => a - b)) { const s = propOwner(sources, m); if (familyMembers(s, pid).includes(m) && propActive(s, m)) live.push([s, m]); }
+    if (!live.length) return [null, null, 'season'];
+    const [s, m] = live[row % live.length];
+    return [s, m, null];
   }
   const viewKeys = (m, zoom = 4) => [0, 1, 2, 3].map(r => [m[0], m[1], (m[2] + (zoom << 8) + (r << 4)) >>> 0]);
   function chooseLot(b, lots) {             // props.choose_lot
@@ -1117,13 +1125,18 @@ function SC4WEB_LIB(B) {
       const pid = o.ids[0] >>> 0;
       const [s, inst, why] = resolveProp(sources, pid, k);
       const [x, z] = turn(o.x - hrow.x, o.z - hrow.z, -(kb - 2));
-      const r = { row: k, id: pid, inst, name: null, src: s, model: null, x, z, q: pyMod((o.rot & 3) - kb, 4), state: why || 'ok' };
+      const r = { row: k, id: pid, inst, name: null, src: s, msrc: null, model: null, x, z, q: pyMod((o.rot & 3) - kb, 4), state: why || 'ok' };
       if (s) {
         const nm = propValue(s, inst, P_NAME);
         r.name = nm || hexU(inst, 8);
         const [m, mwhy] = modelOf(s, inst);
         if (!m) r.state = mwhy;
-        else { r.model = m; if (!viewKeys(m).every(k2 => s.has(...k2))) r.state = 'model not in the packs'; }
+        else {                              // task sc4baseprops: the model from the first source holding its 4 views, the prop's own first
+          r.model = m;
+          const vk = viewKeys(m);
+          r.msrc = [s].concat(sources.filter(x => x !== s)).find(s2 => vk.every(k2 => s2.has(...k2))) || null;
+          if (!r.msrc) r.state = 'model not in the packs';
+        }
       }
       if (r.state === 'ok' && !(win[0] <= x && x <= win[1] && win[2] <= z && z <= win[3])) r.state = 'outside';
       rows.push(r);
@@ -1172,10 +1185,10 @@ function SC4WEB_LIB(B) {
     const slots = [[], [], [], []], [x0w, x1w, z0w, z1w] = pl.window;
     for (const r of pl.rows) {
       if (r.state !== 'ok') continue;
-      if (!r.src.cid) r.src.cid = ++srcSerial;
-      const ck = r.model.join(':') + '@' + r.src.cid;
+      if (!r.msrc.cid) r.msrc.cid = ++srcSerial;
+      const ck = r.model.join(':') + '@' + r.msrc.cid;
       if (!cache.has(ck)) {
-        try { cache.set(ck, propViews(r.src, r.model, r.name)); }
+        try { cache.set(ck, propViews(r.msrc, r.model, r.name)); }
         catch (e) { if (!(e instanceof Sc4Error) && !(e instanceof RangeError)) throw e; cache.set(ck, String(e.message || e)); }
       }
       const pv = cache.get(ck);
@@ -1195,7 +1208,7 @@ function SC4WEB_LIB(B) {
         if (fill && v.fill) parts.push([v.fill[0], v.fill[1], v.fill[2], v.fill_key]);
         for (const [P, UV, tris, fk] of parts) {
           const Pt = P.map(p => { const [x, z] = turn(p[0], p[2], r.q); return [x + ox, p[1], z + oz]; });
-          slots[slot].push([Pt, UV, tris, fk, r.src]);
+          slots[slot].push([Pt, UV, tris, fk, r.msrc]);
         }
       }
     }
@@ -1254,7 +1267,7 @@ function SC4WEB_LIB(B) {
     files.set(stem + '_props.mtl', textBytes(pmtl.join('\n')));
     return info;
   }
-  function propsNotes(plans) {              // sc4conv.props_notes
+  function propsNotes(plans, sc4 = false) {   // sc4conv.props_notes
     if (!plans.length) return [];
     const st = new Map([['ok', 0], ['outside', 0], ['season', 0], ['missing', 0], ['unreadable', 0]]), miss = new Map();
     let tot = 0;
@@ -1266,28 +1279,46 @@ function SC4WEB_LIB(B) {
     const nb = plans.filter(([, pl]) => pl.rows.some(r => r.state === 'ok')).length;
     const lines = ['Lot props: ' + st.get('ok') + ' of ' + tot + ' prop rows placed (' + nw(nb, 'building', 'buildings') + '), ' + st.get('outside') +
       ' outside the SC3 lot, ' + st.get('season') + ' of another season, ' + st.get('missing') + ' in no pack given, ' + st.get('unreadable') + ' without a readable model'];
-    if (miss.size) lines.push("Props not found (" + miss.size + " ids, rows in brackets; SimCity 4's own props or a dependency not given): " +
+    if (miss.size) lines.push("Props not found (" + miss.size + " ids, rows in brackets; " + (sc4 ? 'a dependency not given' : "SimCity 4's own props or a dependency not given") + '): ' +
       [...miss.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([k, v]) => hexU(k, 8) + ' (' + v + ')').join(', '));
     return lines;
   }
-  async function propsContext(idx, bs, lots, deps, fill, off, log, services = null) {   // sc4conv.props_context
+  async function propsContext(idx, bs, lots, deps, fill, off, log, services = null, sc4 = null) {   // sc4conv.props_context
     const sources = [ownSource(idx)];
     for (const d of deps) sources.push(await depsIndex(d, log));
-    const ctx = { lots, sources, cache: new Map(), plans: [], off: !!off, services: services || new Map() };
+    const withSc4 = !!(sc4 && sc4.length && !idx.install);   // task sc4baseprops: the player's SC4 install, the last source
+    if (withSc4) sources.push(await installSource(sc4, log));
+    const ctx = { lots, sources, cache: new Map(), plans: [], off: !!off, services: services || new Map(), sc4: withSc4 };
     const want = new Map(), own = [];
     for (const b of bs) {
       let vs; try { vs = loadViews(idx, b, ZOOM5); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) continue; throw e; }
       const sv = ctx.services.get(tgiKey(...b.tgi));
       const pl = propPlan(b, lots, sources, houseBox(vs), sv ? sv.lot : lotFor(b));
       if (!pl) continue;
-      for (const r of pl.rows) if (r.state === 'ok' && !r.src.own) {
-        if (!want.has(r.src)) want.set(r.src, new Map());
-        for (const k of viewKeys(r.model)) want.get(r.src).set(tgiKey(...k), k);
+      for (const r of pl.rows) if (r.state === 'ok' && !r.msrc.own) {   // task sc4baseprops: from the source holding the model
+        if (!want.has(r.msrc)) want.set(r.msrc, new Map());
+        for (const k of viewKeys(r.model)) want.get(r.msrc).set(tgiKey(...k), k);
       } else if (r.state === 'ok' && idx.install) own.push(r.model);   // task sc4civ: SC4's own props, by slices
     }
     for (const [s, keys] of want) await s.fetch([...keys.values()], log);
     if (own.length) await fetchModels(idx, own);
     return ctx;
+  }
+
+  // ---- task sc4baseprops: the player's SimCity 4 install as a prop source for a download (sc4conv.py --sc4): its
+  //      exemplars and cohorts read by slices once per page session, the S3D and FSH of the props placed when fetched
+  const INSTALL_CACHE = new WeakMap();      // the install's inputs -> source
+  async function installSource(inputs, log = () => {}) {
+    if (INSTALL_CACHE.has(inputs)) return INSTALL_CACHE.get(inputs);
+    const list = inputs.slice(); list.install = true;
+    const iidx = await buildIndex(list, log);
+    await fetchTypes(iidx, [T_EXEMPLAR, T_COHORT]);
+    const src = ownSource(iidx);
+    src.own = false; src.install = true;
+    src.fetch = async keys => fetchModels(iidx, keys.map(k => k.concat(['one'])));
+    log('SimCity 4 install as a prop source: ' + src.props.size + ' prop exemplars, ' + src.cohorts.size + ' cohorts');
+    INSTALL_CACHE.set(inputs, src);
+    return src;
   }
 
   // ---- dependency packs by streaming (deps.DepsIndex). input: { path, size, mtime, slice(a, b) -> Promise<Uint8Array>,
@@ -1639,7 +1670,8 @@ function SC4WEB_LIB(B) {
     [...fam.keys()].forEach((d, i) => pick.set(d, chosen[i] ? chosen[i].tgi : null));
     for (const [d, ms] of fam) if (d[0] === 'S') { const c = ms.find(m => !isDiag(m)); pick.set(d, c ? c.tgi : null); }   // task sc4civ: the first is on
     const files = new Map(), models = [];
-    const pctx = await propsContext(idx, bs, lots, sources.deps || opt.deps || [], fill, opt.noProps, log, services);   // task sc4props
+    const pctx = await propsContext(idx, bs, lots, sources.deps || opt.deps || [], fill, opt.noProps, log, services,
+      sources.sc4 || opt.sc4 || null);      // task sc4props; task sc4baseprops: the SC4 install's own props
     for (let bi = 0; bi < bs.length; bi++) {
       const b = bs[bi];
       if (opt.progress) await opt.progress(bi, bs.length, b);
@@ -1676,7 +1708,7 @@ function SC4WEB_LIB(B) {
         models.push(le);
       }
     }
-    for (const ln of propsNotes(pctx.plans)) { log(ln); report.push(ln); }
+    for (const ln of propsNotes(pctx.plans, pctx.sc4)) { log(ln); report.push(ln); }
     const top = { sc3models: 1, models };
     if (missing.length) top.x_sc4_missing = missing;  // task sc4pass2: the download's buildings without a model, by name
     const text = pyDump(top, 1);
@@ -1753,6 +1785,7 @@ function SC4WEB_LIB(B) {
   // (fetchTypes: every exemplar, cohort, LText and Lua script; fetchModels: S3D views, then the FSH textures they name).
   // A read of an entry not fetched raises an Sc4Error (the building is skipped with a log line), never a wrong answer.
   const INSTALL_FILES = ['SimCity_1.dat', 'SimCity_2.dat', 'SimCity_3.dat', 'SimCity_4.dat', 'SimCity_5.dat', 'EP1.dat', 'SimCityLocale.DAT'];
+  const INSTALL_OTHER = ['Intro.dat', 'Sound.dat'];   // task sc4baseprops: the game folder's other top-level DBPF files (Steam)
   const MAP_FROM = 16 << 20, T_LUA = 0xCA63E2A3;
   function installOf(tree) {                // catalog.install_files on the input tree -> [sources] or null
     const top = new Map([...tree.files.keys()].map(n => [n.toLowerCase(), n]));
@@ -2150,10 +2183,18 @@ function SC4WEB_LIB(B) {
       } else if (isDbpfName(leaf) || isReadme(leaf)) treeAdd(tree, parts, { bytes: it.bytes, size: it.size, slice: it.slice });
     }
     const inst = installOf(tree);           // task sc4civ: the player's SC4 install, its 7 game files only
-    if (inst) { inst.readmes = []; inst.deps = deps; inst.install = true; return inst; }
+    // task sc4baseprops: the install's files picked together with a download (another .dat / SC4 file or archive at the
+    // top of the pick) are a prop source for it, not the input: the download is converted, the install lends its props
+    // (an archive is unpacked into a folder of its own name; the game's own subfolders, Plugins included, and its other
+    // top-level files, Intro.dat and Sound.dat, never count: a pick of the whole game folder stays the install)
+    const game = new Set(INSTALL_FILES.concat(INSTALL_OTHER).map(f => f.toLowerCase()));
+    const rest = !!inst && ([...tree.files.keys()].some(n => isDbpfName(n) && !game.has(n.toLowerCase())) || [...tree.dirs.keys()].some(isArchive));
+    if (inst && !rest) { inst.readmes = []; inst.deps = deps; inst.install = true; return inst; }
+    if (inst) for (const f of inst) { const parts = f.path.split('/'); let t = tree; for (const p of parts.slice(0, -1)) t = t.dirs.get(p); t.files.delete(parts[parts.length - 1]); }
     const out = walkOrder(tree);
     out.readmes = walkOrder(tree, isReadme);   // task sc4pass2: sc4conv.readme_files, the same walk
     out.deps = deps;                          // task sc4props: dependency packs, read by streaming (depsIndex)
+    if (inst) out.sc4 = inst;                 // task sc4baseprops
     return out;
   }
   // a File System Access folder handle -> inputs (recursive)
