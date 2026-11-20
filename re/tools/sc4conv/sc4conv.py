@@ -134,9 +134,12 @@ def class_for(b):
         return None, why + '; it needs a %dx%d lot and SC3 lots are 1x1 to 4x4' % (n, n)
     if n not in CLASS_LOTS.get(cls, (n,)):
         alt = [c for c in CLASS_FALLBACK.get(cls, ()) if n in CLASS_LOTS.get(c, ())]
-        if alt:
-            why += '; class %d has no %dx%d base, %d does' % (cls, n, n, alt[0])
-            cls = alt[0]
+        if not alt:                       # task sc4ci: bldimport would skip it ("class 9300 has no 4x4 lot")
+            return None, why + "; class %d has no %dx%d base in SC3 (bldimport's class table)" % (cls, n, n)
+        why += '; class %d has no %dx%d base, %d does' % (cls, n, n, alt[0])
+        if cls in DIRTY and alt[0] not in DIRTY:
+            why += ' (SC3 has no %dx%d dirty industry base: the clean class, its pollution is lower)' % (n, n)
+        cls = alt[0]
     return cls, why
 
 
@@ -150,8 +153,12 @@ CLASS_LOTS = {3100: (1,), 3300: (1,), 3500: (1, 2), 3700: (2, 3), 3900: (2,),
 CLASS_FALLBACK = {3100: (3700,), 3300: (3900,), 3500: (3500,),
                   5100: (5700, 6300), 5500: (6100, 6700), 5700: (6300, 5100), 6100: (6700, 5500),
                   6300: (5700, 5100), 6700: (6100, 5500),
-                  8100: (8300, 8500), 8300: (8500, 8100), 8500: (8300, 8100),
+                  8100: (8300, 8500, 9100), 8300: (8500, 8100, 9100), 8500: (8300, 8100, 9100),
                   8700: (8900, 9100), 8900: (9100, 8700), 9100: (8900, 8700)}
+# Task sc4ci (2026-11-20): no dirty class has a 4x4 base (8100 1x1, 8300 2x2, 8500 1x1-3x3), so a 4x4 dirty or
+# manufacturing building (7 of SC4's own) takes the dense clean class 9100 last (SC3Pollution.ini air 100 against
+# 8500's 125, the nearest of the clean classes) instead of a class bldimport skips. verify/sc4ci/RESULTS.md 2.
+DIRTY = (8100, 8300, 8500)
 
 
 def lot_for(b):
@@ -748,8 +755,9 @@ def design_key(b, services):
     return tuple(b['families']) or design_of(b['name'])[0].lower()
 
 
-def install_notes(idx, n_all, bs, others_):
-    """Report lines for an SC4 install (sc4web.js installNotes: the same text)."""
+def install_notes(idx, n_all, bs, others_, grow=()):
+    """Report lines for an SC4 install (sc4web.js installNotes: the same text). Task sc4ci: grow = the commercial and
+    industrial growables converted with --growables (not counted in bs)."""
     nolook = [o for o in others_ if any(g in o['groups'] for g in (G_CIVIC, G_PARK, G_REWARD, G_LANDMARK))]
     lines = ['SimCity 4 install: %d of its %d buildings are civic buildings, parks, rewards or landmarks with a model;'
              ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install'
@@ -757,7 +765,26 @@ def install_notes(idx, n_all, bs, others_):
     if nolook:
         lines.append('%d more civic buildings, parks, rewards or landmarks have no model of their own (their look is lot'
                      ' props), not converted: %s' % (len(nolook), ', '.join(label_of(o) for o in nolook)))
+    if grow:
+        cnt = [(p, sum(1 for b in grow if b['purpose'] == p)) for p in GROW_PURPOSES]
+        lines.append('For testing, %d of its shops, offices, industry and farms (SimCity 4 growables) are converted too,'
+                     ' all off: %s' % (len(grow), ', '.join('%d %s' % (k, GROW_LABEL[p][k != 1]) for p, k in cnt if k)))
     return lines
+
+
+# Task sc4ci (2026-11-20): SimCity 4's own commercial and industrial growables from the install (--growables, the
+# page's opt.growables): purpose 2 service commercial, 3 office, 5 agriculture, 6 dirty, 7 manufacturing, 8 high-tech.
+# Converted for testing only, every entry off; whether the page offers them to players is the owner's call.
+GROW_PURPOSES = (2, 3, 5, 6, 7, 8)
+GROW_LABEL = {2: ('shop', 'shops'), 3: ('office', 'offices'), 5: ('farm', 'farms'), 6: ('dirty industry', 'dirty industry'),
+              7: ('manufacturing', 'manufacturing'), 8: ('high-tech industry', 'high-tech industry')}
+GROW_NOTE = " SimCity 4's own growable from your game, converted for testing: off by default."
+
+
+def install_growables(bs, services):
+    """The install's commercial and industrial growables: purpose in GROW_PURPOSES, not a civic / park / reward /
+    landmark building."""
+    return [b for b in bs if b['tgi'] not in services and C.sc(b['purpose']) in GROW_PURPOSES]
 
 
 # ---------------------------------------------------------------------------------------------- task plop2
@@ -833,6 +860,8 @@ def main(argv):
                                   ' as one more prop source (task sc4baseprops)')
     ap.add_argument('--no-props', action='store_true', help='write the lot props but leave them off'
                                                            ' (x_sc4.props.on false)')
+    ap.add_argument('--growables', action='store_true', help="from an SC4 install: also its shops, offices, industry"
+                                                             ' and farms, every entry off (task sc4ci, testing)')
     ap.add_argument('--no-textures', action='store_true', help='write the lot textures but leave them off'
                                                               ' (x_sc4.textures.on false, task sc4lottex)')
     a = ap.parse_args(argv[1:])
@@ -854,10 +883,14 @@ def main(argv):
             services[b['tgi']] = sv
     if idx.install:                       # task sc4civ: from an install only the civic, park, reward, landmark buildings
         n_all = n_models + len(C.others(idx)[0])
-        bs = [b for b in bs if b['tgi'] in services]
-        notes, missing, versions = install_notes(idx, n_all, bs, C.others(idx)[0]), [], {}
+        grow = install_growables(bs, services) if a.growables else []
+        gset = {b['tgi'] for b in grow}
+        notes, missing, versions = install_notes(idx, n_all, [b for b in bs if b['tgi'] in services],
+                                                 C.others(idx)[0], grow), [], {}
+        bs = [b for b in bs if b['tgi'] in services or b['tgi'] in gset]
         states = {b['tgi']: V.model_state(idx, b) for b in bs}
     else:
+        gset = set()
         states = {b['tgi']: V.model_state(idx, b) for b in bs}
         deps = []
         for rp in readme_files(a.src):
@@ -913,13 +946,15 @@ def main(argv):
                          sc4=a.sc4, tex_off=a.no_textures)
     for b in bs:
         design = design_key(b, services)
-        first = pick[design] == b['tgi']
+        first = pick[design] == b['tgi'] and b['tgi'] not in gset     # task sc4ci: the install's growables are off
         try:
             e = write_building(idx, b, a.out, a.all or first, a.style, not a.no_fill, diag[b['tgi']], a.diagonal,
                                versions.get(b['tgi']), pctx)
         except ValueError as ex:
             print('  skip %s: %s' % (b['name'], ex))
             continue
+        if b['tgi'] in gset:
+            e['notes'] += GROW_NOTE
         ed = editable(e)
         auto = {k: e[k] for k in ed}
         e['x_sc4']['auto'] = auto         # what this tool wrote, so a rerun can tell the player's edits apart

@@ -134,8 +134,11 @@ def elevation(d):
 
 TILE_SNAP = 0.35          # task sc4pass2: largest distance of a tile offset from whole pixels that is accepted
 TILE_FIT = 2.0            # task sc4civ: largest error of the joint tile fit (the tower: 0.59 px; SC4's atlases: 9-108)
-ATLAS_FIT = 2.0           # task sc4civ: largest error of an atlas piece against the reference projection (measured
-                          # on SC4's civic / park / reward / landmark views: 1.58 px after rounding the offset)
+ATLAS_FIT = 2.5           # task sc4civ: largest error of an atlas piece against the reference projection (measured
+                          # on SC4's civic / park / reward / landmark views: 1.58 px after rounding the offset).
+                          # Task sc4ci: over all 713 models of the install (1,558 atlas views, 8,484 pieces with texture
+                          # area) the errors run without a gap up to 2.16 px (5 pieces above 2.0, 0 above 2.2), so the
+                          # limit was 2.0 -> 2.5: two offices (2.10, 2.16 px) converted; a wrong transform is 4-60 px
 
 
 def compose_tiles(idx, g, meshes, label):
@@ -251,6 +254,21 @@ def _covered(q, tris, w, h):
     return out
 
 
+UV_FLAT = 0.5             # task sc4ci: texels^2; a piece whose triangles cover less of its texture is left out
+
+
+def _uv_area(q, tris):
+    """Task sc4ci (2026-11-20): the texture area (texels^2) a piece's triangles cover. 48 of the 8,532 atlas pieces of
+    the install's 713 models (18 buildings) have every vertex on one texture column (u = 1.0: area 0.0 on all 48) and
+    cover 0-52 px^2 of a zoom-5 view (0.0%); they are not pieces of the screen render, fit no offset (4-60 px off) and
+    made 11 buildings fail whole (the Large High School among them). They are left out (verify/sc4ci/RESULTS.md 5)."""
+    s = 0.0
+    for t in tris:
+        a, b, c = q[t[0]], q[t[1]], q[t[2]]
+        s = s + abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+    return s * 0.5
+
+
 def compose_atlas(idx, g, meshes, label):
     """Task sc4civ (2026-11-19l): one view whose meshes are pieces of one screen render packed into textures (SC4's
     own civic, park, reward and landmark models: 316 of 452 zoom-5 views, 2,343 pieces). Each piece fits an
@@ -269,7 +287,11 @@ def compose_atlas(idx, g, meshes, label):
             raise ValueError('%s: texture %08X not found' % (label, tid))
         bm = FS.read_fsh(idx.read(fk))[0]
         q = [[float(uv[0]) * bm['w'], float(uv[1]) * bm['h']] for uv in UV]
+        if _uv_area(q, tris) < UV_FLAT:       # task sc4ci: a piece on one texture column covers no texel: left out
+            continue
         pieces.append((P, UV, q, tris, bm, tid))
+    if not pieces:
+        raise ValueError('%s: every atlas piece is flat in its texture' % label)
     ref = 0
     for i, pc in enumerate(pieces):
         if len(pc[0]) > len(pieces[ref][0]):

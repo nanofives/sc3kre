@@ -120,7 +120,8 @@ fi
 if [ -n "${SC4INSTALL:-}" ]; then
   step "sc4_install_setup.py (sc4conv.py on the SC4 install: civic, parks, rewards, landmarks; rerun; subset packed)" $py "$here/sc4_install_setup.py" --install "$SC4INSTALL" --game "$game" --out "$work/sc4install"
   step "sc4_install.mjs (sc4web.js on the SC4 install by slices: files, kinds, rerun, subset pack, frames)" node "$here/sc4_install.mjs" --golden "$work/sc4install" --install "$SC4INSTALL" --game "$game" --frames
-  step "pagetest.mjs sc4install (the page opens the install's .dat files: 112 cards, 73 on, read only)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 112,73
+  # sc4ci (2026-11-20): 113 cards, the Large High School converts since flat atlas pieces are left out (off: 6x6)
+  step "pagetest.mjs sc4install (the page opens the install's .dat files: 113 cards, 73 on, read only)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 113,73
 fi
 if [ -n "$sc4base" ]; then
   step "sc4_baseprops_setup.py (sc4conv.py --sc4: JMyers with SC4's own props, with and without the BSC pack, bldimport.py pack)" $py "$here/sc4_baseprops_setup.py" --sc4 "$sc4dir" --deps "$bsc" --install "$SC4INSTALL" --game "$game" --out "$work/sc4baseprops"
