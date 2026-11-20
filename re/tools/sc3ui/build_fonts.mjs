@@ -17,6 +17,9 @@
 
    --measure  re-measures the calibration in headless Chrome (font_calib.html) and rewrites font_calibration.json
    --ttf DIR  also writes the plain TTFs there (for size comparison; keep DIR outside the repo)
+   --smooth L smoothfont (2026-11-20f): build the fonts in L (comma list, 'all' or 'none') as smooth traced outlines,
+              overriding the SMOOTH list below. Still a COLR v1 glyph each (grayscale, no ClearType fringes)
+   --no-colr  smooth fonts as plain TrueType only (for comparison: Chrome then draws them through ClearType)
 */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,14 +35,21 @@ const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const CALIB = path.join(HERE, 'font_calibration.json');
 // FBF -> published file. Family names inside the files; sc3ui.css maps them to roles (UI_STYLE.md "Game fonts").
 export const FONTS = ['MAIN9', 'MAIN10', 'SYSTEM9', 'TITLE9', 'TITLE12', 'SERIF17'];
+// smoothfont (round 2026-11-20f): THE SWITCH. Fonts listed here are built as smooth outlines traced from the game's
+// coverage (sc3font.js smoothContours) instead of pixel squares. Same file names, advances, line height and baseline,
+// so sc3ui.css does not change: edit this list (or pass --smooth), re-run the build, then sync_css.py for the importer.
+// Empty = the pixel-exact build published since gamefont (2026-11-19d). Candidate (owner to pick): ['TITLE9', 'TITLE12'].
+export const SMOOTH = [];
 
 function args() {
-  const a = { out: path.join(ROOT, 'docs', 'assets', 'fonts'), lang: 'ENGLISH' };
+  const a = { out: path.join(ROOT, 'docs', 'assets', 'fonts'), lang: 'ENGLISH', smooth: SMOOTH.slice(), colr: true };
   const v = process.argv.slice(2);
   for (let i = 0; i < v.length; i++) {
     const k = v[i];
     if (k === '--game') a.game = v[++i]; else if (k === '--out') a.out = v[++i]; else if (k === '--ttf') a.ttf = v[++i];
     else if (k === '--lang') a.lang = v[++i]; else if (k === '--measure') a.measure = true; else if (k === '--check') a.check = true;
+    else if (k === '--smooth') { const l = v[++i]; a.smooth = l === 'none' ? [] : l === 'all' ? FONTS.slice() : l.split(',').map(x => x.trim().toUpperCase()); }
+    else if (k === '--no-colr') a.colr = false;
     else throw new Error('unknown argument ' + k);
   }
   if (!a.game) throw new Error('--game <install> is required');
@@ -122,7 +132,10 @@ function main() {
   for (const nm of FONTS) {
     const p = findFBF(dir, nm);
     if (!p) throw new Error(nm + '.FBF not found in ' + dir);
-    const t = S.buildTTF(fs.readFileSync(p), 'SC3 ' + nm, { side });
+    const sm = a.smooth.includes(nm);
+    // smooth outlines keep the COLR v1 layer too: without it Chrome on Windows draws them with ClearType colour fringes
+    // (verify/smoothfont/RESULTS.md); --no-colr writes plain TrueType. 1-bit fonts are traced too when listed
+    const t = S.buildTTF(fs.readFileSync(p), 'SC3 ' + nm, sm ? { side, smooth: true, smooth1bit: true, colr: a.colr } : { side });
     const ttf = Buffer.from(t.buffer);
     built[nm] = { ttf, woff2: woff2(ttf), info: t };
   }
@@ -139,7 +152,7 @@ function main() {
     } else {
       fs.writeFileSync(dst, x.woff2);
       if (a.ttf) fs.writeFileSync(path.join(a.ttf, nm + '.ttf'), x.ttf);
-      report.push(`${nm}.woff2 ${x.woff2.length} bytes (TTF ${x.ttf.length}, ${x.info.glyphs} glyphs, line ${x.info.line} px, baseline ${x.info.base}, ${x.info.oneBit ? '1-bit' : 'anti-aliased'})`);
+      report.push(`${nm}.woff2 ${x.woff2.length} bytes (TTF ${x.ttf.length}, ${x.info.glyphs} glyphs, line ${x.info.line} px, baseline ${x.info.base}, ${x.info.oneBit ? '1-bit' : 'anti-aliased'}${x.info.smooth ? ', SMOOTH outlines at level ' + x.info.level.toFixed(3) : ''})`);
     }
   }
   console.log(report.join('\n'));
