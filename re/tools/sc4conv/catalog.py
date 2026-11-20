@@ -17,7 +17,7 @@ values: the occupant size matches the S3D box, the model key names an S3D entry,
   0x88FCD877 foundation exemplar instance (the 'FND' model, group 0x361CF9D5)
   lot configuration: 0x88EDC790 lot size {width, depth} (u8 x 2), 0x27812837 growth stage (u8; the lot names
   'R$1_' / 'R$2_' / 'R$3_' agree on all 42 lots), 0x88EDC900.. 0x88EDCDFF lot objects (13 u32 each:
-  type 0 = building, 1 = prop, 2 = texture, ...; +2 rotation 0-3; +3/+5 x/z centre in 1/65536 m; +6..+9 bounds;
+  type 0 = building, 1 = prop, 2 = texture, ...; +2 rotation 0-3; +3/+5 x/z centre in 1/65536 m; +4 height (task sc4ground: props on 815 of the install's 1,908 lots, 0.25-324 m); +6..+9 bounds;
   +12 the object's id: for type 0 the building family or building instance)
 """
 import os
@@ -163,6 +163,7 @@ def buildings(idx):
                     # task sc4lottex: word 2's high bit mirrors a texture (re/analysis/SC4_FORMATS.md 12)
                     objs.append({'type': r[0], 'rot': r[2] & 3, 'flip': bool(r[2] & 0x80000000),
                                  'x': sgn[3] / 65536.0, 'z': sgn[5] / 65536.0,
+                                 'y': sgn[4] / 65536.0,     # task sc4ground: the height above the lot (props only)
                                  'bounds': [sgn[6] / 65536.0, sgn[7] / 65536.0, sgn[8] / 65536.0, sgn[9] / 65536.0],
                                  'ids': r[12:]})
             sz = as_list(pv(ex, 0x88EDC790, [0, 0]))

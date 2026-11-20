@@ -12,7 +12,10 @@ Steps (all plain float arithmetic in a fixed order; sc4web.js runs the same step
 
 1. The lot. A building may grow on several SC4 lots; the props come from its smallest one (area, then the order
    catalog.buildings lists them). Lot objects of kind 1 are props: word 2 rotation, words 3 / 5 the centre, word 12
-   the prop: an exemplar instance (type 0x1E) or a prop family (0x27812870).
+   the prop: an exemplar instance (type 0x1E) or a prop family (0x27812870). Task sc4ground (2026-11-20c): word 4 is the
+   prop's height above the lot (2,431 prop rows on 815 of the install's lots, 0.25 to 324 m, none below 0; 0 on every
+   JMyers and Global Office Center row): the wall and roof signs of SC4's shops and offices. It is added to the prop's y
+   (before, the signs hung up to 5.5 m below the ground and bldrender lifted the whole lot by that much).
 2. Resolve. The building's own download first, then the dependency packs (deps.DepsIndex), a later file winning as
    SC4 loads them. A family: its members, those active on DATE (below) only, sorted by instance; the row takes member
    number (row index in the lot's object list) mod count, so the choice is fixed and differs from row to row.
@@ -319,7 +322,7 @@ def plan(b, lots, sources, house_box, n):
         s, inst, why = resolve(sources, pid, k)
         x, z = turn(o['x'] - hrow['x'], o['z'] - hrow['z'], -(kb - 2))
         r = {'row': k, 'id': pid, 'inst': inst, 'name': None, 'src': s, 'msrc': None, 'model': None, 'x': x, 'z': z,
-             'q': ((o['rot'] & 3) - kb) % 4, 'state': why or 'ok'}
+             'y': o.get('y', 0.0), 'q': ((o['rot'] & 3) - kb) % 4, 'state': why or 'ok'}
         if s is not None:
             r['name'] = s.prop_value(inst, P_NAME) or '%08X' % inst
             m, mwhy = model_of(s, inst)
@@ -384,6 +387,7 @@ def placed_meshes(pl, cache, fill=True):
         if dx or dz:
             r['nudge_m'] = [dx, dz]
         ox, oz = r['x'] + dx, r['z'] + dz
+        oy = r['y']                       # task sc4ground: the lot row's height (word 4): the shop signs on the wall
         for slot in range(4):
             v = match_prop_view(pv, r['q'], slot)
             parts = [(m[0], m[1], m[2], m[3]) for m in v['meshes']]
@@ -393,7 +397,7 @@ def placed_meshes(pl, cache, fill=True):
                 Pt = []
                 for p in P:
                     x, z = turn(p[0], p[2], r['q'])
-                    Pt.append([x + ox, p[1], z + oz])
+                    Pt.append([x + ox, p[1] + oy if oy else p[1], z + oz])
                 slots[slot].append((Pt, UV, tris, fk, r['msrc']))
     return slots
 

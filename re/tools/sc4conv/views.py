@@ -439,10 +439,12 @@ def face_normals(P, tris):
     return np.array(out)
 
 
-def hidden_faces(v, floor_y=0.05):
+def hidden_faces(v, floor_y=0.05, ground=None):
     """The box faces the SC4 camera does not see (the two back walls and the floor, lifted floor_y metres so the
     lot ground stays behind it), with uv from the view's fitted projection: uv = A [x y z 1] / texture size, the
-    same mapping the visible faces have. -> (P (N, 3) model frame, UV (N, 2), tris) or None for a non-box mesh."""
+    same mapping the visible faces have. -> (P (N, 3) model frame, UV (N, 2), tris) or None for a non-box mesh.
+    Task sc4ground: ground = the SC4 lot's height (0.0 for a building): a box reaching below it has its floor
+    floor_y above the ground, not above the box bottom (clamp_ground then raises the back walls' bottom to it)."""
     Pv = v['P_view']
     if len(Pv) != 7:
         return None
@@ -459,7 +461,10 @@ def hidden_faces(v, floor_y=0.05):
                     p[ax], p[o], p[1] = val, a_, b_
                     q.append(p)
                 quads.append(q)
-    y = lo[1] + floor_y
+    base = float(lo[1])
+    if ground is not None and base < ground:
+        base = ground
+    y = base + floor_y
     quads.append([np.array([lo[0], y, lo[2]]), np.array([hi[0], y, lo[2]]), np.array([hi[0], y, hi[2]]),
                   np.array([lo[0], y, hi[2]])])
     P = np.array([p for q in quads for p in q])
@@ -470,6 +475,32 @@ def hidden_faces(v, floor_y=0.05):
     for k in range(len(quads)):
         tris += [(4 * k, 4 * k + 1, 4 * k + 2), (4 * k, 4 * k + 2, 4 * k + 3)]
     return to_model(P, v['r']), UV, tris
+
+
+# ---------------------------------------------------------------------------------------------------- task sc4ground
+# SC4's ground (round 2026-11-20c, verify/sc4ground/RESULTS.md). A lot's building row sits at height 0 (lot object word
+# 4 = 0 on all 1,908 lots of the install, 42 JMyers, 3 Global Office Center), so the SC4 lot's surface is the model's
+# y = 0. bldrender.place puts a model's LOWEST point on the SC3 lawn, so anything below y = 0 lifted the whole lot by
+# that much. The converter raises every vertex below y = 0 to y = 0 (clamp_ground) and puts one zero-area triangle at
+# y = 0 in every OBJ (sc4conv GROUND_MARK), so y = 0 is the lowest point and lands on the lawn. Not a cut at y = 0: the
+# view meshes do not always enclose the model (Wong Insurance's paved forecourt lies on a face 0.13 m under 0 and a cut
+# took it away), while a raised face keeps its picture: a wall that is only under the ground collapses to nothing, a
+# flat face just under it is drawn at ground level.
+def clamp_ground(P, UV, A=None, tex_size=None, y=0.0):
+    """Every vertex below height y raised to y. -> (P, UV) as lists, the inputs unchanged (as lists) when no vertex is
+    below y. With A (4 x 2, the view's fitted projection: texture pixel = A [x y z 1], views.fit_camera) and tex_size the
+    vertex keeps the texel the SC4 camera saw at its new place: uv[j] + A[1][j] * (y - p_y) / size[j] (the same shift for
+    an atlas piece, whose offset does not change). Without A (props) the uv stays. Triangles are not changed. Plain float
+    arithmetic in a fixed order (sc4web.js clampGround: the same steps)."""
+    P = [[float(p[0]), float(p[1]), float(p[2])] for p in P]
+    UV = [[float(u[0]), float(u[1])] for u in UV]
+    for k in range(len(P)):
+        if P[k][1] < y:
+            d = y - P[k][1]
+            P[k][1] = y
+            if A is not None:
+                UV[k] = [UV[k][j] + (float(A[1][j]) * d) / tex_size[j] for j in range(2)]
+    return P, UV
 
 
 # ---------------------------------------------------------------------------------------------------- task sc4diag
