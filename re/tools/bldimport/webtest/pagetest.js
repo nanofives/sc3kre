@@ -62,6 +62,7 @@
         for (const f of man.sc4.remember.files) { const r = await fetch(man.sc4.remember.base + encodeURIComponent(f)); if (!r.ok) throw new Error('fetch ' + f); gf.push(new File([await r.blob()], f)); }
         window.bc.rememberSc4Game(await window.SC4WEB.sourcesFrom(window.SC4WEB.fileInputs(gf)));
       }
+      if (man.sc4.grow) document.getElementById('sc4Grow').checked = true;   // owner 2026-11-20: the growables box
       const t1 = performance.now();
       await window.bc.openSc4(window.SC4WEB.fileInputs(files), { name: man.sc4.files.join(', ') });
       const S = window.bc.S;
@@ -86,6 +87,7 @@
       const S = window.bc.S;
       sc4.noteShown = !document.getElementById('sc4Note').hidden;
       sc4.install = !!(S.sc4 && S.sc4.install); sc4.dirHandle = !!S.dirHandle; sc4.folderName = S.folderName;
+      sc4.growOn = S.recs.filter(r => r.meta.kind === 'growable' && r.meta.enabled).length;
       sc4.kinds = {}; for (const r of S.recs) { const k = r.meta.kind + (r.meta.base ? ':' + r.meta.base : ''); sc4.kinds[k] = (sc4.kinds[k] || 0) + 1; }
       const mh = S.recs.find(r => r.raw && r.raw.x_sc4 && r.raw.x_sc4.exemplar === 'RW16x14_MayorsHouse_031F');
       sc4.mayor = mh ? { kind: mh.meta.kind, population: mh.meta.population, year: mh.meta.year, enabled: mh.meta.enabled } : null;

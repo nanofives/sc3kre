@@ -169,7 +169,7 @@ if (hasGrow) {
   line(`growables: ${pyG.length} files (OBJ / MTL / models.json byte for byte, PNG pixel for pixel), file list`,
     !diff.length && !pix.length && cg.files.size === pyG.length, diff.concat(pix).slice(0, 6).join('; '));
   line('growables: notes = sc4conv.py', JSON.stringify(cg.notes) === JSON.stringify(readJson(g('grow_notes.json')).notes) &&
-    cg.notes.some(l => /^For testing, 9 of its shops/.test(l)), (cg.notes.find(l => /^For testing/.test(l)) || '').slice(0, 140));
+    cg.notes.some(l => /^9 of its shops/.test(l)), (cg.notes.find(l => /of its shops, offices/.test(l)) || '').slice(0, 140));
   const by = new Map(cg.models.map(m => [m.x_sc4.exemplar, m]));
   const cls = ex => (by.get(ex) || {}).class;
   const grow = cg.models.filter(m => m.kind === 'growable');

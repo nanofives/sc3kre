@@ -55,7 +55,7 @@ bsc=""; [ -n "$sc4packs" ] && [ -n "$sc4zip" ] && for f in "$sc4packs"/*Common\ 
 # sc4_install_setup.py (sc4conv.py on the install, a rerun with edits, a 4-building subset packed) + sc4_install.mjs (sc4web.js
 # reads the install by slices: every file byte / pixel identical, kinds, rerun, the subset's game files and frames).
 # EA's files are read in place: nothing of them leaves <work dir>.
-[ -n "${SC4INSTALL:-}" ] && steps=$((steps + 3))
+[ -n "${SC4INSTALL:-}" ] && steps=$((steps + 4))
 # sc4baseprops (2026-11-19): SimCity 4's own props from the install for a download's lots, when SC4INSTALL, the JMyers
 # .zip + folder and the BSC zip are all given: sc4_baseprops_setup.py (sc4conv.py --deps --sc4, and --sc4 alone, both
 # packed) + sc4_baseprops.mjs (sc4web.js: the install picked with the download, read by slices, and remembered) + the
@@ -122,6 +122,8 @@ if [ -n "${SC4INSTALL:-}" ]; then
   step "sc4_install.mjs (sc4web.js on the SC4 install by slices: files, kinds, rerun, subset pack, frames)" node "$here/sc4_install.mjs" --golden "$work/sc4install" --install "$SC4INSTALL" --game "$game" --frames
   # sc4ci (2026-11-20): 113 cards, the Large High School converts since flat atlas pieces are left out (off: 6x6)
   step "pagetest.mjs sc4install (the page opens the install's .dat files: 113 cards, 73 on, read only)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 113,73
+  # owner 2026-11-20: the page's "with shops, offices, industry and farms" box ticked: 310 more cards, all off
+  step "pagetest.mjs sc4install --sc4grow (the box ticked: 423 cards, the 310 growables off, 73 on)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 423,73 --sc4grow --expect-grow 310
 fi
 if [ -n "$sc4base" ]; then
   step "sc4_baseprops_setup.py (sc4conv.py --sc4: JMyers with SC4's own props, with and without the BSC pack, bldimport.py pack)" $py "$here/sc4_baseprops_setup.py" --sc4 "$sc4dir" --deps "$bsc" --install "$SC4INSTALL" --game "$game" --out "$work/sc4baseprops"

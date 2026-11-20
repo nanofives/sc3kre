@@ -760,25 +760,27 @@ def install_notes(idx, n_all, bs, others_, grow=()):
     industrial growables converted with --growables (not counted in bs)."""
     nolook = [o for o in others_ if any(g in o['groups'] for g in (G_CIVIC, G_PARK, G_REWARD, G_LANDMARK))]
     lines = ['SimCity 4 install: %d of its %d buildings are civic buildings, parks, rewards or landmarks with a model;'
-             ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install'
-             % (len(bs), n_all)]
+             % (len(bs), n_all)
+             + (' its homes, utilities and transport buildings are not converted from an install' if grow else
+                ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install')]
     if nolook:
         lines.append('%d more civic buildings, parks, rewards or landmarks have no model of their own (their look is lot'
                      ' props), not converted: %s' % (len(nolook), ', '.join(label_of(o) for o in nolook)))
     if grow:
         cnt = [(p, sum(1 for b in grow if b['purpose'] == p)) for p in GROW_PURPOSES]
-        lines.append('For testing, %d of its shops, offices, industry and farms (SimCity 4 growables) are converted too,'
+        lines.append('%d of its shops, offices, industry and farms (SimCity 4 growables) are converted too,'
                      ' all off: %s' % (len(grow), ', '.join('%d %s' % (k, GROW_LABEL[p][k != 1]) for p, k in cnt if k)))
     return lines
 
 
 # Task sc4ci (2026-11-20): SimCity 4's own commercial and industrial growables from the install (--growables, the
 # page's opt.growables): purpose 2 service commercial, 3 office, 5 agriculture, 6 dirty, 7 manufacturing, 8 high-tech.
-# Converted for testing only, every entry off; whether the page offers them to players is the owner's call.
+# Every entry off. The page converts them when its "with shops, offices, industry and farms" box is ticked (owner
+# 2026-11-20: a checkbox, off by default).
 GROW_PURPOSES = (2, 3, 5, 6, 7, 8)
 GROW_LABEL = {2: ('shop', 'shops'), 3: ('office', 'offices'), 5: ('farm', 'farms'), 6: ('dirty industry', 'dirty industry'),
               7: ('manufacturing', 'manufacturing'), 8: ('high-tech industry', 'high-tech industry')}
-GROW_NOTE = " SimCity 4's own growable from your game, converted for testing: off by default."
+GROW_NOTE = " SimCity 4's own growable from your game: off by default, switch it on to install it."
 
 
 def install_growables(bs, services):

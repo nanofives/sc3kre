@@ -31,6 +31,7 @@ const arg = (k, d = null) => { const i = process.argv.indexOf('--' + k); return 
 const golden = arg('golden'), tree = arg('game'), cs = arg('case', 'kenney');
 const modelsDir = arg('models', golden && path.join(golden, 'src', cs)), action = arg('action', 'install');
 const apply = process.argv.includes('--apply'), compare = !process.argv.includes('--no-compare'), shot = arg('shot');
+const sc4grow = process.argv.includes('--sc4grow');   // owner 2026-11-20: the page's "with shops, offices, industry and farms" box ticked
 const sc4inst = arg('sc4install');         // task sc4civ: the player's SimCity 4 folder: its game .dat files are picked
 const INSTALL = ['SimCity_1.dat', 'SimCity_2.dat', 'SimCity_3.dat', 'SimCity_4.dat', 'SimCity_5.dat', 'EP1.dat', 'SimCityLocale.DAT'];
 const sc4zip = arg('sc4zip') || (sc4inst ? path.join(sc4inst, INSTALL[0]) : null);
@@ -52,7 +53,7 @@ const man = { models: { base: dirUrl(modelsDir), files: sc4zip ? [] : walk(model
   sc4: sc4zip ? { base: dirUrl(path.dirname(path.resolve(sc4zip))), files: sc4inst ? INSTALL.filter(f => fs.existsSync(path.join(sc4inst, f))) : [path.basename(sc4zip)],
     deps: sc4deps ? [{ base: dirUrl(path.dirname(path.resolve(sc4deps))), file: path.basename(sc4deps) }] : [],
     extra: sc4with ? instFiles(sc4with).map(f => ({ base: dirUrl(sc4with), file: f })) : [],
-    remember: sc4remember ? { base: dirUrl(sc4remember), files: instFiles(sc4remember) } : null } : null,
+    remember: sc4remember ? { base: dirUrl(sc4remember), files: instFiles(sc4remember) } : null, grow: sc4grow } : null,
   editDesc: editArg ? { file: editArg.slice(0, editArg.indexOf('=')), text: editArg.slice(editArg.indexOf('=') + 1) } : null };
 const manPath = path.join(golden || os.tmpdir(), `pagetest_${cs}_${action}.json`);
 fs.writeFileSync(manPath, JSON.stringify(man));
@@ -123,7 +124,8 @@ try {
     line('page note: the install line, the EA rule, no download wording', !!s4.noteShown && /(^|\. )SimCity 4 install: \d+ of its/.test(s4.note || '') && /EA's buildings from your own copy of SimCity 4/.test(s4.note || '') && !/One colour of each straight design/.test(s4.note || ''));
     line('page keeps the install read only (no folder handle, named "your SimCity 4 game")', s4.install === true && s4.dirHandle === false && s4.folderName === 'your SimCity 4 game');
     line(`page: kinds civic / reward / landmark, the Mayor's House a reward at population 500 (${JSON.stringify(s4.mayor)})`, !!s4.mayor && s4.mayor.kind === 'reward' && s4.mayor.population === 500 && s4.mayor.year === 0 &&
-      (s4.kinds['civic:police'] || 0) >= 1 && (s4.kinds.landmark || 0) >= 1 && (s4.kinds.reward || 0) >= 1 && Object.keys(s4.kinds).every(k => /^(civic:|reward$|landmark$)/.test(k)));
+      (s4.kinds['civic:police'] || 0) >= 1 && (s4.kinds.landmark || 0) >= 1 && (s4.kinds.reward || 0) >= 1 && Object.keys(s4.kinds).every(k => (sc4grow ? /^(civic:|reward$|landmark$|growable$)/ : /^(civic:|reward$|landmark$)/).test(k)));
+    if (sc4grow) { total += 1; line(`page with the box ticked: ${s4.kinds.growable || 0} shops, offices, industry and farms, ${s4.growOn} of them on (expected ${arg('expect-grow', '?')}, 0 on)`, String(s4.kinds.growable || 0) === arg('expect-grow', '') && s4.growOn === 0); }
   }
   else if (!res.pass) { total = 1; line('page ' + action + ' ran', false, res.error || title); }
   else if (!compare) { total = 1; if (res.meshes) console.log('  ' + JSON.stringify({ focus: res.focus, err: res.err, meshes: res.meshes, thumb: res.thumb, side: res.side, recs: res.recs, status: res.status })); console.log('  ' + res.rep.join('\n  ')); line(`page ${action} ran (${res.seconds.toFixed(1)} s, renderer ${res.worker})`, true); }

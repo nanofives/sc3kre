@@ -2281,22 +2281,24 @@ function SC4WEB_LIB(B) {
   function installNotes(nAll, bs, oth, grow = []) {    // sc4conv.install_notes
     const nolook = oth.filter(o => o.groups.some(g => [G_CIVIC, G_PARK, G_REWARD, G_LANDMARK].includes(g)));
     const lines = ['SimCity 4 install: ' + bs.length + ' of its ' + nAll + ' buildings are civic buildings, parks, rewards or landmarks with a model;' +
-      ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install'];
+      (grow.length ? ' its homes, utilities and transport buildings are not converted from an install'
+        : ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install')];
     if (nolook.length) lines.push(nolook.length + ' more civic buildings, parks, rewards or landmarks have no model of their own (their look is lot' +
       ' props), not converted: ' + nolook.map(labelOf).join(', '));
     if (grow.length) {                      // task sc4ci
       const cnt = GROW_PURPOSES.map(p => [p, grow.filter(b => pyEqInt(b.purpose, p)).length]);
-      lines.push('For testing, ' + grow.length + ' of its shops, offices, industry and farms (SimCity 4 growables) are converted too,' +
+      lines.push(grow.length + ' of its shops, offices, industry and farms (SimCity 4 growables) are converted too,' +
         ' all off: ' + cnt.filter(([, k]) => k).map(([p, k]) => k + ' ' + GROW_LABEL[p][k !== 1 ? 1 : 0]).join(', '));
     }
     return lines;
   }
   // task sc4ci (2026-11-20): SimCity 4's own commercial and industrial growables (sc4conv.install_growables, --growables):
-  // converted for testing only, every entry off; whether the page offers them to players is the owner's call
+  // every entry off. The page converts them when its "with shops, offices, industry and farms" box is ticked (owner
+  // 2026-11-20: a checkbox, off by default)
   const GROW_PURPOSES = [2, 3, 5, 6, 7, 8];
   const GROW_LABEL = { 2: ['shop', 'shops'], 3: ['office', 'offices'], 5: ['farm', 'farms'], 6: ['dirty industry', 'dirty industry'],
     7: ['manufacturing', 'manufacturing'], 8: ['high-tech industry', 'high-tech industry'] };
-  const GROW_NOTE = " SimCity 4's own growable from your game, converted for testing: off by default.";
+  const GROW_NOTE = " SimCity 4's own growable from your game: off by default, switch it on to install it.";
   const installGrowables = (bs, services) => bs.filter(b => !services.has(tgiKey(...b.tgi)) && GROW_PURPOSES.some(p => pyEqInt(b.purpose, p)));
 
   // ================================================================================================ inputs
