@@ -4,6 +4,7 @@ r"""sc4conv.py - task sc4conv (2026-11-18h): SimCity 4 buildings -> OBJ + MTL + 
   py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --out <folder> [--all] [--style baked|baked_raw|baked_sharp] [--no-fill]
   py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --list
   ... --deps "<BSC Common Dependencies Pack V9e.zip>" [--deps <more>] [--deps-cache DIR] [--no-props]   (task sc4props)
+  py -3.12 re/tools/sc4conv/sc4conv.py "<SimCity 4 install folder>" --out <folder>        (task sc4civ)
 
 Then, as for any models folder:   py -3.12 re/tools/bldimport/bldimport.py build <folder> --game <game>
 
@@ -33,6 +34,14 @@ placed at their lot positions and written with the house into <stem>_props.obj; 
 x_sc4.props.on is true, x_sc4.props lists what was placed, left outside the 16 m SC3 lot, of another season and not
 found; the report names every prop id found in no pack. <stem>.obj stays the house alone.
 
+Civic buildings, parks, rewards and landmarks (task sc4civ, 2026-11-19l, re/analysis/SC4_FORMATS.md 10): a building
+SC4 files under OccupantGroups 0x1005 (civic), 0x1006 (park), 0x150B (reward) or 0x150A (landmark) is written as the
+matching bldimport plugin kind instead of a growable (service_for): civic and parks as "civic" looks of the SC3 button
+for the same service (base, the base's lot), rewards as "reward" (lot = the smallest square, population from SC4's own
+Lua reward condition when it counts the whole city, else REWARD_POP; year 0), landmarks as "landmark". The player's own
+SC4 install (a folder holding SimCity_1.dat) is a source too: the game's 7 data files are read (memory-mapped, entries
+read one by one) and only those buildings are converted.
+
 Diagonal buildings (task sc4diag, 2026-11-19c): a house the SC4 author set at 45 degrees on its lot (its foundation
 model's outline runs at 45 degrees, views.foundation_diagonal) is written with enabled false and a note, also with
 --all, since SC3 has no diagonal buildings; a design whose picked colour is diagonal gets a non-diagonal colour
@@ -54,9 +63,19 @@ sys.path.insert(0, HERE)
 import catalog as C  # noqa: E402
 import deps as DP  # noqa: E402
 import props as PR  # noqa: E402
+import rewards as RW  # noqa: E402
 import views as V  # noqa: E402
 
 EDITABLE = ('name', 'class', 'lot', 'weight', 'enabled', 'scale', 'rotate_deg', 'notes', 'x_bldrender')
+SERVICE_EDITABLE = ('kind', 'base', 'population', 'year', 'description')   # task sc4civ, the fields an entry has
+
+
+def editable(e):
+    """The fields a rerun keeps when the player changed them: EDITABLE, plus for a civic look / reward / landmark from
+    SC4 (task sc4civ) those of SERVICE_EDITABLE it holds."""
+    if 'service' not in e.get('x_sc4', {}):
+        return EDITABLE
+    return EDITABLE + tuple(k for k in SERVICE_EDITABLE if k in e)
 CELL_M = 16.0             # bldimport's metres per lot cell (BUILDING_ART.md 4); an SC4 tile is 16 m as well
 ZOOM5 = 4                 # S3D zoom index of SC4 zoom 5
 
@@ -201,9 +220,10 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         fh.write('\n'.join(obj) + '\n')
     with open(os.path.join(out, stem + '.mtl'), 'w', newline='\n') as fh:
         fh.write('\n'.join(mtl))
-    pinfo = write_props(b, vs, stem, obj, mtl, out, pctx, fill) if pctx is not None else None
-    cls, why = class_for(b)
-    n = lot_for(b)
+    svc = (pctx or {}).get('services', {}).get(b['tgi']) if pctx is not None else None
+    n = svc['lot'] if svc else lot_for(b)
+    pinfo = write_props(b, vs, stem, obj, mtl, out, pctx, fill, n) if pctx is not None else None
+    cls, why = class_for(b) if not svc else (None, svc['why'])
     design, colour = design_of(b['name'])
     title = (b['title'] or b['name']).splitlines()[0].strip().rstrip(',')
     sc4lots = sorted({'%dx%d' % tuple(sorted(l['size'])) for l in b['lots']})
@@ -229,6 +249,16 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
                                          'elevation': round(v['cam']['elevation'], 2),
                                          'px_per_m': round(v['cam']['px_per_m'], 3)} for v in vs}},
     }
+    if svc:                               # task sc4civ: a civic look, a reward or a landmark (service_for)
+        entry['kind'] = svc['kind']
+        entry['enabled'] = bool(enabled and svc['ok'] and (keep_diag or not diag))
+        entry['notes'] = (diag_note(dg) if diag else '') + svc['note']
+        if svc['kind'] == 'reward':
+            entry['name'] = REWARD_NAME_RE.sub(' ', title).strip() or b['name']
+        entry['x_sc4']['service'] = svc['x']
+        for k in ('base', 'population', 'year', 'description'):
+            if k in svc:
+                entry[k] = svc[k]
     tiles = [v['tiles'] for v in vs]
     if max(tiles) > 1:                    # task sc4pass2: a tall building's views come in tiles (views.compose_tiles)
         entry['x_sc4']['tiles'] = {v['name']: v['tiles'] for v in vs}
@@ -247,8 +277,8 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
 # into <stem>_props.obj (+ .mtl); <stem>.obj stays the house alone, byte for byte as before. models.json 'file'
 # names the _props OBJ while x_sc4.props.on is true (the default when at least one prop is placed); a rerun keeps
 # the player's x_sc4.props.on. Prop textures are written once per pack texture: sc4prop_<group>_<instance>.png.
-def write_props(b, vs, stem, obj, mtl, out, pctx, fill):
-    n = lot_for(b)
+def write_props(b, vs, stem, obj, mtl, out, pctx, fill, n=None):
+    n = lot_for(b) if n is None else n
     v0 = vs[0]['P']
     box = (float(v0[:, 0].min()), float(v0[:, 0].max()), float(v0[:, 2].min()), float(v0[:, 2].max()))
     pl = PR.plan(b, pctx['lots'], pctx['sources'], box, n)
@@ -324,11 +354,12 @@ def props_notes(plans):
     return lines
 
 
-def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print):
+def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, services=None):
     """Task sc4props: the prop sources (the download, then each --deps pack) and one fetch of every prop model the
     buildings' lots place, before any building is written."""
     sources = [PR.OwnSource(idx)] + [DP.DepsIndex(d, cache, log=log) for d in deps]
-    ctx = {'lots': lots, 'sources': sources, 'cache': {}, 'pngs': set(), 'plans': [], 'off': off}
+    ctx = {'lots': lots, 'sources': sources, 'cache': {}, 'pngs': set(), 'plans': [], 'off': off,
+           'services': services or {}}
     want = {}
     for b in bs:
         try:
@@ -336,7 +367,8 @@ def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print):
         except ValueError:
             continue
         box = (float(v0[:, 0].min()), float(v0[:, 0].max()), float(v0[:, 2].min()), float(v0[:, 2].max()))
-        pl = PR.plan(b, lots, sources, box, lot_for(b))
+        svc = services.get(b['tgi']) if services else None
+        pl = PR.plan(b, lots, sources, box, svc['lot'] if svc else lot_for(b))
         if pl is None:
             continue
         for r in pl['rows']:
@@ -504,6 +536,142 @@ def pack_notes(idx, bs, states, lots, deps):
     return lines, missing, versions
 
 
+# ---------------------------------------------------------------------------------------------- task sc4civ
+# SC4's civic buildings, parks, rewards and landmarks (round 2026-11-19l, re/analysis/SC4_FORMATS.md 10). The groups
+# below are what SC4's own 744 buildings carry in OccupantGroups (0xAA1DD396); the SC3 side is bldimport's plugin kinds
+# (CIVIC_REWARD.md 3: a civic look keeps the stock building's type, coverage and price on the base's own lot).
+G_CIVIC, G_PARK, G_REWARD, G_LANDMARK = 0x1005, 0x1006, 0x150B, 0x150A
+CIVIC_SERVICE = {0x1500: 'police', 0x1501: 'jail', 0x1502: 'fire', 0x1503: 'school', 0x1504: 'college',
+                 0x1505: 'library', 0x1506: 'museum', 0x1507: 'hospital', 0x1702: 'zoo'}
+# the stock lot of each bldimport civic base (the exemplars the 17 plain civic commands build, CIVIC_REWARD.md 1)
+CIVIC_LOT = {'police': 3, 'jail': 3, 'fire': 3, 'hospital': 3, 'school': 3, 'college': 3, 'library': 2, 'museum': 3,
+             'small_park': 1, 'big_park': 3, 'zoo': 4, 'baseball': 4, 'playground': 2, 'pond': 2, 'fountain': 1,
+             'bus_stop': 1, 'train_station': 2}
+CIVIC_LABEL = {'police': 'Police Station', 'jail': 'Jail', 'fire': 'Fire Station', 'hospital': 'Hospital',
+               'school': 'School', 'college': 'College', 'library': 'Library', 'museum': 'Museum',
+               'small_park': 'Small Park', 'big_park': 'Big Park', 'zoo': 'Zoo', 'baseball': 'Baseball Field',
+               'playground': 'Playground', 'pond': 'Pond', 'fountain': 'Fountain', 'bus_stop': 'Bus Stop',
+               'train_station': 'Train Station'}
+# SC4 gives a park no service group (its parks carry 0x1005 / 0x1006 only), so a park's SC3 button comes from words of
+# its SC4 name, else from its footprint: the Small Park when it fits 1x1, the Big Park when it fits 3x3
+PARK_WORDS = (('softball', 'baseball'), ('baseball', 'baseball'), ('playground', 'playground'), ('fountain', 'fountain'),
+              ('pond', 'pond'), ('zoo', 'zoo'))
+REWARD_POP = 20000         # bldimport's own default population of a reward (REWARD in bldimport.py)
+REWARD_NAME_RE = re.compile(r'[;=\r\n]+')    # a reward row cannot hold these (bldimport refuses them)
+SC4_DESC = 'From SimCity 4'
+
+
+def groups_hex(gs):
+    return ['%04X' % g if g < 0x10000 else '%08X' % g for g in gs]
+
+
+def reward_words(r):
+    """The SC4 reward condition in words, for the card's note."""
+    if not r:
+        return ''
+    cmp_ = ', '.join('%s %s' % (m, v) for m, v in r['compares']) or 'no population'
+    oth = ', '.join(r['others'])
+    return 'SC4 offers it as a reward when %s%s' % (cmp_, (' (also: %s)' % oth) if oth else '')
+
+
+def service_for(b, rw):
+    """-> None (not a civic / park / reward / landmark building: the growable rules) or {kind, lot, ok, why, note, x,
+    base | population + year | description}."""
+    gs = b.get('groups') or []
+    if G_LANDMARK in gs:
+        sk = 'landmark'
+    elif G_REWARD in gs:
+        sk = 'reward'
+    elif G_PARK in gs:
+        sk = 'park'
+    elif G_CIVIC in gs:
+        sk = 'civic'
+    else:
+        return None
+    n = lot_for(b)
+    title = label_of(b)
+    svc = [CIVIC_SERVICE[g] for g in gs if g in CIVIC_SERVICE]
+    r = rw.get(b['tgi'][2])
+    x = {'sc4_kind': sk, 'groups': groups_hex(gs)}
+    if r:
+        x['reward'] = {'advisor': r['advisor'], 'compares': [[m, v] for m, v in r['compares']], 'others': r['others']}
+    size = 'footprint %.1f x %.1f m' % (b['size_m'][0], b['size_m'][2])
+    rwn = reward_words(r)
+    if sk == 'civic' and not svc:
+        sk = 'landmark'
+        why0 = 'SC4 civic building (group 1005) of no service SC3 has a button for'
+    else:
+        why0 = None
+    if sk in ('civic', 'park'):
+        if sk == 'park':
+            low = title.lower()
+            word = next((w for w, _bs in PARK_WORDS if w in low), None)
+            base = dict(PARK_WORDS)[word] if word else ('small_park' if n <= 1 else 'big_park')
+            why = ('SC4 park (group 1006), its name says %s: SC3 %s' % (word, CIVIC_LABEL[base]) if word else
+                   'SC4 park (group 1006), %s: SC3 %s' % (size, CIVIC_LABEL[base]))
+        else:
+            base = svc[0]
+            why = 'SC4 civic building, service %s (groups %s): SC3 %s' % (base, ', '.join(groups_hex(gs)),
+                                                                          CIVIC_LABEL[base])
+        bl = CIVIC_LOT[base]
+        ok = n <= bl
+        note = ('%s. A look of the SC3 %s button: the stock building\'s type, coverage and price on its %dx%d lot.'
+                % (why, CIVIC_LABEL[base], bl, bl))
+        if not ok:
+            note += ' Off: its %s needs %dx%d.' % (size, n, n)
+        if rwn:
+            note += ' %s; in SC3 it is a look like the others.' % rwn
+        return {'kind': 'civic', 'base': base, 'lot': bl, 'ok': ok, 'why': why, 'note': note, 'x': x}
+    if sk == 'reward':
+        pop = r['population'] if r and r['population'] is not None else None
+        why = 'SC4 reward (group 150B)'
+        if svc:
+            why += ', also SC4 %s service' % '/'.join(svc)
+        ok = n in LANDMARK_LOTS
+        if pop is not None:
+            popw = 'SC3 population %d (%s)' % (pop, r['measure'])
+        else:
+            popw = ('SC3 population %d, the default: %s' % (REWARD_POP, 'no SC4 condition counts the whole city'
+                                                              if r else 'no SC4 reward condition found'))
+        note = '%s. %s. %s, year 0 (no SC4 reward condition reads the year).' % (
+            why, rwn or 'No SC4 reward record', popw)
+        if svc and svc[0] in CIVIC_LOT:
+            note += ' As a look of the SC3 %s button instead: kind civic, base %s.' % (CIVIC_LABEL[svc[0]], svc[0])
+        if not ok:
+            note += ' Off: its %s needs %dx%d and SC3 rewards are 1x1 to 4x4.' % (size, n, n)
+        return {'kind': 'reward', 'lot': n, 'ok': ok, 'why': why, 'note': note, 'x': x,
+                'population': pop if pop is not None else REWARD_POP, 'year': 0, 'description': SC4_DESC}
+    why = why0 or 'SC4 landmark (group 150A)'
+    ok = n in LANDMARK_LOTS and not why0
+    note = '%s: an SC3 landmark (the landmark menu, one per city).' % why
+    if why0:
+        note += ' Off: SC3 has no button for it.'
+    elif not ok:
+        note += ' Off: its %s needs %dx%d and SC3 landmarks are 1x1 to 4x4.' % (size, n, n)
+    return {'kind': 'landmark', 'lot': n, 'ok': ok, 'why': why, 'note': note, 'x': x, 'description': SC4_DESC}
+
+
+def design_key(b, services):
+    """One design = one enabled entry (main). A growable: its SC4 family, else its JMyers design name. Task sc4civ: a
+    civic look / reward / landmark: its SC4 name (SC4's own 3 Private Schools, 4 Houses of Worship, 3 Cemeteries, 3 City
+    Halls, 2 x 4 Mayor's Statues share a name and one is on)."""
+    if b['tgi'] in services:
+        return ('sc4', services[b['tgi']]['kind'], label_of(b).lower())
+    return tuple(b['families']) or design_of(b['name'])[0].lower()
+
+
+def install_notes(idx, n_all, bs, others_):
+    """Report lines for an SC4 install (sc4web.js installNotes: the same text)."""
+    nolook = [o for o in others_ if any(g in o['groups'] for g in (G_CIVIC, G_PARK, G_REWARD, G_LANDMARK))]
+    lines = ['SimCity 4 install: %d of its %d buildings are civic buildings, parks, rewards or landmarks with a model;'
+             ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install'
+             % (len(bs), n_all)]
+    if nolook:
+        lines.append('%d more civic buildings, parks, rewards or landmarks have no model of their own (their look is lot'
+                     ' props), not converted: %s' % (len(nolook), ', '.join(label_of(o) for o in nolook)))
+    return lines
+
+
 # ---------------------------------------------------------------------------------------------- task plop2
 # SC4 landmark / ploppable versions (round 2026-11-19i): a lot whose building has no model and shows a converted
 # building as a lot prop (the Global Office Center's "Landmark" and "Jobs" lots) becomes an SC3 landmark entry
@@ -579,16 +747,29 @@ def main(argv):
     idx = C.Index(a.src)
     bs, lots = C.buildings(idx)
     print('%d DBPF files, %d buildings with S3D models, %d lots' % (len(idx.files), len(bs), len(lots)))
+    n_models = len(bs)                    # task sc4civ: before --only, for the install report
     if a.only:
         want = {x.strip().lower() for x in a.only.split(',')}
         bs = [b for b in bs if b['name'].lower() in want or design_of(b['name'])[0].lower() in want]
-    states = {b['tgi']: V.model_state(idx, b) for b in bs}
-    deps = []
-    for rp in readme_files(a.src):
-        for d in readme_deps(open(rp, encoding='utf-8', errors='replace').read()):
-            if d not in deps:
-                deps.append(d)
-    notes, missing, versions = pack_notes(idx, bs, states, lots, deps)
+    rw = RW.lua_rewards(idx)              # task sc4civ: SC4's own reward conditions (an install; a download has none)
+    services = {}
+    for b in bs:
+        sv = service_for(b, rw)
+        if sv is not None:
+            services[b['tgi']] = sv
+    if idx.install:                       # task sc4civ: from an install only the civic, park, reward, landmark buildings
+        n_all = n_models + len(C.others(idx)[0])
+        bs = [b for b in bs if b['tgi'] in services]
+        notes, missing, versions = install_notes(idx, n_all, bs, C.others(idx)[0]), [], {}
+        states = {b['tgi']: V.model_state(idx, b) for b in bs}
+    else:
+        states = {b['tgi']: V.model_state(idx, b) for b in bs}
+        deps = []
+        for rp in readme_files(a.src):
+            for d in readme_deps(open(rp, encoding='utf-8', errors='replace').read()):
+                if d not in deps:
+                    deps.append(d)
+        notes, missing, versions = pack_notes(idx, bs, states, lots, deps)
     for ln in notes:
         print(ln)
     if a.notes_json:
@@ -600,8 +781,11 @@ def main(argv):
     if a.list or not a.out:
         for b in bs:
             dg = diag[b['tgi']]
-            print('  %-32s %-30s class %s lot %dx%d %s' % (b['name'], label_of(b)[:30],
-                                                          class_for(b)[0], lot_for(b), lot_for(b),
+            sv = services.get(b['tgi'])
+            print('  %-32s %-30s %s lot %dx%d %s' % (b['name'], label_of(b)[:30],
+                                                    ('%s %s' % (sv['kind'], sv.get('base') or sv.get('population') or ''))
+                                                    if sv else 'class %s' % class_for(b)[0],
+                                                    sv['lot'] if sv else lot_for(b), sv['lot'] if sv else lot_for(b),
                                                           'foundation not read' if dg is None else
                                                           '%s 45-degree outline %.2f%s' % (dg['foundation'], dg['share_45'],
                                                                                            ', DIAGONAL' if dg['diagonal'] else '')))
@@ -623,13 +807,16 @@ def main(argv):
     models = []
     fam = {}                              # one SC4 family per design; enable colour k of the k-th design
     for b in bs:
-        fam.setdefault(tuple(b['families']) or design_of(b['name'])[0].lower(), []).append(b)
+        fam.setdefault(design_key(b, services), []).append(b)
     pick = {}
     for d, c in zip(fam, pick_colours(list(fam.values()), is_diag)):
         pick[d] = c['tgi'] if c is not None else None
-    pctx = props_context(idx, bs, lots, a.deps, a.deps_cache, not a.no_fill, a.no_props)
+        if d[0] == 'sc4':                 # task sc4civ: of SC4's buildings sharing a name, the first (name order) is on
+            c = next((m for m in fam[d] if not is_diag(m)), None)
+            pick[d] = c['tgi'] if c is not None else None
+    pctx = props_context(idx, bs, lots, a.deps, a.deps_cache, not a.no_fill, a.no_props, services=services)
     for b in bs:
-        design = tuple(b['families']) or design_of(b['name'])[0].lower()
+        design = design_key(b, services)
         first = pick[design] == b['tgi']
         try:
             e = write_building(idx, b, a.out, a.all or first, a.style, not a.no_fill, diag[b['tgi']], a.diagonal,
@@ -637,7 +824,8 @@ def main(argv):
         except ValueError as ex:
             print('  skip %s: %s' % (b['name'], ex))
             continue
-        auto = {k: e[k] for k in EDITABLE}
+        ed = editable(e)
+        auto = {k: e[k] for k in ed}
         e['x_sc4']['auto'] = auto         # what this tool wrote, so a rerun can tell the player's edits apart
         pr = e['x_sc4'].get('props')
         if pr is not None:
@@ -645,7 +833,7 @@ def main(argv):
         o = old.get(e['x_sc4']['exemplar']) or old.get(e['file'])
         if o:                             # keep a field the player changed (classifier page) since the last run
             prev = (o.get('x_sc4') or {}).get('auto') or {}
-            for k in EDITABLE:
+            for k in ed:
                 if k in o and k in prev and o[k] != prev[k]:
                     e[k] = o[k]
             op = (o.get('x_sc4') or {}).get('props')
@@ -668,7 +856,8 @@ def main(argv):
             models.append(le)
             print('  %-32s -> %-36s landmark lot %s %s' % (v['exemplar'][:32], le['file'], le['lot'],
                                                           'enabled' if le['enabled'] else ''))
-        print('  %-32s -> %-36s class %s lot %s %s%s' % (b['name'], e['file'], e['class'], e['lot'],
+        print('  %-32s -> %-36s %s lot %s %s%s' % (b['name'], e['file'], e['kind'] if e['kind'] != 'growable' else
+                                                 'class %s' % e['class'], e['lot'],
                                                        'enabled' if e['enabled'] else '',
                                                        ' diagonal' if e['x_sc4']['diagonal'] else ''))
     for ln in props_notes(pctx['plans']):

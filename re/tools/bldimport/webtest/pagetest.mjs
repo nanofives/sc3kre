@@ -27,7 +27,9 @@ const arg = (k, d = null) => { const i = process.argv.indexOf('--' + k); return 
 const golden = arg('golden'), tree = arg('game'), cs = arg('case', 'kenney');
 const modelsDir = arg('models', golden && path.join(golden, 'src', cs)), action = arg('action', 'install');
 const apply = process.argv.includes('--apply'), compare = !process.argv.includes('--no-compare'), shot = arg('shot');
-const sc4zip = arg('sc4zip');
+const sc4inst = arg('sc4install');         // task sc4civ: the player's SimCity 4 folder: its game .dat files are picked
+const INSTALL = ['SimCity_1.dat', 'SimCity_2.dat', 'SimCity_3.dat', 'SimCity_4.dat', 'SimCity_5.dat', 'EP1.dat', 'SimCityLocale.DAT'];
+const sc4zip = arg('sc4zip') || (sc4inst ? path.join(sc4inst, INSTALL[0]) : null);
 const editArg = arg('edit-desc');           // plop2: "<file>=<text>"
 const sc4deps = arg('sc4deps');           // task sc4props: a dependency pack picked with the download (the BSC zip)
 const chrome = arg('chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
@@ -41,7 +43,7 @@ function walk(d, base = d, out = []) {
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const dirUrl = d => pathToFileURL(d).href.replace(/\/?$/, '/');
 const man = { models: { base: dirUrl(modelsDir), files: sc4zip ? [] : walk(modelsDir) }, game: { base: dirUrl(tree), files: walk(tree) }, action, apply,
-  sc4: sc4zip ? { base: dirUrl(path.dirname(path.resolve(sc4zip))), files: [path.basename(sc4zip)],
+  sc4: sc4zip ? { base: dirUrl(path.dirname(path.resolve(sc4zip))), files: sc4inst ? INSTALL.filter(f => fs.existsSync(path.join(sc4inst, f))) : [path.basename(sc4zip)],
     deps: sc4deps ? [{ base: dirUrl(path.dirname(path.resolve(sc4deps))), file: path.basename(sc4deps) }] : [] } : null,
   editDesc: editArg ? { file: editArg.slice(0, editArg.indexOf('=')), text: editArg.slice(editArg.indexOf('=') + 1) } : null };
 const manPath = path.join(golden || os.tmpdir(), `pagetest_${cs}_${action}.json`);
@@ -103,6 +105,17 @@ try {
     const miss = names.filter(n => !(s4.note || '').includes(n));
     line(`page note names the missing buildings (${names.length} checked)`, !miss.length, miss.slice(0, 5).join(', '));
     line('page status line says it cannot be converted', /^No building in .* can be converted: it holds no building models/.test(s4.status || ''), s4.status);
+  }
+  else if (res.pass && sc4inst) {           // task sc4civ: the page on the SC4 install's .dat files (Open SC4 .zip route)
+    const s4 = res.sc4 || {}, want = arg('expect-install', '').split(',').map(Number);   // <cards>,<on>
+    total = 4;
+    console.log('  note: ' + (s4.note || '').slice(0, 300));
+    console.log('  status: ' + (s4.status || '') + '  kinds: ' + JSON.stringify(s4.kinds) + '  in ' + (s4.seconds || 0).toFixed(1) + ' s');
+    line(`page: ${s4.cards} cards, ${s4.enabled} on (expected ${want.join(' / ')}), no card error`, s4.cards === want[0] && s4.enabled === want[1] && !(s4.errors || []).length, (s4.errors || []).join('; '));
+    line('page note: the install line, the EA rule, no download wording', !!s4.noteShown && /(^|\. )SimCity 4 install: \d+ of its/.test(s4.note || '') && /EA's buildings from your own copy of SimCity 4/.test(s4.note || '') && !/One colour of each straight design/.test(s4.note || ''));
+    line('page keeps the install read only (no folder handle, named "your SimCity 4 game")', s4.install === true && s4.dirHandle === false && s4.folderName === 'your SimCity 4 game');
+    line(`page: kinds civic / reward / landmark, the Mayor's House a reward at population 500 (${JSON.stringify(s4.mayor)})`, !!s4.mayor && s4.mayor.kind === 'reward' && s4.mayor.population === 500 && s4.mayor.year === 0 &&
+      (s4.kinds['civic:police'] || 0) >= 1 && (s4.kinds.landmark || 0) >= 1 && (s4.kinds.reward || 0) >= 1 && Object.keys(s4.kinds).every(k => /^(civic:|reward$|landmark$)/.test(k)));
   }
   else if (!res.pass) { total = 1; line('page ' + action + ' ran', false, res.error || title); }
   else if (!compare) { total = 1; if (res.meshes) console.log('  ' + JSON.stringify({ focus: res.focus, err: res.err, meshes: res.meshes, thumb: res.thumb, side: res.side, recs: res.recs, status: res.status })); console.log('  ' + res.rep.join('\n  ')); line(`page ${action} ran (${res.seconds.toFixed(1)} s, renderer ${res.worker})`, true); }

@@ -31,11 +31,37 @@ import exemplar as X  # noqa: E402
 
 DBPF_EXT = ('.dat', '.sc4desc', '.sc4lot', '.sc4model')
 LOTOBJ_FIRST, LOTOBJ_LAST = 0x88EDC900, 0x88EDCDFF
+# Task sc4civ (2026-11-19l): the player's own SimCity 4 install as a source. A folder that holds SimCity_1.dat at its
+# top is read as the game's own files only, in this order (no TGI is in two of them: 0 shared over the 7 files of the
+# Steam SimCity 4 Deluxe), never its Plugins, Regions or other .dat (Intro.dat, Sound.dat, a shop plugin in Sku_Data).
+INSTALL_FILES = ('SimCity_1.dat', 'SimCity_2.dat', 'SimCity_3.dat', 'SimCity_4.dat', 'SimCity_5.dat', 'EP1.dat',
+                 'SimCityLocale.DAT')
+
+
+def install_files(root):
+    """The game files of an SC4 install folder, in INSTALL_FILES order (names matched without case; SimCityLocale.DAT
+    from the first subfolder, in name order, when the top has none), or None when root is not an install."""
+    if not os.path.isdir(root):
+        return None
+    top = {n.lower(): n for n in os.listdir(root) if os.path.isfile(os.path.join(root, n))}
+    if INSTALL_FILES[0].lower() not in top:
+        return None
+    out = [os.path.join(root, top[n.lower()]) for n in INSTALL_FILES if n.lower() in top]
+    if INSTALL_FILES[-1].lower() not in top:
+        for d in sorted(n for n in os.listdir(root) if os.path.isdir(os.path.join(root, n))):
+            sub = {n.lower(): n for n in os.listdir(os.path.join(root, d))}
+            if INSTALL_FILES[-1].lower() in sub:
+                out.append(os.path.join(root, d, sub[INSTALL_FILES[-1].lower()]))
+                break
+    return out
 
 
 def dbpf_files(root):
     if os.path.isfile(root):
         return [root]
+    inst = install_files(root)
+    if inst is not None:
+        return inst
     out = []
     for dp, dn, fn in os.walk(root):
         dn.sort()
@@ -51,6 +77,8 @@ class Index:
     def __init__(self, root):
         self.files = []
         self.tgi = {}
+        self.install = install_files(root) is not None     # task sc4civ: an SC4 install, not a download
+        self._ex = {}
         for p in dbpf_files(root):
             try:
                 f = D.DBPF(p)
@@ -73,7 +101,33 @@ class Index:
         return [k for k in self.tgi if k[0] == t]
 
     def exemplar(self, tgi):
-        return X.parse_exemplar(self.read(tgi))
+        if tgi not in self._ex:
+            self._ex[tgi] = X.parse_exemplar(self.read(tgi))
+        return self._ex[tgi]
+
+    def full(self, tgi, depth=0):
+        """Task sc4civ: the exemplar with its parent cohort's properties under its own (a parent of the index, 8 deep at
+        most, as props.OwnSource.prop_value): 3,160 of SC4's own 8,957 exemplars name a parent, and 63 of its 113
+        civic, park, reward and landmark buildings with a model hold their exemplar type (0x10) only there. A parent the
+        index does not hold adds nothing (a download's cohort from another pack), so a download reads as before. -> exemplar dict."""
+        ex = self.exemplar(tgi)
+        par = tuple(ex['parent'])
+        if not any(par) or depth >= 8 or not self.has(par):
+            return ex
+        try:
+            pe = self.full(par, depth + 1)
+        except (ValueError, KeyError, struct.error):
+            return ex
+        props = dict(pe['props'])
+        props.update(ex['props'])
+        order = list(pe['order']) + [k for k in ex['order'] if k not in pe['props']]
+        return dict(ex, props=props, order=order)
+
+
+# Task sc4civ: OccupantGroups (0xAA1DD396, u32 list): what SC4 files a building under. On its own buildings
+# (SimCity_1.dat) 0x1005 civic, 0x1006 park, 0x150B reward, 0x150A landmark, 0x1500..0x1507 the service (police, jail,
+# fire, school, college, library, museum, health). Counts and names: re/analysis/SC4_FORMATS.md 10.
+P_GROUPS = 0xAA1DD396
 
 
 def pv(ex, pid, default=None):
@@ -96,7 +150,7 @@ def buildings(idx):
     lots = []
     for k in idx.of_type(D.T_EXEMPLAR):
         try:
-            ex = idx.exemplar(k)
+            ex = idx.full(k)
         except (ValueError, KeyError, struct.error):
             continue
         t = sc(pv(ex, 0x10))
@@ -117,7 +171,7 @@ def buildings(idx):
     out = []
     for k in idx.of_type(D.T_EXEMPLAR):
         try:
-            ex = idx.exemplar(k)
+            ex = idx.full(k)
         except (ValueError, KeyError, struct.error):
             continue
         if sc(pv(ex, 0x10)) != 2:
@@ -135,7 +189,8 @@ def buildings(idx):
              'size_m': [float(x) for x in as_list(pv(ex, 0x27812810, [0, 0, 0]))],
              'wealth': sc(pv(ex, 0x27812832)), 'purpose': sc(pv(ex, 0x27812833)),
              'capacity': [(cap[i], cap[i + 1]) for i in range(0, len(cap) - 1, 2)],
-             'families': fams, 'foundation': pv(ex, 0x88FCD877), 'lots': []}
+             'families': fams, 'foundation': pv(ex, 0x88FCD877), 'lots': [],
+             'groups': [int(x) & 0xFFFFFFFF for x in as_list(pv(ex, P_GROUPS, [])) if isinstance(x, int)]}
         for lot in lots:
             for o in lot['objects']:
                 if o['type'] == 0 and (k[2] in o['ids'] or any(f in o['ids'] for f in fams)):
@@ -158,7 +213,7 @@ def others(idx):
     blds, props = [], {}
     for k in idx.of_type(D.T_EXEMPLAR):
         try:
-            ex = idx.exemplar(k)
+            ex = idx.full(k)
         except (ValueError, KeyError, struct.error):
             continue
         t = sc(pv(ex, 0x10))
@@ -172,7 +227,8 @@ def others(idx):
             if name_key and isinstance(name_key, list) and len(name_key) == 3 and idx.has(tuple(name_key)):
                 title = X.ltext(idx.read(tuple(name_key))).strip()
             blds.append({'tgi': k, 'name': pv(ex, 0x20, ''), 'title': title,
-                         'landmark': 0x2781284F in ex['props'], 'jobs': 0x27812834 in ex['props']})
+                         'landmark': 0x2781284F in ex['props'], 'jobs': 0x27812834 in ex['props'],
+                         'groups': [int(x) & 0xFFFFFFFF for x in as_list(pv(ex, P_GROUPS, [])) if isinstance(x, int)]})
     return blds, props
 
 

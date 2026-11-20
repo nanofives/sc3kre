@@ -17,6 +17,10 @@
 //   sc4conv/deps.py      task sc4props: dependency packs (the 1.7 GB BSC zip) read by streaming: the zip's central
 //                        directory by slices, the jar inside inflated front to back, prop exemplars + entry index
 //   sc4conv/props.py     the lot's props resolved, turned and placed in the house's frame (sc4conv.write_props)
+//   sc4conv/rewards.py   task sc4civ: SC4's reward conditions from its Lua scripts; the player's SC4 install as a source
+//                        (catalog.install_files, read by slices), SC4's civic buildings, parks, rewards and landmarks as
+//                        bldimport kinds civic / reward / landmark (sc4conv.service_for), SC4's atlas views
+//                        (views.compose_atlas), cohort parents (catalog.Index.full)
 //
 // Byte identity (webtest/sc4_golden.mjs): the OBJ, MTL and models.json text equal sc4conv.py's to the byte, the
 // textures equal its PNGs pixel for pixel (alpha too; the PNG bytes differ: PIL deflates, this file stores), and
@@ -550,20 +554,29 @@ function SC4WEB_LIB(B) {
   // ================================================================================================ catalogue
   // Sources: [{ path, bytes: async () => Uint8Array }] in sc4conv's walk order (catalog.dbpf_files)
   async function buildIndex(sources, log) {
-    const files = [], tgi = new Map();
+    const files = [], tgi = new Map(), exc = new Map();
     for (const s of sources) {
       let f;
-      try { f = readDbpf(s.path, await s.bytes()); }
+      try { f = sources.install && s.slice && s.size >= MAP_FROM ? await readDbpfLazy(s.path, s) : readDbpf(s.path, await s.bytes()); }   // task sc4civ
       catch (e) { if (log) log('  skip ' + s.path + ': ' + (e.message || e)); continue; }
       files.push(f);
       for (const e of f.entries) if (e.type !== T_DIR) tgi.set(tgiKey(e.type, e.group, e.instance), [f, e]);
     }
-    return {
-      files, tgi,
+    const idx = {
+      files, tgi, install: !!sources.install,
       has: (t, g, i) => tgi.has(tgiKey(t, g, i)),
       read(t, g, i) { const x = tgi.get(tgiKey(t, g, i)); if (!x) throw new Sc4Error('TGI not found'); return x[0].read(x[1]); },
       ofType(t) { const out = []; for (const [k, [, e]] of tgi) if (e.type === t) out.push([e.type, e.group, e.instance]); return out; },
+      exemplar(k) { const kk = tgiKey(...k); if (!exc.has(kk)) exc.set(kk, parseExemplar(idx.read(...k))); return exc.get(kk); },
+      full(k, depth = 0) {                  // catalog.Index.full (task sc4civ): the parent cohort's properties under its own
+        const ex = idx.exemplar(k), par = ex.parent.map(x => x >>> 0);
+        if (!par.some(x => x) || depth >= 8 || !idx.has(...par)) return ex;
+        let pe; try { pe = idx.full(par, depth + 1); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) return ex; throw e; }
+        const props = new Map(pe.props); for (const [k2, v] of ex.props) props.set(k2, v);
+        return Object.assign({}, ex, { props, order: pe.order.concat(ex.order.filter(k2 => !pe.props.has(k2))) });
+      },
     };
+    return idx;
   }
   const pv = (ex, pid, dflt = null) => { const v = ex.props.get(pid); return v === undefined ? dflt : v[1]; };
   const asList = v => Array.isArray(v) ? v : [v];
@@ -573,7 +586,7 @@ function SC4WEB_LIB(B) {
   function buildings(idx) {                 // catalog.buildings -> [buildings, lots]
     const exes = [];
     for (const k of idx.ofType(T_EXEMPLAR)) {
-      try { exes.push([k, parseExemplar(idx.read(...k))]); } catch (e) { if (!(e instanceof Sc4Error)) throw e; }
+      try { exes.push([k, idx.full(k)]); } catch (e) { if (!(e instanceof Sc4Error)) throw e; }
     }
     const lots = [];
     for (const [k, ex] of exes) {
@@ -602,7 +615,8 @@ function SC4WEB_LIB(B) {
       const cap = asList(pv(ex, 0x27812834, []));
       const capPairs = []; for (let i = 0; i + 1 < cap.length; i += 2) capPairs.push([cap[i], cap[i + 1]]);
       const b = { tgi: k, name: pv(ex, 0x20, ''), title, model: rk.slice(0, 3), size_m: asList(pv(ex, 0x27812810, [0, 0, 0])).map(x => Number(num(x))),
-        wealth: sc(pv(ex, 0x27812832)), purpose: sc(pv(ex, 0x27812833)), capacity: capPairs, families: fams, foundation: pv(ex, 0x88FCD877), lots: [] };
+        wealth: sc(pv(ex, 0x27812832)), purpose: sc(pv(ex, 0x27812833)), capacity: capPairs, families: fams, foundation: pv(ex, 0x88FCD877), lots: [],
+        groups: groupsOf(ex) };
       for (const lot of lots) for (const o of lot.objects) {
         if (o.type === 0 && (o.ids.includes(k[2]) || fams.some(f => o.ids.includes(f))))
           b.lots.push({ name: lot.name, size: lot.size, stage: lot.stage, rot: o.rot, x: o.x, z: o.z, via: o.ids.includes(k[2]) ? 'building' : 'family' });
@@ -665,9 +679,9 @@ function SC4WEB_LIB(B) {
   function composeTiles(idx, g, meshes, label) {
     const pieces = [];
     for (const m of meshes) {
-      const tid = m.mat.tex[0].id;
-      if (!idx.has(T_FSH, g, tid)) throw new Sc4Error(label + ': texture ' + hexU(tid, 8) + ' not found');
-      const bm = readFshFirst(idx.read(T_FSH, g, tid));
+      const tid = m.mat.tex[0].id, fk = texKey(idx, g, tid);
+      if (!idx.has(...fk)) throw new Sc4Error(label + ': texture ' + hexU(tid, 8) + ' not found');
+      const bm = readFshFirst(idx.read(...fk));
       pieces.push({ P: m.P, q: m.UV.map(uv => [uv[0] * bm.w, uv[1] * bm.h]), tris: m.tris, bm, tid });
     }
     const G = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], R = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]], means = [];
@@ -691,11 +705,19 @@ function SC4WEB_LIB(B) {
     }
     const L = solve(G, R);
     const ts = means.map(([mp, mq]) => [0, 1].map(j => mq[j] - ((mp[0] * L[0][j] + mp[1] * L[1][j]) + mp[2] * L[2][j])));
-    let offs = ts.map(t => [0, 1].map(j => {
-      const x = ts[0][j] - t[j], r = Math.floor(x + 0.5);
-      if (Math.abs(x - r) > TILE_SNAP) throw new Sc4Error(label + ': tile offset ' + pyFixed(x, 2) + ' px is not on the pixel grid');
-      return r;
-    }));
+    for (let i = 0; i < pieces.length; i++) {   // task sc4civ: one screen picture, else an atlas (null)
+      const pc = pieces[i], t = ts[i];
+      for (let k = 0; k < pc.P.length; k++) for (let j = 0; j < 2; j++) {
+        const e = ((pc.P[k][0] * L[0][j] + pc.P[k][1] * L[1][j]) + pc.P[k][2] * L[2][j]) + t[j] - pc.q[k][j];
+        if (Math.abs(e) > TILE_FIT) return null;
+      }
+    }
+    let offs = [];
+    for (const t of ts) {
+      const o = [];
+      for (let j = 0; j < 2; j++) { const x = ts[0][j] - t[j], r = Math.floor(x + 0.5); if (Math.abs(x - r) > TILE_SNAP) return null; o.push(r); }
+      offs.push(o);
+    }
     const x0 = Math.min(...offs.map(o => o[0])), y0 = Math.min(...offs.map(o => o[1]));
     offs = offs.map(o => [o[0] - x0, o[1] - y0]);
     const W = Math.max(...offs.map((o, i) => o[0] + pieces[i].bm.w)), H = Math.max(...offs.map((o, i) => o[1] + pieces[i].bm.h));
@@ -726,11 +748,11 @@ function SC4WEB_LIB(B) {
       let P, UV, tris, bm, tiles;
       if (meshes.length === 1) {
         ({ P, UV, tris } = meshes[0]);
-        const tid = meshes[0].mat.tex[0].id;
-        if (!idx.has(T_FSH, g, tid)) throw new Sc4Error(b.name + ' view ' + r + ': texture ' + hexU(tid, 8) + ' not found');
-        bm = readFshFirst(idx.read(T_FSH, g, tid));
+        const tid = meshes[0].mat.tex[0].id, fk = texKey(idx, g, tid);
+        if (!idx.has(...fk)) throw new Sc4Error(b.name + ' view ' + r + ': texture ' + hexU(tid, 8) + ' not found');
+        bm = readFshFirst(idx.read(...fk));
         tiles = 1;
-      } else ({ P, UV, tris, bm, tiles } = composeTiles(idx, g, meshes, b.name + ' view ' + r));
+      } else ({ P, UV, tris, bm, tiles } = composeTiles(idx, g, meshes, b.name + ' view ' + r) || composeAtlas(idx, g, meshes, b.name + ' view ' + r));
       const [A, err, d] = fitCamera(P, UV, bm.w, bm.h);
       const dm = toModel1(d, r);
       out.push({ r, name: VIEW_NAMES[r], P_view: P, P: P.map(p => toModel1(p, r)), A, tex_size: [bm.w, bm.h], UV, tris, tex: bm.image, tiles,
@@ -746,8 +768,9 @@ function SC4WEB_LIB(B) {
     if (miss.length) return ['missing', 'no model in this download (S3D ' + tgiHex(miss[0]) + ')'];
     try {
       for (const k of keys) for (const m of readS3D(idx.read(...k))) for (const tx of m.mat.tex) {
-        if (!idx.has(T_FSH, g, tx.id)) continue;
-        const im = readFshFirst(idx.read(T_FSH, g, tx.id)).image;
+        const fk = texKey(idx, g, tx.id);
+        if (!idx.has(...fk)) continue;
+        const im = readFshFirst(idx.read(...fk)).image;
         for (let i = 3; i < im.length; i += 4) if (im[i] > 0) return ['ok', null];
       }
     } catch (e) { if (!(e instanceof Sc4Error) && !(e instanceof RangeError)) throw e; return ['ok', null]; }
@@ -939,8 +962,9 @@ function SC4WEB_LIB(B) {
       const hf = fill ? hiddenFaces(v) : null;
       if (hf) emit(...hf);
     }
-    const [cls, why] = classFor(b);
-    const n = lotFor(b);
+    const svc = pctx && pctx.services ? pctx.services.get(tgiKey(...b.tgi)) || null : null;   // task sc4civ
+    const [cls, why] = svc ? [null, svc.why] : classFor(b);
+    const n = svc ? svc.lot : lotFor(b);
     const [design, colour] = designOf(b.name);
     const lines = pySplitlines(b.title || b.name);
     if (!lines.length) throw new Sc4Error(b.name + ': empty name');
@@ -967,11 +991,19 @@ function SC4WEB_LIB(B) {
           elevation: new PyFloat(pyRound(v.cam.elevation, 2)), px_per_m: new PyFloat(pyRound(v.cam.px_per_m, 3)) }])),
       },
     };
+    if (svc) {                              // task sc4civ: a civic look, a reward or a landmark (sc4conv.service_for)
+      entry.kind = svc.kind;
+      entry.enabled = !!(enabled && svc.ok && (keepDiag || !diag));
+      entry.notes = (diag ? diagNote(dg) : '') + svc.note;
+      if (svc.kind === 'reward') entry.name = pyStrip(title.replace(/[;=\r\n]+/g, ' ')) || b.name;
+      entry.x_sc4.service = svc.x;
+      for (const k of ['base', 'population', 'year', 'description']) if (k in svc) entry[k] = svc[k];
+    }
     if (Math.max(...vs.map(v => v.tiles)) > 1) entry.x_sc4.tiles = Object.fromEntries(vs.map(v => [v.name, v.tiles]));
     if (versions && versions.length) entry.x_sc4.versions = versions;
     files.set(stem + '.obj', textBytes(obj.join('\n') + '\n'));
     files.set(stem + '.mtl', textBytes(mtl.join('\n')));
-    const pinfo = pctx ? writeProps(b, vs, stem, obj, mtl, files, pctx, fill) : null;
+    const pinfo = pctx ? writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n) : null;
     if (pinfo) { entry.x_sc4.props = pinfo; if (pinfo.on) entry.file = stem + '_props.obj'; }   // task sc4props
     for (const [png, im] of pngs) files.set(png, im);         // RGBA image; png() turns it into PNG bytes
     return entry;
@@ -1105,7 +1137,7 @@ function SC4WEB_LIB(B) {
       const meshes = [];
       for (const m of readS3D(src.read(...key))) {
         if (!m.mat.tex.length || !m.tris.length) continue;
-        const fk = [T_FSH, g, m.mat.tex[0].id >>> 0];
+        const fk = texKey(src, g, m.mat.tex[0].id >>> 0);   // task sc4civ: SC4's own props keep theirs in 0x1ABE787D
         if (!src.has(...fk)) throw new Sc4Error(label + ': texture ' + hexU(fk[2], 8) + ' not found');
         meshes.push([m.P, m.UV, m.tris, fk]);
       }
@@ -1185,8 +1217,8 @@ function SC4WEB_LIB(B) {
       missing_ids: [...miss.entries()].map(([k, v]) => [hexU(k, 8), v]).sort((a, b) => cmpStr(a[0], b[0])) };
   }
   const houseBox = vs => { const P = vs[0].P; let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity; for (const p of P) { if (p[0] < a) a = p[0]; if (p[0] > b) b = p[0]; if (p[2] < c) c = p[2]; if (p[2] > d) d = p[2]; } return [a, b, c, d]; };
-  function writeProps(b, vs, stem, obj, mtl, files, pctx, fill) {   // sc4conv.write_props -> x_sc4.props or null
-    const pl = propPlan(b, pctx.lots, pctx.sources, houseBox(vs), lotFor(b));
+  function writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n = null) {   // sc4conv.write_props -> x_sc4.props or null
+    const pl = propPlan(b, pctx.lots, pctx.sources, houseBox(vs), n === null ? lotFor(b) : n);
     if (!pl) return null;
     const slots = placedMeshes(pl, pctx.cache, fill);
     const s = propSummary(pl);
@@ -1238,21 +1270,23 @@ function SC4WEB_LIB(B) {
       [...miss.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([k, v]) => hexU(k, 8) + ' (' + v + ')').join(', '));
     return lines;
   }
-  async function propsContext(idx, bs, lots, deps, fill, off, log) {   // sc4conv.props_context
+  async function propsContext(idx, bs, lots, deps, fill, off, log, services = null) {   // sc4conv.props_context
     const sources = [ownSource(idx)];
     for (const d of deps) sources.push(await depsIndex(d, log));
-    const ctx = { lots, sources, cache: new Map(), plans: [], off: !!off };
-    const want = new Map();
+    const ctx = { lots, sources, cache: new Map(), plans: [], off: !!off, services: services || new Map() };
+    const want = new Map(), own = [];
     for (const b of bs) {
       let vs; try { vs = loadViews(idx, b, ZOOM5); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) continue; throw e; }
-      const pl = propPlan(b, lots, sources, houseBox(vs), lotFor(b));
+      const sv = ctx.services.get(tgiKey(...b.tgi));
+      const pl = propPlan(b, lots, sources, houseBox(vs), sv ? sv.lot : lotFor(b));
       if (!pl) continue;
       for (const r of pl.rows) if (r.state === 'ok' && !r.src.own) {
         if (!want.has(r.src)) want.set(r.src, new Map());
         for (const k of viewKeys(r.model)) want.get(r.src).set(tgiKey(...k), k);
-      }
+      } else if (r.state === 'ok' && idx.install) own.push(r.model);   // task sc4civ: SC4's own props, by slices
     }
     for (const [s, keys] of want) await s.fetch([...keys.values()], log);
+    if (own.length) await fetchModels(idx, own);
     return ctx;
   }
 
@@ -1418,7 +1452,7 @@ function SC4WEB_LIB(B) {
     const blds = [], props = new Map();
     for (const k of idx.ofType(T_EXEMPLAR)) {
       let ex;
-      try { ex = parseExemplar(idx.read(...k)); } catch (e) { if (!(e instanceof Sc4Error)) throw e; continue; }
+      try { ex = idx.full(k); } catch (e) { if (!(e instanceof Sc4Error)) throw e; continue; }
       const t = sc(pv(ex, 0x10)), rk = pv(ex, 0x27812821);
       const hasModel = Array.isArray(rk) && rk.length >= 3 && rk[0] === T_S3D;
       if (t === 0x1E && hasModel) props.set(k[2], { tgi: k, name: pv(ex, 0x20, ''), model: rk.slice(0, 3) });
@@ -1426,7 +1460,7 @@ function SC4WEB_LIB(B) {
         const nk = pv(ex, 0x8A416A99);
         let title = null;
         if (Array.isArray(nk) && nk.length === 3 && idx.has(...nk)) title = pyStrip(ltext(idx.read(...nk)));
-        blds.push({ tgi: k, name: pv(ex, 0x20, ''), title, landmark: ex.props.has(0x2781284F), jobs: ex.props.has(0x27812834) });
+        blds.push({ tgi: k, name: pv(ex, 0x20, ''), title, landmark: ex.props.has(0x2781284F), jobs: ex.props.has(0x27812834), groups: groupsOf(ex) });
       }
     }
     return [blds, props];
@@ -1568,12 +1602,24 @@ function SC4WEB_LIB(B) {
   async function convert(sources, opt = {}) {
     const log = opt.log || (() => {}), style = opt.style || 'baked', fill = opt.fill !== false;
     const idx = await buildIndex(sources, log);
+    if (idx.install) await fetchTypes(idx, [T_EXEMPLAR, T_COHORT, T_LTEXT, T_LUA]);   // task sc4civ: by slices
     let [bs, lots] = buildings(idx);
     const report = [idx.files.length + ' DBPF files, ' + bs.length + ' buildings with S3D models, ' + lots.length + ' lots'];
     log(report[0]);
-    // task sc4pass2: buildings without a model (lot-only packs), the readme's dependency list, ploppable versions
-    const states = new Map(bs.map(b => [b, modelState(idx, b)]));
-    const [notes, missing, versions] = packNotes(idx, bs, states, lots, await depsOf(sources.readmes));
+    const rw = luaRewards(idx), services = new Map();   // task sc4civ: SC4's civic buildings, parks, rewards, landmarks
+    for (const b of bs) { const sv = serviceFor(b, rw); if (sv) services.set(tgiKey(...b.tgi), sv); }
+    let states, notes, missing, versions;
+    if (idx.install) {                      // from an install only those, by slices
+      const oth = others(idx)[0], nAll = bs.length + oth.length;
+      bs = bs.filter(b => services.has(tgiKey(...b.tgi)));
+      [notes, missing, versions] = [installNotes(nAll, bs, oth), [], new Map()];
+      await fetchModels(idx, buildingModels(idx, bs));
+      states = new Map(bs.map(b => [b, modelState(idx, b)]));
+    } else {
+      // task sc4pass2: buildings without a model (lot-only packs), the readme's dependency list, ploppable versions
+      states = new Map(bs.map(b => [b, modelState(idx, b)]));
+      [notes, missing, versions] = packNotes(idx, bs, states, lots, await depsOf(sources.readmes));
+    }
     for (const ln of notes) { log(ln); report.push(ln); }
     bs = bs.filter(b => states.get(b)[0] === 'ok');
     lastEmpty = !bs.length;
@@ -1583,15 +1629,17 @@ function SC4WEB_LIB(B) {
     }
     const old = new Map();
     if (opt.old) { const j = pyLoad(opt.old); for (const m of (j && j.models) || []) { old.set('F' + m.file, m); if (m.x_sc4 && m.x_sc4.exemplar) old.set('X' + m.x_sc4.exemplar, m); } }
-    const keyOf = b => b.families.length ? 'F' + b.families.join(',') : 'D' + designOf(b.name)[0].toLowerCase();
+    const keyOf = b => { const sv = services.get(tgiKey(...b.tgi)); return sv ? 'S' + sv.kind + '\u0000' + labelOf(b).toLowerCase()   // sc4conv.design_key
+      : b.families.length ? 'F' + b.families.join(',') : 'D' + designOf(b.name)[0].toLowerCase(); };
     const fam = new Map();
     for (const b of bs) { const k = keyOf(b); if (!fam.has(k)) fam.set(k, []); fam.get(k).push(b); }
     const diag = new Map(bs.map(b => [b, foundationDiagonal(idx, b)]));
     const isDiag = opt.diagonal ? (() => false) : (b => !!(diag.get(b) && diag.get(b).diagonal));
     const pick = new Map(), chosen = pickColours([...fam.values()], isDiag);
     [...fam.keys()].forEach((d, i) => pick.set(d, chosen[i] ? chosen[i].tgi : null));
+    for (const [d, ms] of fam) if (d[0] === 'S') { const c = ms.find(m => !isDiag(m)); pick.set(d, c ? c.tgi : null); }   // task sc4civ: the first is on
     const files = new Map(), models = [];
-    const pctx = await propsContext(idx, bs, lots, sources.deps || opt.deps || [], fill, opt.noProps, log);   // task sc4props
+    const pctx = await propsContext(idx, bs, lots, sources.deps || opt.deps || [], fill, opt.noProps, log, services);   // task sc4props
     for (let bi = 0; bi < bs.length; bi++) {
       const b = bs[bi];
       if (opt.progress) await opt.progress(bi, bs.length, b);
@@ -1599,14 +1647,14 @@ function SC4WEB_LIB(B) {
       let e;
       try { e = writeBuilding(idx, b, files, opt.all || first, style, fill, diag.get(b), !!opt.diagonal, versions.get(b.tgi) || null, pctx); }
       catch (ex) { if (!(ex instanceof Sc4Error)) throw ex; const line = '  skip ' + b.name + ': ' + ex.message; log(line); report.push(line); continue; }
-      const auto = {}; for (const k of EDITABLE) auto[k] = e[k];
+      const ed = editableOf(e), auto = {}; for (const k of ed) auto[k] = e[k];   // task sc4civ: + the service fields
       e.x_sc4.auto = auto;
       const pr = e.x_sc4.props || null;
       if (pr) auto.props_on = pr.on;
       const o = old.get('X' + e.x_sc4.exemplar) || old.get('F' + e.file);
       if (o) {
         const prev = (o.x_sc4 && o.x_sc4.auto) || {};
-        for (const k of EDITABLE) if (k in o && k in prev && !pyEq(o[k], prev[k])) e[k] = o[k];
+        for (const k of ed) if (k in o && k in prev && !pyEq(o[k], prev[k])) e[k] = o[k];
         const op = o.x_sc4 && o.x_sc4.props;   // task sc4props: the player's props switch
         if (pr && op && typeof op === 'object' && !Array.isArray(op) && 'props_on' in prev && !pyEq(op.on, prev.props_on)) {
           pr.on = !!op.on && pr.placed > 0;
@@ -1698,6 +1746,331 @@ function SC4WEB_LIB(B) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch2); else watch2();
   }
 
+  // ================================================================================================ SC4 install (task sc4civ)
+  // The player's own SimCity 4 install as a source (catalog.install_files): a folder holding SimCity_1.dat at its top is
+  // read as the game's 7 data files only. The large ones (100-170 MB) are never read whole: their header, index and
+  // directory by slices, then the entries the conversion reads, fetched in batches before each step that reads them
+  // (fetchTypes: every exemplar, cohort, LText and Lua script; fetchModels: S3D views, then the FSH textures they name).
+  // A read of an entry not fetched raises an Sc4Error (the building is skipped with a log line), never a wrong answer.
+  const INSTALL_FILES = ['SimCity_1.dat', 'SimCity_2.dat', 'SimCity_3.dat', 'SimCity_4.dat', 'SimCity_5.dat', 'EP1.dat', 'SimCityLocale.DAT'];
+  const MAP_FROM = 16 << 20, T_LUA = 0xCA63E2A3;
+  function installOf(tree) {                // catalog.install_files on the input tree -> [sources] or null
+    const top = new Map([...tree.files.keys()].map(n => [n.toLowerCase(), n]));
+    if (!top.has(INSTALL_FILES[0].toLowerCase())) return null;
+    const out = [];
+    for (const n of INSTALL_FILES) { const k = top.get(n.toLowerCase()); if (k !== undefined) out.push(Object.assign({ path: k }, tree.files.get(k))); }
+    const loc = INSTALL_FILES[INSTALL_FILES.length - 1].toLowerCase();
+    if (!top.has(loc)) for (const d of [...tree.dirs.keys()].sort()) {
+      const t = tree.dirs.get(d), m = [...t.files.keys()].find(n => n.toLowerCase() === loc);
+      if (m !== undefined) { out.push(Object.assign({ path: d + '/' + m }, t.files.get(m))); break; }
+    }
+    return out;
+  }
+  async function readDbpfLazy(path, src) {  // dbpf.DBPF over slices: the same checks, entries read when fetched
+    const h = await src.slice(0, 96);
+    if (!(h[0] === 0x44 && h[1] === 0x42 && h[2] === 0x50 && h[3] === 0x46)) throw new Sc4Error(path + ': not a DBPF file');
+    const r = new Rd(h);
+    const major = r.u32(4), minor = r.u32(8);
+    const count = r.u32(0x24), ioff = r.u32(0x28), isize = r.u32(0x2C);
+    const indexMinor = minor >= 1 ? r.u32(0x3C) : 0;
+    const esz = indexMinor === 2 ? 24 : 20;
+    if (count && isize !== count * esz) throw new Sc4Error(path + ': index size ' + isize + ' != ' + count + ' x ' + esz);
+    const ix = count ? await src.slice(ioff, ioff + count * esz) : new Uint8Array(0), ri = new Rd(ix);
+    const entries = [];
+    for (let k = 0; k < count; k++) {
+      const p = k * esz;
+      const e = { type: ri.u32(p), group: ri.u32(p + 4), instance: ri.u32(p + 8), offset: ri.u32(p + esz - 8), size: ri.u32(p + esz - 4), usize: 0, packed: false };
+      e.usize = e.size; entries.push(e);
+    }
+    const byTgi = new Map(); for (const e of entries) byTgi.set(tgiKey(e.type, e.group, e.instance), e);
+    const dsz = indexMinor === 2 ? 20 : 16;
+    for (const e of entries) {
+      if (e.type !== T_DIR) continue;
+      const raw = await src.slice(e.offset, e.offset + e.size), rr = new Rd(raw);
+      for (let p = 0; p + dsz <= raw.length; p += dsz) {
+        const x = byTgi.get(tgiKey(rr.u32(p), rr.u32(p + 4), rr.u32(p + 8)));
+        if (x) { x.packed = true; x.usize = rr.u32(p + dsz - 4); }
+      }
+    }
+    const got = new Map();                  // entry -> its raw bytes
+    return { path, data: null, major, minor, indexMinor, entries, lazy: true,
+      has: e => got.has(e),
+      async fetch(es) {                     // nearby entries in one slice (gap <= 256 KB, slice <= 16 MB)
+        const want = es.filter(e => !got.has(e)).sort((a, b) => a.offset - b.offset);
+        for (let i = 0; i < want.length;) {
+          let j = i + 1, end = want[i].offset + want[i].size;
+          while (j < want.length && want[j].offset - end <= (256 << 10) && want[j].offset + want[j].size - want[i].offset <= MAP_FROM) { end = Math.max(end, want[j].offset + want[j].size); j++; }
+          const buf = await src.slice(want[i].offset, end);
+          for (let k = i; k < j; k++) got.set(want[k], buf.subarray(want[k].offset - want[i].offset, want[k].offset - want[i].offset + want[k].size));
+          i = j;
+        }
+      },
+      read(e) {
+        const raw = got.get(e);
+        if (!raw) throw new Sc4Error(path + ': entry ' + tgiHex([e.type, e.group, e.instance]) + ' was not fetched');
+        return e.packed ? qfsDecompress(raw) : raw;
+      } };
+  }
+  async function fetchKeys(idx, keys) {     // the lazy entries of these TGIs, per file
+    const per = new Map();
+    for (const k of keys) {
+      const x = idx.tgi.get(tgiKey(k[0] >>> 0, k[1] >>> 0, k[2] >>> 0));
+      if (!x || !x[0].lazy || x[0].has(x[1])) continue;
+      if (!per.has(x[0])) per.set(x[0], []);
+      per.get(x[0]).push(x[1]);
+    }
+    for (const [f, es] of per) await f.fetch(es);
+  }
+  async function fetchTypes(idx, types) {
+    const per = new Map();
+    for (const [f, e] of idx.tgi.values()) if (f.lazy && types.includes(e.type)) { if (!per.has(f)) per.set(f, []); per.get(f).push(e); }
+    for (const [f, es] of per) await f.fetch(es);
+  }
+  async function fetchModels(idx, models, src = idx) {   // S3D views of the models (zoom 4), then their textures
+    const keys = [];
+    for (const m of models) for (const k of (m.length === 4 ? [m.slice(0, 3)] : viewKeys(m))) keys.push(k);
+    await fetchKeys(idx, keys);
+    const tex = [];
+    for (const k of keys) {
+      if (!idx.has(...k)) continue;
+      let ms; try { ms = readS3D(idx.read(...k)); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) continue; throw e; }
+      for (const m of ms) for (const tx of m.mat.tex) tex.push(texKey(src, k[1], tx.id >>> 0));
+    }
+    await fetchKeys(idx, tex);
+  }
+  function buildingModels(idx, bs, zoom = 4) {   // the S3D keys load_views, model_state and foundation_diagonal read
+    const out = [];
+    for (const b of bs) {
+      out.push(b.model);
+      const inst = b.foundation;
+      if (typeof inst !== 'number' || !Number.isInteger(inst)) continue;
+      const k = [T_EXEMPLAR, FND_GROUP, inst >>> 0];
+      if (!idx.has(...k)) continue;
+      let ex; try { ex = parseExemplar(idx.read(...k)); } catch (e) { if (e instanceof Sc4Error || e instanceof RangeError) continue; throw e; }
+      const rk = pv(ex, 0x27812821);
+      if (Array.isArray(rk) && rk.length >= 3 && rk[0] === T_S3D) out.push([rk[0], rk[1], (rk[2] + (zoom << 8)) >>> 0, 'one']);
+    }
+    return out;
+  }
+
+  // ---- views.tex_key: SC4's own models (S3D group 0xBADB57F1) keep their textures in FSH group 0x1ABE787D
+  const MAXIS_S3D_GROUP = 0xBADB57F1, MAXIS_FSH_GROUP = 0x1ABE787D;
+  function texKey(src, g, tid) {
+    if (g === MAXIS_S3D_GROUP && !src.has(T_FSH, g, tid) && src.has(T_FSH, MAXIS_FSH_GROUP, tid)) return [T_FSH, MAXIS_FSH_GROUP, tid];
+    return [T_FSH, g, tid];
+  }
+
+  // ---- views.compose_atlas: a view whose meshes are pieces of one screen render packed into textures
+  const TILE_FIT = 2.0, ATLAS_FIT = 2.0;
+  function atlasCovered(q, tris, w, h) {    // views._covered -> Uint8Array(h * w)
+    const out = new Uint8Array(w * h);
+    for (const t of tris) {
+      const a = q[t[0]], b = q[t[1]], c = q[t[2]];
+      const ar = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      if (ar === 0.0) continue;
+      const sg = ar > 0 ? 1.0 : -1.0;
+      const x0 = Math.max(0, Math.floor(Math.min(a[0], b[0], c[0]))), x1 = Math.min(w - 1, Math.ceil(Math.max(a[0], b[0], c[0])) - 1);
+      const y0 = Math.max(0, Math.floor(Math.min(a[1], b[1], c[1]))), y1 = Math.min(h - 1, Math.ceil(Math.max(a[1], b[1], c[1])) - 1);
+      if (x1 < x0 || y1 < y0) continue;
+      const edges = [[a, b], [b, c], [c, a]];
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        let ok = true;
+        for (const [p_, r_] of edges) {
+          const ex = r_[0] - p_[0], ey = r_[1] - p_[1];
+          let inside = false;
+          for (const [dx, dy] of [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]) {
+            if (sg * (ex * ((y + dy) - p_[1]) - ey * ((x + dx) - p_[0])) >= 0.0) { inside = true; break; }
+          }
+          if (!inside) { ok = false; break; }
+        }
+        if (ok) out[y * w + x] = 1;
+      }
+    }
+    return out;
+  }
+  function composeAtlas(idx, g, meshes, label) {
+    const pieces = [];
+    for (const m of meshes) {
+      const tid = m.mat.tex[0].id, fk = texKey(idx, g, tid);
+      if (!idx.has(...fk)) throw new Sc4Error(label + ': texture ' + hexU(tid, 8) + ' not found');
+      const bm = readFshFirst(idx.read(...fk));
+      pieces.push({ P: m.P, UV: m.UV, q: m.UV.map(uv => [uv[0] * bm.w, uv[1] * bm.h]), tris: m.tris, bm, tid });
+    }
+    let ref = 0;
+    pieces.forEach((pc, i) => { if (pc.P.length > pieces[ref].P.length) ref = i; });
+    const [A] = fitCamera(pieces[ref].P, pieces[ref].UV, pieces[ref].bm.w, pieces[ref].bm.h);
+    const placed = [];
+    for (const pc of pieces) {
+      const n = pc.P.length;
+      const c = pc.P.map(p => [0, 1].map(j => ((p[0] * A[0][j] + p[1] * A[1][j]) + p[2] * A[2][j]) + A[3][j]));
+      const G = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], R = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]];
+      for (let k = 0; k < n; k++) {
+        const x = [c[k][0], c[k][1], 1.0];
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) G[i][j] = G[i][j] + x[i] * x[j];
+          for (let j = 0; j < 2; j++) R[i][j] = R[i][j] + x[i] * pc.q[k][j];
+        }
+      }
+      const M = solve(G, R);
+      const tr = (M[0][0] * M[1][1] - M[0][1] * M[1][0]) < 0.0;
+      const cc = c.map(ck => tr ? [ck[1], ck[0]] : [ck[0], ck[1]]);
+      const off = [0, 1].map(j => { let sm = 0.0; for (let k = 0; k < n; k++) sm = sm + (pc.q[k][j] - cc[k][j]); return Math.floor(sm / n + 0.5); });
+      for (let k = 0; k < n; k++) for (let j = 0; j < 2; j++) {
+        const e = Math.abs((cc[k][j] + off[j]) - pc.q[k][j]);
+        if (e > ATLAS_FIT) throw new Sc4Error(label + ': atlas piece of texture ' + hexU(pc.tid, 8) + " is " + pyFixed(e, 2) + " px off the view's projection");
+      }
+      const cov = atlasCovered(pc.q, pc.tris, pc.bm.w, pc.bm.h), xs = [], ys = [];
+      for (let y = 0; y < pc.bm.h; y++) for (let x = 0; x < pc.bm.w; x++) if (cov[y * pc.bm.w + x]) { xs.push(x); ys.push(y); }
+      placed.push({ pc, tr, off, xs, ys });
+    }
+    const toCanvas = (tr, off, x, y) => tr ? [y - off[1], x - off[0]] : [x - off[0], y - off[1]];
+    let box = null;
+    for (const { tr, off, xs, ys } of placed) for (let k = 0; k < xs.length; k++) {
+      const [cx, cy] = toCanvas(tr, off, xs[k], ys[k]);
+      if (!box) box = [cx, cy, cx, cy];
+      else { if (cx < box[0]) box[0] = cx; if (cy < box[1]) box[1] = cy; if (cx > box[2]) box[2] = cx; if (cy > box[3]) box[3] = cy; }
+    }
+    if (!box) throw new Sc4Error(label + ': the atlas pieces cover no texel');
+    const X0 = box[0], Y0 = box[1], W = box[2] - X0 + 1, H = box[3] - Y0 + 1;
+    const canvas = new Uint8Array(W * H * 4);
+    for (const { pc, tr, off, xs, ys } of placed) {
+      const im = pc.bm.image, w = pc.bm.w;
+      for (let k = 0; k < xs.length; k++) {
+        const [cx, cy] = toCanvas(tr, off, xs[k], ys[k]);
+        const s = 4 * (ys[k] * w + xs[k]), d = 4 * ((cy - Y0) * W + (cx - X0));
+        if (im[s + 3] > canvas[d + 3]) { canvas[d] = im[s]; canvas[d + 1] = im[s + 1]; canvas[d + 2] = im[s + 2]; canvas[d + 3] = im[s + 3]; }
+      }
+    }
+    const P = [], UV = [], tris = [];
+    for (const { pc, tr, off } of placed) {
+      const base = P.length;
+      for (const t of pc.tris) tris.push(t.map(k => base + k));
+      for (const p of pc.P) P.push([p[0], p[1], p[2]]);
+      for (const qq of pc.q) { const [ux, uy] = toCanvas(tr, off, qq[0], qq[1]); UV.push([(ux - X0) / W, (uy - Y0) / H]); }
+    }
+    return { P, UV, tris, bm: { w: W, h: H, image: canvas, code: pieces[0].bm.code }, tid: pieces[0].tid, tiles: pieces.length };
+  }
+
+  // ---- rewards.lua_rewards: SC4's reward conditions from its own Lua scripts
+  const RW_FAIR = ['g_population', 'g_city_r_population', 'g_city_r1_population+g_city_r2_population+g_city_r3_population'];
+  const RW_POPVAR = 'game\\.g_[a-z0-9_]*population';
+  function luaRewards(idx) {
+    const texts = [];
+    for (const k of idx.ofType(T_LUA)) { let b; try { b = idx.read(...k); } catch (e) { if (e instanceof Sc4Error) continue; throw e; } texts.push(latin1(b).replace(/--[^\n]*/g, '')); }
+    const consts = new Map();
+    for (const t of texts) for (const m of t.matchAll(/^[ \t]*tuning_constants\.([A-Za-z0-9_]+)[ \t]*=[ \t]*(-?[0-9]+(?:\.[0-9]+)?)/gm)) {
+      const v = Number(m[2]); consts.set(m[1], Number.isInteger(v) ? v : new PyFloat(v));
+    }
+    const thresh = '(?:([0-9]+(?:\\.[0-9]+)?)[ \\t]*\\*[ \\t]*)?(tuning_constants\\.[A-Za-z0-9_]+)|([0-9]+(?:\\.[0-9]+)?)(?![0-9.])';
+    const cmpRe = new RegExp('(' + RW_POPVAR + '(?:[ \\t]*\\+[ \\t]*' + RW_POPVAR + ')*)[ \\t]*<[ \\t]*(?:' + thresh + ')', 'g');
+    const out = new Map();
+    for (const t of texts) {
+      const heads = [...t.matchAll(/^[ \t]*a[ \t]*=[ \t]*create_reward_([A-Za-z_]+)[ \t]*\([ \t]*'([0-9A-Fa-f]{8})'[ \t]*\)/gm)];
+      heads.forEach((h, n) => {
+        const body = t.slice(h.index + h[0].length, n + 1 < heads.length ? heads[n + 1].index : t.length);
+        const cm = /function[ \t]+a\.condition[ \t]*\([ \t]*\)([\s\S]*?)\nend/.exec(body), cond = cm ? cm[1] : '';
+        const cmps = [];
+        for (const m of cond.matchAll(cmpRe)) {
+          const v = m[1].split('+').map(x => pyStrip(x).slice(5)).join('+'), fac = m[2], th = m[3], lit = m[4];
+          let val;                          // a tuning constant, times a factor (the Casino), or a number
+          if (th) { val = consts.has(th.slice(17)) ? consts.get(th.slice(17)) : null; if (val !== null && fac) val = new PyFloat(Number(fac) * num(val)); }
+          else val = new PyFloat(Number(lit));
+          if (val instanceof PyFloat && Number.isInteger(val.v)) val = val.v;
+          cmps.push({ measure: v, threshold: th ? (fac ? fac + ' * ' : '') + th : null, value: val });
+        }
+        let best = null;
+        for (const c of cmps) if (RW_FAIR.includes(c.measure) && typeof c.value === 'number' && Number.isInteger(c.value) && (!best || c.value > best.value)) best = c;
+        const pops = new Set(cmps.map(c => c.measure)), others = [];
+        for (const m of cond.matchAll(/game\.([A-Za-z0-9_]+)/g)) {
+          const v = m[1];
+          if (!others.includes(v) && ![...pops].some(p => p.split('+').includes(v))) others.push(v);
+        }
+        others.sort(cmpStr);
+        out.set(parseInt(h[2], 16), { advisor: h[1], population: best ? best.value : null, measure: best ? best.measure : null,
+          threshold: best ? best.threshold : null, compares: cmps.map(c => [c.measure, c.value]), others });
+      });
+    }
+    return out;
+  }
+
+  // ---- sc4conv.service_for: SC4 civic buildings, parks, rewards, landmarks -> bldimport kinds civic / reward / landmark
+  const G_CIVIC = 0x1005, G_PARK = 0x1006, G_REWARD = 0x150B, G_LANDMARK = 0x150A, P_GROUPS = 0xAA1DD396;
+  const CIVIC_SERVICE = new Map([[0x1500, 'police'], [0x1501, 'jail'], [0x1502, 'fire'], [0x1503, 'school'], [0x1504, 'college'],
+    [0x1505, 'library'], [0x1506, 'museum'], [0x1507, 'hospital'], [0x1702, 'zoo']]);
+  const CIVIC_LOT = { police: 3, jail: 3, fire: 3, hospital: 3, school: 3, college: 3, library: 2, museum: 3, small_park: 1, big_park: 3, zoo: 4,
+    baseball: 4, playground: 2, pond: 2, fountain: 1, bus_stop: 1, train_station: 2 };
+  const CIVIC_LABEL = { police: 'Police Station', jail: 'Jail', fire: 'Fire Station', hospital: 'Hospital', school: 'School', college: 'College',
+    library: 'Library', museum: 'Museum', small_park: 'Small Park', big_park: 'Big Park', zoo: 'Zoo', baseball: 'Baseball Field',
+    playground: 'Playground', pond: 'Pond', fountain: 'Fountain', bus_stop: 'Bus Stop', train_station: 'Train Station' };
+  const PARK_WORDS = [['softball', 'baseball'], ['baseball', 'baseball'], ['playground', 'playground'], ['fountain', 'fountain'], ['pond', 'pond'], ['zoo', 'zoo']];
+  const REWARD_POP = 20000, SC4_DESC = 'From SimCity 4';
+  const SERVICE_EDITABLE = ['kind', 'base', 'population', 'year', 'description'];
+  const editableOf = e => e.x_sc4 && e.x_sc4.service ? EDITABLE.concat(SERVICE_EDITABLE.filter(k => k in e)) : EDITABLE;
+  const groupsHex = gs => gs.map(g => g < 0x10000 ? hexU(g, 4) : hexU(g, 8));
+  const groupsOf = ex => asList(pv(ex, P_GROUPS, [])).filter(x => typeof x === 'number').map(x => x >>> 0);
+  const pyStrV = v => v === null || v === undefined ? 'None' : v instanceof PyFloat ? pyRepr(v.v) : String(v);
+  function rewardWords(r) {
+    if (!r) return '';
+    const cmp = r.compares.map(([m, v]) => m + ' ' + pyStrV(v)).join(', ') || 'no population';
+    const oth = r.others.join(', ');
+    return 'SC4 offers it as a reward when ' + cmp + (oth ? ' (also: ' + oth + ')' : '');
+  }
+  function serviceFor(b, rw) {
+    const gs = b.groups || [];
+    let sk;
+    if (gs.includes(G_LANDMARK)) sk = 'landmark'; else if (gs.includes(G_REWARD)) sk = 'reward';
+    else if (gs.includes(G_PARK)) sk = 'park'; else if (gs.includes(G_CIVIC)) sk = 'civic'; else return null;
+    const n = lotFor(b), title = labelOf(b), svc = gs.filter(g => CIVIC_SERVICE.has(g)).map(g => CIVIC_SERVICE.get(g));
+    const r = rw.get(b.tgi[2]) || null;
+    const x = { sc4_kind: sk, groups: groupsHex(gs) };
+    if (r) x.reward = { advisor: r.advisor, compares: r.compares.map(([m, v]) => [m, v]), others: r.others };
+    const size = 'footprint ' + pyFixed(b.size_m[0], 1) + ' x ' + pyFixed(b.size_m[2], 1) + ' m';
+    const rwn = rewardWords(r);
+    let why0 = null;
+    if (sk === 'civic' && !svc.length) { sk = 'landmark'; why0 = 'SC4 civic building (group 1005) of no service SC3 has a button for'; }
+    if (sk === 'civic' || sk === 'park') {
+      let base, why;
+      if (sk === 'park') {
+        const low = title.toLowerCase(), w = PARK_WORDS.find(([wd]) => low.includes(wd));
+        base = w ? w[1] : (n <= 1 ? 'small_park' : 'big_park');
+        why = w ? 'SC4 park (group 1006), its name says ' + w[0] + ': SC3 ' + CIVIC_LABEL[base] : 'SC4 park (group 1006), ' + size + ': SC3 ' + CIVIC_LABEL[base];
+      } else {
+        base = svc[0];
+        why = 'SC4 civic building, service ' + base + ' (groups ' + groupsHex(gs).join(', ') + '): SC3 ' + CIVIC_LABEL[base];
+      }
+      const bl = CIVIC_LOT[base], ok = n <= bl;
+      let note = why + '. A look of the SC3 ' + CIVIC_LABEL[base] + " button: the stock building's type, coverage and price on its " + bl + 'x' + bl + ' lot.';
+      if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + '.';
+      if (rwn) note += ' ' + rwn + '; in SC3 it is a look like the others.';
+      return { kind: 'civic', base, lot: bl, ok, why, note, x };
+    }
+    if (sk === 'reward') {
+      const pop = r && r.population !== null ? r.population : null;
+      let why = 'SC4 reward (group 150B)';
+      if (svc.length) why += ', also SC4 ' + svc.join('/') + ' service';
+      const ok = LANDMARK_LOTS.includes(n);
+      const popw = pop !== null ? 'SC3 population ' + pop + ' (' + r.measure + ')'
+        : 'SC3 population ' + REWARD_POP + ', the default: ' + (r ? 'no SC4 condition counts the whole city' : 'no SC4 reward condition found');
+      let note = why + '. ' + (rwn || 'No SC4 reward record') + '. ' + popw + ', year 0 (no SC4 reward condition reads the year).';
+      if (svc.length && svc[0] in CIVIC_LOT) note += ' As a look of the SC3 ' + CIVIC_LABEL[svc[0]] + ' button instead: kind civic, base ' + svc[0] + '.';
+      if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 rewards are 1x1 to 4x4.';
+      return { kind: 'reward', lot: n, ok, why, note, x, population: pop !== null ? pop : REWARD_POP, year: 0, description: SC4_DESC };
+    }
+    const why = why0 || 'SC4 landmark (group 150A)', ok = LANDMARK_LOTS.includes(n) && !why0;
+    let note = why + ': an SC3 landmark (the landmark menu, one per city).';
+    if (why0) note += ' Off: SC3 has no button for it.';
+    else if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 landmarks are 1x1 to 4x4.';
+    return { kind: 'landmark', lot: n, ok, why, note, x, description: SC4_DESC };
+  }
+  function installNotes(nAll, bs, oth) {    // sc4conv.install_notes
+    const nolook = oth.filter(o => o.groups.some(g => [G_CIVIC, G_PARK, G_REWARD, G_LANDMARK].includes(g)));
+    const lines = ['SimCity 4 install: ' + bs.length + ' of its ' + nAll + ' buildings are civic buildings, parks, rewards or landmarks with a model;' +
+      ' the others (homes, shops, offices, industry, utilities, transport) are not converted from an install'];
+    if (nolook.length) lines.push(nolook.length + ' more civic buildings, parks, rewards or landmarks have no model of their own (their look is lot' +
+      ' props), not converted: ' + nolook.map(labelOf).join(', '));
+    return lines;
+  }
+
   // ================================================================================================ inputs
   // Python's walk (catalog.dbpf_files): a folder's files sorted, then its folders sorted, depth first
   function walkOrder(tree, want = isDbpfName) {   // tree: { files: Map name -> src, dirs: Map name -> tree }
@@ -1774,8 +2147,10 @@ function SC4WEB_LIB(B) {
       if (isArchive(leaf)) {
         let t = tree; for (const p of parts) { if (!t.dirs.has(p)) t.dirs.set(p, newTree()); t = t.dirs.get(p); }
         await addArchive(t, await it.bytes());
-      } else if (isDbpfName(leaf) || isReadme(leaf)) treeAdd(tree, parts, { bytes: it.bytes });
+      } else if (isDbpfName(leaf) || isReadme(leaf)) treeAdd(tree, parts, { bytes: it.bytes, size: it.size, slice: it.slice });
     }
+    const inst = installOf(tree);           // task sc4civ: the player's SC4 install, its 7 game files only
+    if (inst) { inst.readmes = []; inst.deps = deps; inst.install = true; return inst; }
     const out = walkOrder(tree);
     out.readmes = walkOrder(tree, isReadme);   // task sc4pass2: sc4conv.readme_files, the same walk
     out.deps = deps;                          // task sc4props: dependency packs, read by streaming (depsIndex)
@@ -1786,7 +2161,8 @@ function SC4WEB_LIB(B) {
     for await (const [name, h] of dir.entries()) {
       if (h.kind === 'directory') { if (name !== 'sc3build') await handleInputs(h, pre + name + '/', out); }
       else if (isArchive(name)) out.push(blobInput(pre + name, await h.getFile()));   // task sc4props: size, slices, stream
-      else if (isDbpfName(name) || isReadme(name)) out.push({ path: pre + name, bytes: async () => new Uint8Array(await (await h.getFile()).arrayBuffer()) });
+      else if (isDbpfName(name)) out.push(blobInput(pre + name, await h.getFile()));   // task sc4civ: an install's files are read by slices
+      else if (isReadme(name)) out.push({ path: pre + name, bytes: async () => new Uint8Array(await (await h.getFile()).arrayBuffer()) });
     }
     return out;
   }
@@ -1829,6 +2205,7 @@ function SC4WEB_LIB(B) {
     parseTextExemplar, composeTiles, modelState, others, packNotes, readmeDeps, fixEmptyNote,
     convert, sourcesFrom, handleInputs, fileInputs, zipEntries, zipRead, overlayFS, isDbpfName, isArchive,
     depsIndex, walkDeps, propPlan, propSummary, propsNotes, ownSource, modelOf, resolveProp, DEPS_MIN,
+    luaRewards, serviceFor, composeAtlas, texKey, installOf, INSTALL_FILES,
   };
 }
 

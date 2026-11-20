@@ -15,9 +15,12 @@ Layout (re/analysis/SC4_FORMATS.md 1-2, every offset checked on the JMyers Homes
 
 API:  f = DBPF(path);  for e in f.entries: ...;  f.read(e) -> bytes (unpacked when the directory lists it)
 """
+import mmap
+import os
 import struct
 import sys
 
+MAP_FROM = 16 << 20         # task sc4civ: files from this size are memory-mapped (the bytes read are the same)
 T_DIR = 0xE86B1EEF
 T_EXEMPLAR = 0x6534284A
 T_COHORT = 0x05342861
@@ -114,7 +117,10 @@ class DBPF:
         self.path = path
         if data is None:
             with open(path, 'rb') as f:
-                data = f.read()
+                if os.path.getsize(path) >= MAP_FROM:   # task sc4civ: SC4's own 100-170 MB files, mapped, not read
+                    data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                else:
+                    data = f.read()
         self.data = data                  # task sc4props: a file inflated from a zip / jar member
         d = self.data
         if d[:4] != b'DBPF':

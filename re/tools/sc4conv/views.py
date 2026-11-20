@@ -29,6 +29,21 @@ import fsh as FS  # noqa: E402
 from s3d import S3D  # noqa: E402
 
 VIEW_NAMES = ('S', 'W', 'N', 'E')
+# Task sc4civ (2026-11-19l): SimCity 4's own models. Every S3D of SimCity_1.dat and EP1.dat is in group 0xBADB57F1
+# (42,895 of 42,895) and the textures their MATS name are FSH entries of group 0x1ABE787D in SimCity_2..5.dat and EP1.dat
+# (the S3D's own group holds no FSH there). A download's BAT keeps the texture in the S3D's own group (the JMyers, tower
+# and BSC packs), which is tried first.
+MAXIS_S3D_GROUP, MAXIS_FSH_GROUP = 0xBADB57F1, 0x1ABE787D
+
+
+def tex_key(idx, g, tid):
+    """The FSH key a mesh's texture id names: the S3D's own group, else for SC4's own models group 0x1ABE787D."""
+    k = (D.T_FSH, g, tid)
+    if g == MAXIS_S3D_GROUP and not idx.has(k):
+        k2 = (D.T_FSH, MAXIS_FSH_GROUP, tid)
+        if idx.has(k2):
+            return k2
+    return k
 # SC4 camera azimuth of view r in the model frame, degrees from +z towards +x (derivation: views.camera_azimuth)
 # SC3 slot r camera azimuth in the same frame, after bldrender's model axes (+X -> u, +Z -> v, slot rule
 # (u, v) -> (v, n - u)): slot 0 sees the +z and -x walls.
@@ -118,6 +133,9 @@ def elevation(d):
 
 
 TILE_SNAP = 0.35          # task sc4pass2: largest distance of a tile offset from whole pixels that is accepted
+TILE_FIT = 2.0            # task sc4civ: largest error of the joint tile fit (the tower: 0.59 px; SC4's atlases: 9-108)
+ATLAS_FIT = 2.0           # task sc4civ: largest error of an atlas piece against the reference projection (measured
+                          # on SC4's civic / park / reward / landmark views: 1.58 px after rounding the offset)
 
 
 def compose_tiles(idx, g, meshes, label):
@@ -133,7 +151,7 @@ def compose_tiles(idx, g, meshes, label):
     pieces = []
     for P, UV, tris, mat, _mname in meshes:
         tid = mat['tex'][0]['id']
-        fk = (D.T_FSH, g, tid)
+        fk = tex_key(idx, g, tid)
         if not idx.has(fk):
             raise ValueError('%s: texture %08X not found' % (label, tid))
         bm = FS.read_fsh(idx.read(fk))[0]
@@ -166,6 +184,12 @@ def compose_tiles(idx, g, meshes, label):
                     R[i][j] = R[i][j] + dp[i] * dq[j]
     L = _solve(G, R)
     ts = [[mq[j] - ((mp[0] * L[0][j] + mp[1] * L[1][j]) + mp[2] * L[2][j]) for j in range(2)] for mp, mq in means]
+    for (P, q, _t, _bm, _id), t in zip(pieces, ts):     # task sc4civ: one screen picture, else an atlas (None)
+        for k in range(len(P)):
+            for j in range(2):
+                e = ((float(P[k][0]) * L[0][j] + float(P[k][1]) * L[1][j]) + float(P[k][2]) * L[2][j]) + t[j] - q[k][j]
+                if abs(e) > TILE_FIT:
+                    return None
     offs = []
     for t in ts:
         o = []
@@ -173,7 +197,7 @@ def compose_tiles(idx, g, meshes, label):
             x = ts[0][j] - t[j]
             r = math.floor(x + 0.5)
             if abs(x - r) > TILE_SNAP:
-                raise ValueError('%s: tile offset %.2f px is not on the pixel grid' % (label, x))
+                return None
             o.append(int(r))
         offs.append(o)
     x0 = min(o[0] for o in offs)
@@ -195,6 +219,127 @@ def compose_tiles(idx, g, meshes, label):
     return Pall, UVall, tall, {'w': W, 'h': H, 'image': canvas, 'code': pieces[0][3]['code']}, pieces[0][4], len(pieces)
 
 
+def _covered(q, tris, w, h):
+    """Task sc4civ: texels (x, y) of a w x h texture whose square [x, x+1] x [y, y+1] meets one of the triangles (q:
+    texture pixels): inside the triangle's bounding box, and for every edge at least one corner of the square on its inner
+    side or on it (a separating-axis test on the two box axes and the three edge normals). Zero-area triangles cover nothing. -> bool array (h, w). Elementwise float arithmetic in
+    a fixed order (sc4web.js atlasCovered: the same operations)."""
+    out = np.zeros((h, w), dtype=bool)
+    for t in tris:
+        a, b, c = q[t[0]], q[t[1]], q[t[2]]
+        ar = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+        if ar == 0.0:
+            continue
+        sg = 1.0 if ar > 0 else -1.0
+        x0 = max(0, int(math.floor(min(a[0], b[0], c[0]))))
+        x1 = min(w - 1, int(math.ceil(max(a[0], b[0], c[0]))) - 1)
+        y0 = max(0, int(math.floor(min(a[1], b[1], c[1]))))
+        y1 = min(h - 1, int(math.ceil(max(a[1], b[1], c[1]))) - 1)
+        if x1 < x0 or y1 < y0:
+            continue
+        X = np.arange(x0, x1 + 1, dtype=np.float64)[None, :]
+        Y = np.arange(y0, y1 + 1, dtype=np.float64)[:, None]
+        ok = np.ones((y1 - y0 + 1, x1 - x0 + 1), dtype=bool)
+        for p_, r_ in ((a, b), (b, c), (c, a)):
+            ex, ey = r_[0] - p_[0], r_[1] - p_[1]
+            inside = np.zeros_like(ok)
+            for dx, dy in ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)):
+                e = sg * (ex * ((Y + dy) - p_[1]) - ey * ((X + dx) - p_[0]))
+                inside |= e >= 0.0
+            ok &= inside
+        out[y0:y1 + 1, x0:x1 + 1] |= ok
+    return out
+
+
+def compose_atlas(idx, g, meshes, label):
+    """Task sc4civ (2026-11-19l): one view whose meshes are pieces of one screen render packed into textures (SC4's
+    own civic, park, reward and landmark models: 316 of 452 zoom-5 views, 2,343 pieces). Each piece fits an
+    orthographic camera of its own to 0.6 px; against the projection fitted on the piece with the most vertices it is
+    the same picture moved, unturned (1,605) or transposed (x and y swapped: 738), 1.58 px off at most once its offset
+    is rounded to whole pixels. So: per piece a 2D affine fit of its texture pixels against the reference projection
+    (normal equations, _solve) decides transposed (determinant < 0); the mean offset, rounded, says where its texels
+    go; the texels its triangles cover (_covered) are copied to one canvas, a texel replacing the canvas only where its
+    alpha is higher (as compose_tiles), pieces in mesh order. Every vertex keeps its own texel, moved with it.
+    -> as compose_tiles."""
+    pieces = []
+    for P, UV, tris, mat, _mname in meshes:
+        tid = mat['tex'][0]['id']
+        fk = tex_key(idx, g, tid)
+        if not idx.has(fk):
+            raise ValueError('%s: texture %08X not found' % (label, tid))
+        bm = FS.read_fsh(idx.read(fk))[0]
+        q = [[float(uv[0]) * bm['w'], float(uv[1]) * bm['h']] for uv in UV]
+        pieces.append((P, UV, q, tris, bm, tid))
+    ref = 0
+    for i, pc in enumerate(pieces):
+        if len(pc[0]) > len(pieces[ref][0]):
+            ref = i
+    A, _err, _d = fit_camera(pieces[ref][0], pieces[ref][1], pieces[ref][4]['w'], pieces[ref][4]['h'])
+    A = [[float(A[i, j]) for j in range(2)] for i in range(4)]
+    placed = []
+    for P, _UV, q, tris, bm, tid in pieces:
+        n = len(P)
+        c = [[((float(p[0]) * A[0][j] + float(p[1]) * A[1][j]) + float(p[2]) * A[2][j]) + A[3][j] for j in range(2)]
+             for p in P]
+        G = [[0.0] * 3 for _ in range(3)]
+        R = [[0.0] * 2 for _ in range(3)]
+        for k in range(n):
+            x = (c[k][0], c[k][1], 1.0)
+            for i in range(3):
+                for j in range(3):
+                    G[i][j] = G[i][j] + x[i] * x[j]
+                for j in range(2):
+                    R[i][j] = R[i][j] + x[i] * q[k][j]
+        M = _solve(G, R)
+        tr = (M[0][0] * M[1][1] - M[0][1] * M[1][0]) < 0.0
+        cc = [[ck[1], ck[0]] if tr else [ck[0], ck[1]] for ck in c]
+        off = []
+        for j in range(2):
+            sm = 0.0
+            for k in range(n):
+                sm = sm + (q[k][j] - cc[k][j])
+            off.append(int(math.floor(sm / n + 0.5)))
+        for k in range(n):
+            for j in range(2):
+                e = abs((cc[k][j] + off[j]) - q[k][j])
+                if e > ATLAS_FIT:
+                    raise ValueError("%s: atlas piece of texture %08X is %.2f px off the view's projection"
+                                     % (label, tid, e))
+        ys, xs = np.nonzero(_covered(q, tris, bm['w'], bm['h']))
+        placed.append((P, q, tris, bm, tr, off, xs, ys))
+
+    def to_canvas(tr, off, x, y):             # a texture position -> canvas, before the shift to 0
+        return (y - off[1], x - off[0]) if tr else (x - off[0], y - off[1])
+    box = None
+    for _P, _q, _t, _bm, tr, off, xs, ys in placed:
+        if len(xs):
+            cx, cy = to_canvas(tr, off, xs, ys)
+            b = [int(cx.min()), int(cy.min()), int(cx.max()), int(cy.max())]
+            box = b if box is None else [min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3])]
+    if box is None:
+        raise ValueError('%s: the atlas pieces cover no texel' % label)
+    X0, Y0 = box[0], box[1]
+    W, H = box[2] - X0 + 1, box[3] - Y0 + 1
+    canvas = np.zeros((H, W, 4), dtype=np.uint8)
+    for _P, _q, _t, bm, tr, off, xs, ys in placed:
+        if not len(xs):
+            continue
+        cx, cy = to_canvas(tr, off, xs, ys)
+        cx, cy = cx - X0, cy - Y0
+        src = bm['image'][ys, xs]
+        m = src[:, 3] > canvas[cy, cx, 3]     # one piece never puts two texels on one canvas pixel
+        canvas[cy[m], cx[m]] = src[m]
+    Pall, UVall, tall = [], [], []
+    for P, q, tris, _bm, tr, off, _xs, _ys in placed:
+        base = len(Pall)
+        tall += [tuple(base + i for i in t) for t in tris]
+        Pall += [[float(p[0]), float(p[1]), float(p[2])] for p in P]
+        for qq in q:
+            ux, uy = to_canvas(tr, off, qq[0], qq[1])
+            UVall.append([(ux - X0) / W, (uy - Y0) / H])
+    return Pall, UVall, tall, {'w': W, 'h': H, 'image': canvas, 'code': pieces[0][4]['code']}, pieces[0][5], len(pieces)
+
+
 def load_views(idx, b, zoom=4):
     """-> list of 4 dicts {r, name, P (model frame), P_view, UV, tris, tex (RGBA uint8), tex_id, cam, tiles}"""
     t, g, base = b['model']
@@ -211,13 +356,16 @@ def load_views(idx, b, zoom=4):
         if len(meshes) == 1:
             P, UV, tris, mat, mname = meshes[0]
             tid = mat['tex'][0]['id']
-            fk = (D.T_FSH, g, tid)
+            fk = tex_key(idx, g, tid)
             if not idx.has(fk):
                 raise ValueError('%s view %d: texture %08X not found' % (b['name'], r, tid))
             bm = FS.read_fsh(idx.read(fk))[0]
             tiles = 1
         else:                                 # task sc4pass2: a view cut into tiles (tall buildings)
-            P, UV, tris, bm, tid, tiles = compose_tiles(idx, g, meshes, '%s view %d' % (b['name'], r))
+            got = compose_tiles(idx, g, meshes, '%s view %d' % (b['name'], r))
+            if got is None:                   # task sc4civ: SC4's own models, the view packed into an atlas
+                got = compose_atlas(idx, g, meshes, '%s view %d' % (b['name'], r))
+            P, UV, tris, bm, tid, tiles = got
             mat, mname = meshes[0][3], meshes[0][4]
         A, err, d = fit_camera(P, UV, bm['w'], bm['h'])
         dm = to_model(d[None, :], r)[0]
@@ -245,7 +393,7 @@ def model_state(idx, b, zoom=4):
         for k in keys:
             for _P, _UV, _tris, mat, _n in S3D(idx.read(k)).meshes():
                 for tx in mat['tex']:
-                    fk = (D.T_FSH, g, tx['id'])
+                    fk = tex_key(idx, g, tx['id'])
                     if idx.has(fk) and FS.read_fsh(idx.read(fk))[0]['image'][:, :, 3].max() > 0:
                         return 'ok', None
     except (ValueError, KeyError, IndexError, struct.error):

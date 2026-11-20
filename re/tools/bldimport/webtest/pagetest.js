@@ -74,6 +74,17 @@
       done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4, empty: true });
       return;
     }
+    if (man.action === 'open' && sc4) {      // task sc4civ: an SC4 install opened in the grid (no install)
+      const S = window.bc.S;
+      sc4.noteShown = !document.getElementById('sc4Note').hidden;
+      sc4.install = !!(S.sc4 && S.sc4.install); sc4.dirHandle = !!S.dirHandle; sc4.folderName = S.folderName;
+      sc4.kinds = {}; for (const r of S.recs) { const k = r.meta.kind + (r.meta.base ? ':' + r.meta.base : ''); sc4.kinds[k] = (sc4.kinds[k] || 0) + 1; }
+      const mh = S.recs.find(r => r.raw && r.raw.x_sc4 && r.raw.x_sc4.exemplar === 'RW16x14_MayorsHouse_031F');
+      sc4.mayor = mh ? { kind: mh.meta.kind, population: mh.meta.population, year: mh.meta.year, enabled: mh.meta.enabled } : null;
+      sc4.buttons = Object.fromEntries(['btnInstall', 'btnZipInstall', 'btnSave'].map(id => [id, document.getElementById(id).disabled]));
+      done({ pass: true, action: 'open', seconds: 0, rep: [], files: {}, models: {}, deleted: [], sc4 });
+      return;
+    }
     if ((man.action === 'open' || man.editDesc) && !man.sc4) {   // sc3compat-a: a models folder opened in the grid as Open folder does
       const files = [];
       for (const rel of man.models.files) {
