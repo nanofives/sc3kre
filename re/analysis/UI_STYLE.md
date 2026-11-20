@@ -427,6 +427,28 @@ gives caps 15 CSS px, larger than the page text a phone shows elsewhere.
 A reader who wants larger text on a 100% screen uses browser zoom: at 125% zoom the page snaps to 2 screen px per game
 pixel and stays crisp (`verify/gamefont/owner_shots/scale_desktop_1x_vs_2x.jpg`, `scale_phone_4_scales.jpg`).
 
+### Smooth outlines for TITLE9 / TITLE12 (smoothfont, round 2026-11-20f, built, not published)
+
+Owner, 2026-11-20: "can you make the comic sans font less pixelated?". At 150% and 200% screens every game pixel of the
+pixel build shows as a block (2 and 3 device px), and the partial-coverage bars show as thin stripes.
+`sc3font.js` `smoothContours` traces each glyph instead: coverage upsampled 8 x 8 with a Catmull-Rom kernel, cut at one
+iso level per font (picked so the outlines' area equals the font's total coverage: TITLE9 0.491, TITLE12 0.507),
+Douglas-Peucker at 0.07 px, drawn as a TrueType quadratic B-spline (vertices off-curve, turns past 57 degrees kept as
+on-curve corners). Advances, cmap, ascent and descent are identical to the pixel build (0 of 220 advances differ in all
+six fonts), so layout does not move. Each glyph keeps its COLR v1 layer: without it Chrome draws the outlines with
+ClearType colour fringes (max |R-B| 184 of 255, measured), with it grayscale like the game.
+
+At 100% against the game's coverage (fbf.py, the game's draw): mean coverage error 0.064 to 0.084, ink mass 0.97 to
+1.01, IoU at 0.5 0.90 to 0.95 (the pixel build: 0.003, 1.00, 1.00). So the pixel build stays the exact one at 100%,
+the smooth one wins at 150% and up. 1-bit fonts (MAIN9, MAIN10, SYSTEM9) trace too, but they are drawn on the pixel
+grid (stair-step diagonals), so tracing only rounds the corners: not recommended.
+
+**The switch:** `SMOOTH` in `re/tools/sc3ui/build_fonts.mjs` (published files) and `SMOOTH` in `sc3font.js` (run-time
+fallback), both `[]` today. Owner pick -> `['TITLE9', 'TITLE12']` in both, re-run `build_fonts.mjs --game <install>`,
+then `sync_css.py` (+ `--publish`). sc3ui.css does not change (same file names and metrics). `sc3font_check.py`'s two
+published TITLE checks (coverage within 0.012) then need a smooth tolerance. WOFF2 sizes: TITLE9 17,452 -> 21,300,
+TITLE12 21,956 -> 26,376 bytes. Pictures and numbers: `verify/smoothfont/RESULTS.md` (local).
+
 ### Proof: the replica with the published fonts against R3
 
 `replica_diff.py` + `verify/gamefont/text_pixels.py`, the 16 labels of Preferencias, the replica at `--ui-scale` 1:
