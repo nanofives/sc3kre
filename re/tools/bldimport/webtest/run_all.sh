@@ -69,7 +69,8 @@ sc4base=""; [ -n "${SC4INSTALL:-}" ] && [ -n "$bsc" ] && sc4base=1 && steps=$((s
 [ -n "${BLD1999:-}" ] && steps=$((steps + 5))
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
-step() { n=$((n + 1)); local name="$1"; shift; if "$@"; then echo "[$n/$steps] $name PASS"; else echo "[$n/$steps] $name FAIL"; bad=$((bad + 1)); fi; }
+# each step line carries its wall time before PASS / FAIL, so slow steps show in every log (2026-11-20)
+step() { n=$((n + 1)); local name="$1"; shift; local t0=$SECONDS; if "$@"; then echo "[$n/$steps] $name ($((SECONDS - t0)) s) PASS"; else echo "[$n/$steps] $name ($((SECONDS - t0)) s) FAIL"; bad=$((bad + 1)); fi; }
 step "golden_setup (bldimport.py pack, 8 cases)" $py "$here/golden_setup.py" --game "$game" --kits "$kits" --out "$work"
 step "golden.mjs (bldweb.js vs pack, every file + frame)" node "$here/golden.mjs" --golden "$work" --game "$game" --cases testmodels,bld,kenney,styles,ports,landmarks,civic --frames
 step "install_golden.mjs (install, re-install, restore)" node "$here/install_golden.mjs" --golden "$work" --game "$game" --case kenney
