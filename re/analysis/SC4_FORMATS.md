@@ -463,4 +463,67 @@ without a readable model: animated people (`Aper*`, resource key type 4 with no 
 first 60 buildings), effects (no model key) and resource key type 0 (98). The two most used prop ids the JMyers lots
 left unplaced (9.2) are SC4's own: `1EDF0000` is the prop exemplar `Flora2x2x2_QuarterShrub_1EDF` and `28330000`
 `Flora2x2x2_Quarterbush_2833` in SimCity_1.dat [CONFIRMED: instance keys of type-0x1E exemplars of the install]. Reading the
-install as a dependency source for downloads is the next stream (sc4baseprops).
+install as a dependency source for downloads: section 11.
+
+## 11. SimCity 4's own props for a download's lots (round 2026-11-19l, stream sc4baseprops)
+
+`sc4conv.py <download> --sc4 <install>` (Python) and the page (`sc4web.js installSource`: the install's `.dat` files picked
+with the download, or the game opened before with Open SC4 game) add the player's install as one more prop source.
+Results: `verify/sc4baseprops/RESULTS.md`. EA's files are read in place, nothing of them is in the repository or docs.
+
+### 11.1 The install as a prop source
+
+- `props.OwnSource(catalog.Index(<install>))`: 1,544 prop exemplars (exemplar type 0x1E) and 388 cohorts of SimCity_1.dat.
+  Every one of the 1,544 holds its type 0x1E itself: of the install's 8,957 exemplars, 980 hold their type only in a
+  parent cohort, and none of them is a prop (exemplar type 2: 653, 0x16: 154, 0x17: 115, 0x26: 21, 0x18: 19,
+  0x19: 15, 1: 2, 0x25: 1) [CONFIRMED: `Index.exemplar` vs `Index.full` over SimCity_1.dat].
+- Order: the download, then each `--deps` pack, then the install. SC4 loads its own data files before the plugins, so a
+  plugin's exemplar of an id the install also holds replaces the install's: `props.owner` returns the first source
+  holding an instance.
+- The page reads the install's exemplars and cohorts once per page session (by slices, as section 10.1), then only
+  the S3D views and FSH textures of the props it places: 13.3 MB in slices and 1.0 MB of whole small files
+  (SimCityLocale.DAT) for the JMyers pack, no large file read whole.
+
+### 11.2 One exemplar space: families and models across sources
+
+SC4 keeps one exemplar space for its own files and the plugins. Two rules of section 9 read each source on its own and
+were changed to read across them (`props.resolve`, `props.plan`; `sc4web.js resolveProp`, `propPlan`):
+
+- **Families are pooled.** A family id's members are the union of every source's members, each read from its
+  `owner`, a member counted only when its owner's exemplar still names the family; then active on DATE, sorted, row
+  index mod count as before. Measured on the JMyers lots: family A0000038 has 502 members in the BSC pack (car props,
+  e.g. `family single high wealth mercedes suv grey`) and 23 in the install (`R4x8x3_$JunkerTruck_1C93`,
+  `R4x8x2_$bentley_1CDF`), 48 rows; A0000068 has 2 in the BSC pack and 46 in the install (`Aper2x2x4_*` people), 12 rows.
+  With one source (a download alone, an install converting itself) the pool is that source's list: nothing changes.
+- **The model comes from the first source holding its 4 zoom-5 views**, the prop's own source first (`row.msrc`). The
+  BSC prop `CP_MaxisFluffyMed` (D0A8237D) has Resource Key Type 1 {0x5AD0E817, 0xBADB57F1, 0x1EDA0000}: SimCity 4's own
+  S3D, which only the install holds (`1EDA0400`..`1EDA0430` present in the install, absent from the BSC index). With the
+  install given, its 6 rows resolve (they fall outside the SC3 lot window on the JMyers lots).
+
+### 11.3 Results on the JMyers pack (110 buildings, 5,190 prop rows)
+
+| sources | placed (buildings) | outside the SC3 lot | other season | in no source (ids) | no readable model |
+|---|---|---|---|---|---|
+| download + BSC pack (section 9.4) | 486 (72) | 866 | 378 | 3,454 (54) | 6 |
+| download + install | 1,786 (110) | 1,634 | 0 | 1,676 (81) | 94 |
+| download + BSC pack + install | 2,236 (110) | 2,494 | 366 | 0 | 94 |
+
+- All 54 ids the BSC run left unresolved are in the install: `1EDF0000` = `Flora2x2x2_QuarterShrub_1EDF` (1,380 rows),
+  `28330000` = `Flora2x2x2_Quarterbush_2833` (804) and the 52 others.
+- The 81 ids the install run leaves unresolved are BSC props (`109F9BD6` 240 rows, `109F9DCC` 210, `D09F9C1E` 204, ...):
+  with both sources, 0.
+- 94 rows without a readable model: 88 whose Resource Key Type 4 holds only records `{state, 0, 0, 0, 0x27812820,
+  0x29A5D1EC, group 0x2A2458F9 or 0x49A593E7, instance}` (no record of 0x27812821, so `model_of` finds no S3D):
+  `ACV6x4x4_jump-ropeanimate_1DE7` 18 rows, `Aper2x2x4_female-S-drk01-wait` 14, `ACV6x2x4_keep-awayanimate_1D46` 12,
+  `Amill4x2x4_exploritorium_29C2` 12, `Aper2x2x4_male-drk01-negative-tantrum_2875` 8, `AR8x8x2_$DogOnAChain_1ef3` 6 and
+  others of the pooled people family; 6 rows of `Randomwalk_MowerBldg`, Resource Key Type 0 {0x5AD0E817, 0xBADB57F1, 0}.
+  [UNCERTAIN: what resource type 0x29A5D1EC holds; the names say animated. Not read.]
+- What the two rule changes moved, with both sources (before -> after): other season 378 -> 366 and no readable model
+  88 -> 94 (the 12 rows of family A0000068: its 2 BSC members 287D0000 / 28870000 have interval 365, start {10, 1}, 120 days, not active on DATE, the pooled list adds the install's
+  46 people, which have no S3D record), outside 2,488 -> 2,494 and no readable model -6 (the 6 `CP_MaxisFluffyMed`
+  rows, now with a model, outside the window). Placed: 2,236 both times.
+
+### 11.4 SC4's own lots
+
+The install converting itself (section 10.5) has one prop source, so pooling and the model lookup give the same rows as
+before: 0 props missing there (the BSC pack was not added to an install run: nothing is missing for it to supply).

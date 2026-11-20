@@ -7,6 +7,10 @@
 //        (task sc4pass2: a download without building models: no cards, Install off, the note names the buildings)
 //   node pagetest.mjs --golden <sc4_props_setup.py dir> --game <tree> --case sc4props --sc4zip <JMyers .zip> --sc4deps <BSC zip>
 //        (task sc4props: both picked in Open SC4 .zip, the 1.7 GB pack streamed by the page, props baked, installed)
+//   node pagetest.mjs --golden <sc4_baseprops_setup.py dir> --game <tree> --case sc4baseprops_inst --sc4zip <JMyers .zip>
+//        --sc4with <SimCity 4 folder>  |  --sc4remember <SimCity 4 folder>
+//        (task sc4baseprops: the game's .dat files picked with the download, or the game opened first (Open SC4 game,
+//        remembered for the page session) and the download alone after it: SC4's own props baked, installed)
 //   node pagetest.mjs --golden <dir> --game <tree> --case landmarkdesc --edit-desc "<file>=<text>"
 //        (plop2: the entry's description blanked, typed into the panel's Description box, installed from the page's own
 //        models.json; the outputs, ids.json included, must equal bldimport.py's on golden_setup case landmarkdesc)
@@ -32,6 +36,8 @@ const INSTALL = ['SimCity_1.dat', 'SimCity_2.dat', 'SimCity_3.dat', 'SimCity_4.d
 const sc4zip = arg('sc4zip') || (sc4inst ? path.join(sc4inst, INSTALL[0]) : null);
 const editArg = arg('edit-desc');           // plop2: "<file>=<text>"
 const sc4deps = arg('sc4deps');           // task sc4props: a dependency pack picked with the download (the BSC zip)
+const sc4with = arg('sc4with'), sc4remember = arg('sc4remember');   // task sc4baseprops: the SC4 game as a prop source
+const instFiles = d => INSTALL.filter(f => fs.existsSync(path.join(d, f)));
 const chrome = arg('chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 function walk(d, base = d, out = []) {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -44,7 +50,9 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const dirUrl = d => pathToFileURL(d).href.replace(/\/?$/, '/');
 const man = { models: { base: dirUrl(modelsDir), files: sc4zip ? [] : walk(modelsDir) }, game: { base: dirUrl(tree), files: walk(tree) }, action, apply,
   sc4: sc4zip ? { base: dirUrl(path.dirname(path.resolve(sc4zip))), files: sc4inst ? INSTALL.filter(f => fs.existsSync(path.join(sc4inst, f))) : [path.basename(sc4zip)],
-    deps: sc4deps ? [{ base: dirUrl(path.dirname(path.resolve(sc4deps))), file: path.basename(sc4deps) }] : [] } : null,
+    deps: sc4deps ? [{ base: dirUrl(path.dirname(path.resolve(sc4deps))), file: path.basename(sc4deps) }] : [],
+    extra: sc4with ? instFiles(sc4with).map(f => ({ base: dirUrl(sc4with), file: f })) : [],
+    remember: sc4remember ? { base: dirUrl(sc4remember), files: instFiles(sc4remember) } : null } : null,
   editDesc: editArg ? { file: editArg.slice(0, editArg.indexOf('=')), text: editArg.slice(editArg.indexOf('=') + 1) } : null };
 const manPath = path.join(golden || os.tmpdir(), `pagetest_${cs}_${action}.json`);
 fs.writeFileSync(manPath, JSON.stringify(man));
@@ -122,7 +130,7 @@ try {
   else {
     const pyOut = path.join(golden, 'py', cs, 'out');
     const want = walk(pyOut);
-    total = want.length + 4 + (res.sc4 ? 3 : 0) + (man.editDesc ? 3 : 0);
+    total = want.length + 4 + (res.sc4 ? 3 : 0) + (man.editDesc ? 3 : 0) + (sc4with || sc4remember ? 1 : 0);
     if (man.editDesc) {
       const e = res.editDesc || {}, t = man.editDesc.text;
       console.log('  editDesc: ' + JSON.stringify(e));
@@ -138,6 +146,12 @@ try {
       const pd = pm.filter(m => m.x_sc4 && m.x_sc4.diagonal).map(m => m.file).sort();
       line(`page marks the ${s4.diag} diagonal cards (badge + reason)`, JSON.stringify([...s4.diagFiles].sort()) === JSON.stringify(pd) && /45 degrees/.test(s4.diagTitle), s4.diagTitle.slice(0, 120));
       line('page shows the SC4 licence rule', /never share the converted buildings without the author's permission/.test(s4.note), s4.note.slice(0, 140));
+      if (sc4with || sc4remember) {         // task sc4baseprops
+        const how = sc4with ? 'its .dat files picked with the download' : 'opened with Open SC4 game';
+        const pon = pm.filter(m => m.x_sc4 && m.x_sc4.props && m.x_sc4.props.on).length;
+        line(`page note: SimCity 4's own props from the game (${how}), ${s4.withProps} cards with props on (Python ${pon})`, s4.withProps === pon && s4.note.includes("SimCity 4's own props came from your SimCity 4 game (" + how + ')') &&
+          /^SimCity 4 download /.test(s4.note) && !/Props not found \(\d+ ids, rows in brackets; SimCity 4's own props/.test(s4.note), s4.note.slice(0, 160));
+      }
     }
     console.log(`  page: ${res.seconds.toFixed(1)} s, renderer ${res.worker}, ${res.resultRows} result rows, "${res.progressShown}"`);
     for (const rel of want) {

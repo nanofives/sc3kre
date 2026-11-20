@@ -56,6 +56,11 @@ bsc=""; [ -n "$sc4packs" ] && [ -n "$sc4zip" ] && for f in "$sc4packs"/*Common\ 
 # reads the install by slices: every file byte / pixel identical, kinds, rerun, the subset's game files and frames).
 # EA's files are read in place: nothing of them leaves <work dir>.
 [ -n "${SC4INSTALL:-}" ] && steps=$((steps + 3))
+# sc4baseprops (2026-11-19): SimCity 4's own props from the install for a download's lots, when SC4INSTALL, the JMyers
+# .zip + folder and the BSC zip are all given: sc4_baseprops_setup.py (sc4conv.py --deps --sc4, and --sc4 alone, both
+# packed) + sc4_baseprops.mjs (sc4web.js: the install picked with the download, read by slices, and remembered) + the
+# page installing the install-alone case twice (the game's .dat files picked with the .zip; Open SC4 game first)
+sc4base=""; [ -n "${SC4INSTALL:-}" ] && [ -n "$bsc" ] && sc4base=1 && steps=$((steps + 4))
 [ -n "${BLD1999:-}" ] && steps=$((steps + 5))
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
@@ -111,6 +116,12 @@ if [ -n "${SC4INSTALL:-}" ]; then
   step "sc4_install_setup.py (sc4conv.py on the SC4 install: civic, parks, rewards, landmarks; rerun; subset packed)" $py "$here/sc4_install_setup.py" --install "$SC4INSTALL" --game "$game" --out "$work/sc4install"
   step "sc4_install.mjs (sc4web.js on the SC4 install by slices: files, kinds, rerun, subset pack, frames)" node "$here/sc4_install.mjs" --golden "$work/sc4install" --install "$SC4INSTALL" --game "$game" --frames
   step "pagetest.mjs sc4install (the page opens the install's .dat files: 112 cards, 73 on, read only)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 112,73
+fi
+if [ -n "$sc4base" ]; then
+  step "sc4_baseprops_setup.py (sc4conv.py --sc4: JMyers with SC4's own props, with and without the BSC pack, bldimport.py pack)" $py "$here/sc4_baseprops_setup.py" --sc4 "$sc4dir" --deps "$bsc" --install "$SC4INSTALL" --game "$game" --out "$work/sc4baseprops"
+  step "sc4_baseprops.mjs (sc4web.js: the install picked with the download and remembered, by slices; files, pack, frames)" node "$here/sc4_baseprops.mjs" --golden "$work/sc4baseprops" --game "$game" --zip "$sc4zip" --deps "$bsc" --install "$SC4INSTALL" --frames
+  step "pagetest.mjs sc4baseprops_inst --sc4with (the page: the game's .dat files picked with the .zip, installed)" node "$here/pagetest.mjs" --golden "$work/sc4baseprops" --game "$game" --case sc4baseprops_inst --sc4zip "$sc4zip" --sc4with "$SC4INSTALL"
+  step "pagetest.mjs sc4baseprops_inst --sc4remember (the page: Open SC4 game first, then the .zip alone, installed)" node "$here/pagetest.mjs" --golden "$work/sc4baseprops" --game "$game" --case sc4baseprops_inst --sc4zip "$sc4zip" --sc4remember "$SC4INSTALL"
 fi
 echo "$((n - bad)) of $n steps passed"
 exit $bad

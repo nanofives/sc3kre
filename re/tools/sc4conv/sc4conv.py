@@ -5,6 +5,7 @@ r"""sc4conv.py - task sc4conv (2026-11-18h): SimCity 4 buildings -> OBJ + MTL + 
   py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --list
   ... --deps "<BSC Common Dependencies Pack V9e.zip>" [--deps <more>] [--deps-cache DIR] [--no-props]   (task sc4props)
   py -3.12 re/tools/sc4conv/sc4conv.py "<SimCity 4 install folder>" --out <folder>        (task sc4civ)
+  ... --sc4 "<SimCity 4 install folder>"     SimCity 4's own props for a download's lots (task sc4baseprops)
 
 Then, as for any models folder:   py -3.12 re/tools/bldimport/bldimport.py build <folder> --game <game>
 
@@ -33,6 +34,9 @@ found in the download or in the dependency packs given with --deps (read by stre
 placed at their lot positions and written with the house into <stem>_props.obj; models.json names that file while
 x_sc4.props.on is true, x_sc4.props lists what was placed, left outside the 16 m SC3 lot, of another season and not
 found; the report names every prop id found in no pack. <stem>.obj stays the house alone.
+With --sc4 <the player's SimCity 4 install> (task sc4baseprops, 2026-11-19), the game's own props (shrubs, bushes,
+trees, cars of SimCity_1.dat, their textures in SimCity_2..5.dat and EP1.dat) are one more prop source, after the
+download and the --deps packs (SC4 loads its own files first, so a plugin's exemplar of the same id wins).
 
 Civic buildings, parks, rewards and landmarks (task sc4civ, 2026-11-19l, re/analysis/SC4_FORMATS.md 10): a building
 SC4 files under OccupantGroups 0x1005 (civic), 0x1006 (park), 0x150B (reward) or 0x150A (landmark) is written as the
@@ -331,7 +335,7 @@ def write_props(b, vs, stem, obj, mtl, out, pctx, fill, n=None):
     return info
 
 
-def props_notes(plans):
+def props_notes(plans, sc4=False):
     """Report lines for the lot props of every converted building (sc4web.js propsNotes: the same text)."""
     from collections import Counter
     if not plans:
@@ -348,18 +352,25 @@ def props_notes(plans):
              ' given, %d without a readable model' % (st['ok'], tot, nw(nb, 'building', 'buildings'), st['outside'], st['season'],
                                         st['missing'], st['unreadable'])]
     if miss:
-        lines.append("Props not found (%d ids, rows in brackets; SimCity 4's own props or a dependency not given): %s"
-                     % (len(miss), ', '.join('%08X (%d)' % (k, v)
+        lines.append("Props not found (%d ids, rows in brackets; %s): %s"
+                     % (len(miss), 'a dependency not given' if sc4 else "SimCity 4's own props or a dependency not given",
+                        ', '.join('%08X (%d)' % (k, v)
                                              for k, v in sorted(miss.items(), key=lambda kv: (-kv[1], kv[0])))))
     return lines
 
 
-def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, services=None):
+def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, services=None, sc4=None):
     """Task sc4props: the prop sources (the download, then each --deps pack) and one fetch of every prop model the
-    buildings' lots place, before any building is written."""
+    buildings' lots place, before any building is written. Task sc4baseprops: sc4 = the player's SimCity 4 install,
+    the last source (its own props; read in place, memory-mapped)."""
     sources = [PR.OwnSource(idx)] + [DP.DepsIndex(d, cache, log=log) for d in deps]
+    with_sc4 = sc4 is not None and not idx.install
+    if with_sc4:
+        src = PR.OwnSource(C.Index(sc4))
+        log('SimCity 4 install as a prop source: %d prop exemplars, %d cohorts' % (len(src.props), len(src.cohorts)))
+        sources.append(src)
     ctx = {'lots': lots, 'sources': sources, 'cache': {}, 'pngs': set(), 'plans': [], 'off': off,
-           'services': services or {}}
+           'services': services or {}, 'sc4': with_sc4}
     want = {}
     for b in bs:
         try:
@@ -372,8 +383,8 @@ def props_context(idx, bs, lots, deps, cache, fill, off=False, log=print, servic
         if pl is None:
             continue
         for r in pl['rows']:
-            if r['state'] == 'ok' and isinstance(r['src'], DP.DepsIndex):
-                want.setdefault(id(r['src']), (r['src'], set()))[1].update(PR.view_keys(r['model']))
+            if r['state'] == 'ok' and isinstance(r['msrc'], DP.DepsIndex):
+                want.setdefault(id(r['msrc']), (r['msrc'], set()))[1].update(PR.view_keys(r['model']))
     for s, keys in want.values():
         s.fetch(sorted(keys))
     return ctx
@@ -741,9 +752,14 @@ def main(argv):
                          ' (task sc4props)')
     ap.add_argument('--deps-cache', help='where the dependency index and fetched props are cached'
                                          ' (default %%LOCALAPPDATA%%\\sc4conv)')
+    ap.add_argument('--sc4', help="the player's SimCity 4 install (the folder holding SimCity_1.dat): its own props"
+                                  ' as one more prop source (task sc4baseprops)')
     ap.add_argument('--no-props', action='store_true', help='write the lot props but leave them off'
                                                            ' (x_sc4.props.on false)')
     a = ap.parse_args(argv[1:])
+    if a.sc4 is not None and C.install_files(a.sc4) is None:
+        print('--sc4 %s: no SimCity_1.dat in that folder (give the SimCity 4 folder itself)' % a.sc4)
+        return 2
     idx = C.Index(a.src)
     bs, lots = C.buildings(idx)
     print('%d DBPF files, %d buildings with S3D models, %d lots' % (len(idx.files), len(bs), len(lots)))
@@ -814,7 +830,8 @@ def main(argv):
         if d[0] == 'sc4':                 # task sc4civ: of SC4's buildings sharing a name, the first (name order) is on
             c = next((m for m in fam[d] if not is_diag(m)), None)
             pick[d] = c['tgi'] if c is not None else None
-    pctx = props_context(idx, bs, lots, a.deps, a.deps_cache, not a.no_fill, a.no_props, services=services)
+    pctx = props_context(idx, bs, lots, a.deps, a.deps_cache, not a.no_fill, a.no_props, services=services,
+                         sc4=a.sc4)
     for b in bs:
         design = design_key(b, services)
         first = pick[design] == b['tgi']
@@ -860,7 +877,7 @@ def main(argv):
                                                  'class %s' % e['class'], e['lot'],
                                                        'enabled' if e['enabled'] else '',
                                                        ' diagonal' if e['x_sc4']['diagonal'] else ''))
-    for ln in props_notes(pctx['plans']):
+    for ln in props_notes(pctx['plans'], pctx['sc4']):
         print(ln)
     top = {'sc3models': 1, 'models': models}
     if missing:                           # task sc4pass2: buildings of the download without a model, by name

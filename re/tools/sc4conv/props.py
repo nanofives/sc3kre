@@ -21,6 +21,9 @@ Steps (all plain float arithmetic in a fixed order; sc4web.js runs the same step
    0x4A764564 days). DATE = 1 July (SC3 has no seasons; its trees are summer green). Model: Resource Key Type 1
    (0x27812821); Type 4 (0x27812824, records of 8 words {state, 0, 0, 0, 0x27812821, type, group, instance}): the
    first record of state 0. Type 0 (0x27812820) is not read (98 of 17,410 BSC props).
+   Task sc4baseprops (2026-11-19): the player's SimCity 4 install is the last source (sc4conv.py --sc4). SC4 has one
+   exemplar space, so a family's members are pooled over all sources (resolve) and a prop's model is read from the
+   first source holding its 4 views (plan: row 'msrc'), the prop's own source first (re/analysis/SC4_FORMATS.md 11).
 3. Place. Lot frame -> building model frame: the house's lot row has rotation kb and centre (bx, bz); in the JMyers
    lots a house with kb = 2 faces the lot's +z edge (the street: the front setback is 13.3-13.7 m on every 1x2 and
    1x3 lot, the back yard 9-25 m), and the house model's front is +Z, so the lot frame turned by kb - 2 quarter turns
@@ -157,22 +160,36 @@ def model_of(src, inst):
     return None, 'no model key'
 
 
+def owner(sources, inst):
+    """The first source holding prop exemplar inst (the one SC4 uses: a plugin's exemplar replaces the game's)."""
+    return next((s for s in sources if inst in s.props), None)
+
+
 def resolve(sources, pid, row):
     """-> (source, instance, None) or (None, None, reason): reason 'missing' (in no pack), 'season' (a timed prop not
-    shown on DATE), or a model problem."""
+    shown on DATE), or a model problem.
+    Task sc4baseprops: a family's members are pooled over all sources (SC4 has one exemplar space: the BSC pack adds
+    502 cars to SimCity 4's own car family A0000038, which holds 23), each member read from its owner(), and a member
+    counts only when its owner's exemplar still names the family."""
+    s = owner(sources, pid)
+    if s is not None:
+        if not active(s, pid):
+            return None, None, 'season'
+        return s, pid, None
+    cand = set()
     for s in sources:
-        if pid in s.props:
-            if not active(s, pid):
-                return None, None, 'season'
-            return s, pid, None
-    for s in sources:
-        ms = s.family_members(pid)
-        if ms:
-            live = [m for m in ms if active(s, m)]
-            if not live:
-                return None, None, 'season'
-            return s, live[row % len(live)], None
-    return None, None, 'missing'
+        cand.update(s.family_members(pid))
+    if not cand:
+        return None, None, 'missing'
+    live = []
+    for m in sorted(cand):
+        s = owner(sources, m)
+        if m in s.family_members(pid) and active(s, m):
+            live.append((s, m))
+    if not live:
+        return None, None, 'season'
+    s, m = live[row % len(live)]
+    return s, m, None
 
 
 def view_keys(model, zoom=ZOOM5):
@@ -301,7 +318,7 @@ def plan(b, lots, sources, house_box, n):
         pid = o['ids'][0] & 0xFFFFFFFF
         s, inst, why = resolve(sources, pid, k)
         x, z = turn(o['x'] - hrow['x'], o['z'] - hrow['z'], -(kb - 2))
-        r = {'row': k, 'id': pid, 'inst': inst, 'name': None, 'src': s, 'model': None, 'x': x, 'z': z,
+        r = {'row': k, 'id': pid, 'inst': inst, 'name': None, 'src': s, 'msrc': None, 'model': None, 'x': x, 'z': z,
              'q': ((o['rot'] & 3) - kb) % 4, 'state': why or 'ok'}
         if s is not None:
             r['name'] = s.prop_value(inst, P_NAME) or '%08X' % inst
@@ -310,7 +327,12 @@ def plan(b, lots, sources, house_box, n):
                 r['state'] = mwhy
             else:
                 r['model'] = m
-                if not all(s.has(k2) for k2 in view_keys(m)):
+                # task sc4baseprops: the model from the first source holding its 4 views, the prop's own first (the
+                # BSC prop CP_MaxisFluffyMed names SimCity 4's own S3D 1EDA0000, which only the install holds)
+                vk = view_keys(m)
+                r['msrc'] = next((s2 for s2 in [s] + [x for x in sources if x is not s]
+                                  if all(s2.has(k2) for k2 in vk)), None)
+                if r['msrc'] is None:
                     r['state'] = 'model not in the packs'
         if r['state'] == 'ok' and not (win[0] <= x <= win[1] and win[2] <= z <= win[3]):
             r['state'] = 'outside'
@@ -336,10 +358,10 @@ def placed_meshes(pl, cache, fill=True):
     for r in pl['rows']:
         if r['state'] != 'ok':
             continue
-        ck = (r['model'], id(r['src']))
+        ck = (r['model'], id(r['msrc']))
         if ck not in cache:
             try:
-                cache[ck] = prop_views(r['src'], r['model'], r['name'])
+                cache[ck] = prop_views(r['msrc'], r['model'], r['name'])
             except (ValueError, KeyError, IndexError, struct.error) as e:
                 cache[ck] = str(e)
         pv = cache[ck]
@@ -372,7 +394,7 @@ def placed_meshes(pl, cache, fill=True):
                 for p in P:
                     x, z = turn(p[0], p[2], r['q'])
                     Pt.append([x + ox, p[1], z + oz])
-                slots[slot].append((Pt, UV, tris, fk, r['src']))
+                slots[slot].append((Pt, UV, tris, fk, r['msrc']))
     return slots
 
 

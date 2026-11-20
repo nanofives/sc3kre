@@ -485,7 +485,7 @@ footer a { color: var(--ui-info-text); }
   <li><b>Landmark versions become landmarks.</b> A SimCity 4 download can hold the same building as a growable, a ploppable and a landmark. The page converts the growable, and the landmark version becomes a landmark (<a href="#landmarks">Landmarks</a>) with the same pictures, named as in SimCity 4 and described as <code>From SimCity 4</code>. A ploppable version gets a landmark entry too, switched off, since SimCity 3000 landmarks have no jobs and it is the same building again. The landmark has the building alone, without the props of its SimCity 4 lot. Our test tower's landmark version went into the landmark menu as a 4x4 landmark and was placed in Madison.</li>
   <li><b>Light painted in.</b> Each SimCity 4 picture is lit from the same side of the screen. In two of the four view rotations the converted houses are lit from the other side than their stock neighbours.</li>
   <li><b>Roofs seen from higher up.</b> SimCity 4 looks down at 45 degrees, SimCity 3000 at 30. In each view one wall is stretched sideways and shows less detail.</li>
-  <li><b>Lot props only with the dependency pack.</b> The fences, trees and cars of a SimCity 4 lot mostly come from other downloads. Give the page the BSC Common Dependencies Pack and it puts them on the lot with the building (<a href="#sc4props">Lot props</a>). Without it, the building stands centred on plain lawn and the yard is left out. Lot textures (driveways, paths) are not converted either way.</li>
+  <li><b>Lot props from the dependency pack and your SimCity 4 game.</b> The fences, trees and cars of a SimCity 4 lot mostly come from other downloads and from SimCity 4 itself. Give the page the BSC Common Dependencies Pack and your SimCity 4 game and it puts them on the lot with the building (<a href="#sc4props">Lot props</a>). Without them, the building stands centred on plain lawn and the yard is left out. Lot textures (driveways, paths) are not converted either way.</li>
   <li><b>Softer than a 3D model.</b> The pictures are redrawn, not rebuilt, so edges are softer than in the stock art. Where the SimCity 4 camera could not see (around porches and wings), the page fills in with pieces of the same picture.</li>
   <li><b>No diagonal houses.</b> The page tells a house set at 45 degrees from its SimCity 4 foundation model and leaves it off. Buildings without a foundation model are not checked.</li>
   <li>Night textures are not used. SimCity 3000 has no night view.</li>
@@ -493,21 +493,29 @@ footer a { color: var(--ui-info-text); }
   <li>Parts the page cannot read (other model formats, a view made of pieces that do not fit back into one picture) skip that building with a line in the log.</li>
 </ul>
 <h3 id="sc4props">Lot props: fences, trees and cars</h3>
-<p>A SimCity 4 lot places props around the building: fences, trees, parked cars, flower beds. Most of them are not in the building's own download but in dependency packs. The page reads one of them, the BSC Common Dependencies Pack, a download for SimCity 4. Give it to the page and it draws the props into the building's pictures, so they stand on the lot in every view and zoom and move with the building.</p>
+<p>A SimCity 4 lot places props around the building: fences, trees, parked cars, flower beds, shrubs. Most of them are not in the building's own download. They come from dependency packs and from SimCity 4 itself. The page reads two sources: the BSC Common Dependencies Pack, a download for SimCity 4, and your own SimCity 4 game. Give it both and it draws the props into the building's pictures, so they stand on the lot in every view and zoom and move with the building.</p>
 <ol>
   <li>Download the BSC Common Dependencies Pack. We tested version V9e, a 1.7 GB <code>.zip</code>. Keep it zipped.</li>
   <li>Select <b>Open SC4 .zip</b> and pick the building download and the dependency <code>.zip</code> together (put both in one folder, hold Ctrl and click both). The page reads the large zip in pieces, never whole, and keeps what it found until you close the page.</li>
-  <li>The page's note on the download gets two more lines: how many prop rows were placed, on how many buildings, and how many were left out and why, then the ids of the props it found in no pack.</li>
+  <li>For SimCity 4's own props (its shrubs, bushes, flowers, trees and cars), give the page your SimCity 4 game too. Either open it first with <b>Open SC4 game</b> (<a href="#sc4game">From your own SimCity 4</a>): the page keeps it for the downloads you open after it, until you close the page. Or pick the game's <code>.dat</code> files (<code>SimCity_1.dat</code> to <code>SimCity_5.dat</code>, <code>EP1.dat</code>, <code>SimCityLocale.DAT</code>) together with the download in <b>Open SC4 .zip</b>. The page then converts the download, not the game, and reads from the game files only the props it places, in pieces.</li>
+  <li>The page's note on the download gets two more lines: how many prop rows were placed, on how many buildings, and how many were left out and why, then the ids of the props it found in no source. With your game given, the note says so.</li>
   <li>Install as usual. Each building with props placed installs with them.</li>
 </ol>
 <p>What is placed and what is left out:</p>
 <ul>
-  <li><b>Placed:</b> the props of the building's smallest SimCity 4 lot that the download or the dependency pack holds. Seasonal trees are taken in their summer version.</li>
+  <li><b>Placed:</b> the props of the building's smallest SimCity 4 lot that the download, the dependency pack or your SimCity 4 game holds. As in SimCity 4, a prop in the download or the pack wins over the game's prop of the same id. Seasonal trees are taken in their summer version.</li>
   <li><b>Left out at the edge:</b> a SimCity 3000 lot is 16 m per cell, often smaller than the SimCity 4 lot, so a prop whose centre falls outside it is left out. A fence that reaches up to 1 m past the edge is moved in.</li>
-  <li><b>Missing: SimCity 4's own props.</b> Many lots use props that come with SimCity 4 itself, such as its own shrubs and flowers. No download holds them, so they stay missing on a download's lots. The page lists them by id in its note. The two most used ids of our test pack are SimCity 4's own: we found both in a SimCity 4 install, as a quarter shrub and a quarter bush. On the lots of SimCity 4's own buildings (<a href="#sc4game">From your own SimCity 4</a>) these props are placed.</li>
+  <li><b>SimCity 4's own props come from your game.</b> Many lots use props that come with SimCity 4 itself, such as its own quarter shrub and quarter bush, the two most used props of our test pack. No download holds them. With your SimCity 4 game given they are placed. Without it they stay missing, and the page lists them by id in its note and says how to add your game.</li>
+  <li><b>Left out, moving props:</b> people, children at play, a dog on a chain and a lawn mower. Their props point at no still model the page reads (by their SimCity 4 names they are animated or walk about).</li>
   <li><b>No lot textures.</b> Driveways and paths are not drawn, so cars stand on SimCity 3000 lawn.</li>
 </ul>
-<p>In our test with a pack of 110 houses, 486 of its 5,190 prop rows were placed, on 72 of the buildings. 3,454 rows named 54 props found in no pack given. The two most used of those, in 1,380 and 804 rows, are SimCity 4's own. We installed 6 of the houses twice, with and without props, and all 12 grew in Sacramento by the first autosave.</p>
+<p>In our test with a pack of 110 houses and its 5,190 prop rows:</p>
+<ul>
+  <li>With the BSC pack alone, 486 rows were placed, on 72 of the buildings. 3,454 rows named 54 props found in no source. The two most used of those, in 1,380 and 804 rows, are SimCity 4's own.</li>
+  <li>With the Steam SimCity 4 Deluxe alone, 1,786 rows were placed, on all 110 buildings. 1,676 rows named 81 props of the BSC pack.</li>
+  <li>With both, 2,236 rows were placed, on all 110 buildings, and no row named a prop missing from both. The other rows were outside the SimCity 3000 lot (2,494), of another season (366) or moving props (94).</li>
+</ul>
+<p>We installed 4 of the houses twice, with the BSC props and with the BSC and game props, and all 8 grew in Sacramento by the first autosave. The page gives the same files as our Python tool, to the byte, with the game picked with the download and with the game opened first.</p>
 <h3>Switching the props off for one building</h3>
 <p>The props are on for every building that got at least one. To turn them off for one building, set <code>"on": false</code> under <code>"x_sc4"</code>, <code>"props"</code> in its entry in <code>models.json</code>, then open the download again with that <code>models.json</code> (picked together with the <code>.zip</code>, or in the same folder) and install. The page keeps your choice each time you open the download again. Set it back to <code>true</code> to get them back.</p>
 <h3>Packs that hold only lots</h3>
@@ -522,6 +530,7 @@ footer a { color: var(--ui-info-text); }
   <li><b>Landmarks</b> go to the landmark menu (<a href="#landmarks">Landmarks</a>).</li>
   <li>Buildings that share a name (three private schools, four houses of worship, the mayor's statues) are each converted and the first one is on.</li>
   <li>The props of SimCity 4's own lots come along: its cars, shrubs and flower beds, since they are in the install too.</li>
+  <li>The page keeps the game for the SimCity 4 downloads you open after it, until you close the page, so their lots get SimCity 4's own props (<a href="#sc4props">Lot props</a>).</li>
 </ul>
 <ol>
   <li>Select <b>Open SC4 game</b> and pick your SimCity 4 folder, the one that holds <code>SimCity_1.dat</code>. For Steam that is <code>steamapps\common\SimCity 4 Deluxe</code> in your Steam folder. You can also select <b>Open SC4 .zip</b> and pick the game's <code>.dat</code> files themselves.</li>
@@ -578,7 +587,7 @@ footer a { color: var(--ui-info-text); }
 <h3>I removed a model and my city looks different</h3>
 <p>Its lots now show a stock building of the same type. Install the model again (with the same <code>ids.json</code>) to get it back. For airport and seaport buildings that stock building is a runway strip or a pier piece, which stays until you bulldoze it (<a href="#ports">Airports and seaports</a>).</p>
 <h3>My SimCity 4 building has no fences or trees</h3>
-<p>Pick the BSC Common Dependencies Pack together with the download in <b>Open SC4 .zip</b> (<a href="#sc4props">Lot props</a>). Props that are SimCity 4's own stay missing, and the page's note lists them. If the props are there in the page but not in the game, check that <code>"on"</code> under <code>"props"</code> is <code>true</code> in <code>models.json</code> and install again.</p>
+<p>Pick the BSC Common Dependencies Pack together with the download in <b>Open SC4 .zip</b>, and give the page your SimCity 4 game for its own shrubs and bushes: open it first with <b>Open SC4 game</b>, or pick its <code>.dat</code> files with the download (<a href="#sc4props">Lot props</a>). The page's note lists the props it found in no source. If the props are there in the page but not in the game, check that <code>"on"</code> under <code>"props"</code> is <code>true</code> in <code>models.json</code> and install again.</p>
 <h3>The page cannot open my folder</h3>
 <p>Use Chrome or Edge. The page writes into folders through a browser feature (the File System Access API) that Firefox and Safari do not offer. In any browser, the .zip buttons under <b>No folder access</b> do the same job (see <a href="#install">Installing</a>).</p>
 <h3>Install says the game folder is wrong</h3>

@@ -54,6 +54,14 @@
       for (const d of man.sc4.deps || []) {   // task sc4props: the dependency pack (a Blob the page slices and streams)
         const r = await fetch(d.base + encodeURIComponent(d.file)); if (!r.ok) throw new Error('fetch ' + d.file); files.push(new File([await r.blob()], d.file));
       }
+      for (const d of man.sc4.extra || []) {   // task sc4baseprops: the SC4 game's .dat files picked with the download
+        const r = await fetch(d.base + encodeURIComponent(d.file)); if (!r.ok) throw new Error('fetch ' + d.file); files.push(new File([await r.blob()], d.file));
+      }
+      if (man.sc4.remember) {               // task sc4baseprops: the game opened before (Open SC4 game), kept for the session
+        const gf = [];
+        for (const f of man.sc4.remember.files) { const r = await fetch(man.sc4.remember.base + encodeURIComponent(f)); if (!r.ok) throw new Error('fetch ' + f); gf.push(new File([await r.blob()], f)); }
+        window.bc.rememberSc4Game(await window.SC4WEB.sourcesFrom(window.SC4WEB.fileInputs(gf)));
+      }
       const t1 = performance.now();
       await window.bc.openSc4(window.SC4WEB.fileInputs(files), { name: man.sc4.files.join(', ') });
       const S = window.bc.S;
@@ -63,7 +71,7 @@
         diagFiles: diagCards.map(c => c.dataset.file), seconds: (performance.now() - t1) / 1000, recs: S.recs.length, enabled: S.recs.filter(r => r.meta.enabled).length,
         errors: S.recs.filter(r => r.err).map(r => r.file + ': ' + r.err).slice(0, 5), groups: document.querySelectorAll('#grid .grp').length,
         cards: document.querySelectorAll('#grid .card').length, note: document.getElementById('sc4Note').textContent, status: document.getElementById('status').textContent,
-        withProps: S.recs.filter(r => r.meta && r.meta.x_sc4 && r.meta.x_sc4.props && r.meta.x_sc4.props.on).length };
+        withProps: S.recs.filter(r => { const x = (r.raw && r.raw.x_sc4) || (r.meta && r.meta.x_sc4); return !!(x && x.props && x.props.on); }).length };
       mfs = window.bc.modelsFolder();
     }
     if (man.action === 'open' && sc4 && !window.bc.S.recs.length) {   // task sc4pass2: a lot-only download converts to nothing
