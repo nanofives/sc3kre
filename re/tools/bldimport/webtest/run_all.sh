@@ -7,6 +7,7 @@
 # fonts_inline.mjs (the importer's inline fonts, no Theme button, light look under OS dark mode).
 #
 #   test-slot bash re/tools/bldimport/webtest/run_all.sh <work dir> <pristine game tree> <stage\kits> [<SC4 .zip> <the same SC4 download unpacked> [<folder with more SC4 zips>]]
+#   (env SC4INSTALL=<SimCity 4 folder> adds the install steps, sc4civ 2026-11-19l)
 #
 # airsea (2026-11-19g): golden case ports (kinds airport / seaport: make_testmodels.py --ports + a .bld as a seaport) in
 # golden_setup / golden.mjs, and the page installing it (pagetest.mjs ports).
@@ -50,6 +51,11 @@ steps=22; [ -n "$sc4zip" ] && steps=$((steps + 3)); [ -n "$sc4packs" ] && steps=
 # the 1.7 GB zip as the page does: slices and a stream, never read whole)
 bsc=""; [ -n "$sc4packs" ] && [ -n "$sc4zip" ] && for f in "$sc4packs"/*Common\ Dependencies*.zip; do [ -f "$f" ] && bsc="$f"; done
 [ -n "$bsc" ] && steps=$((steps + 2))
+# sc4civ (2026-11-19l): SC4INSTALL=<the player's SimCity 4 folder, holding SimCity_1.dat> adds the install as a source:
+# sc4_install_setup.py (sc4conv.py on the install, a rerun with edits, a 4-building subset packed) + sc4_install.mjs (sc4web.js
+# reads the install by slices: every file byte / pixel identical, kinds, rerun, the subset's game files and frames).
+# EA's files are read in place: nothing of them leaves <work dir>.
+[ -n "${SC4INSTALL:-}" ] && steps=$((steps + 3))
 [ -n "${BLD1999:-}" ] && steps=$((steps + 5))
 [ -n "${BLDSIDE:-}" ] && steps=$((steps + 3))
 n=0; bad=0
@@ -100,6 +106,11 @@ fi
 if [ -n "$bsc" ]; then
   step "sc4_props_setup.py (sc4conv.py --deps: JMyers lot props from the BSC pack, rerun, --no-props, bldimport.py pack)" $py "$here/sc4_props_setup.py" --sc4 "$sc4dir" --deps "$bsc" --game "$game" --out "$work/sc4props"
   step "sc4_props.mjs (sc4web.js: the BSC zip streamed, props baked, rerun switch, --no-props, pack, frames)" node "$here/sc4_props.mjs" --golden "$work/sc4props" --game "$game" --zip "$sc4zip" --deps "$bsc" --frames
+fi
+if [ -n "${SC4INSTALL:-}" ]; then
+  step "sc4_install_setup.py (sc4conv.py on the SC4 install: civic, parks, rewards, landmarks; rerun; subset packed)" $py "$here/sc4_install_setup.py" --install "$SC4INSTALL" --game "$game" --out "$work/sc4install"
+  step "sc4_install.mjs (sc4web.js on the SC4 install by slices: files, kinds, rerun, subset pack, frames)" node "$here/sc4_install.mjs" --golden "$work/sc4install" --install "$SC4INSTALL" --game "$game" --frames
+  step "pagetest.mjs sc4install (the page opens the install's .dat files: 112 cards, 73 on, read only)" node "$here/pagetest.mjs" --golden "$work" --game "$game" --case sc4install --action open --sc4install "$SC4INSTALL" --expect-install 112,73
 fi
 echo "$((n - bad)) of $n steps passed"
 exit $bad

@@ -209,7 +209,7 @@ def prop_views(src, model, label):
         for P, UV, tris, mat, _n in S3D(src.read(key)).meshes():
             if not mat['tex'] or not tris:
                 continue
-            fk = (D.T_FSH, g, mat['tex'][0]['id'])
+            fk = V.tex_key(src, g, mat['tex'][0]['id'])   # task sc4civ: SC4's own props keep theirs in 0x1ABE787D
             if not src.has(fk):
                 raise ValueError('%s: texture %08X not found' % (label, fk[2]))
             meshes.append((P, UV, tris, fk))

@@ -490,7 +490,7 @@ footer a { color: var(--ui-info-text); }
   <li><b>No diagonal houses.</b> The page tells a house set at 45 degrees from its SimCity 4 foundation model and leaves it off. Buildings without a foundation model are not checked.</li>
   <li>Night textures are not used. SimCity 3000 has no night view.</li>
   <li><code>baked</code> brightens the SimCity 4 art to sit with the stock buildings. For SimCity 4's own brightness, set <code>"x_bldrender": {"style": "baked_raw"}</code> in the entry. It looks darker than the stock neighbours.</li>
-  <li>Parts the page cannot read (other model formats, a view made of meshes that are not tiles of one picture) skip that building with a line in the log.</li>
+  <li>Parts the page cannot read (other model formats, a view made of pieces that do not fit back into one picture) skip that building with a line in the log.</li>
 </ul>
 <h3 id="sc4props">Lot props: fences, trees and cars</h3>
 <p>A SimCity 4 lot places props around the building: fences, trees, parked cars, flower beds. Most of them are not in the building's own download but in dependency packs. The page reads one of them, the BSC Common Dependencies Pack, a download for SimCity 4. Give it to the page and it draws the props into the building's pictures, so they stand on the lot in every view and zoom and move with the building.</p>
@@ -504,15 +504,39 @@ footer a { color: var(--ui-info-text); }
 <ul>
   <li><b>Placed:</b> the props of the building's smallest SimCity 4 lot that the download or the dependency pack holds. Seasonal trees are taken in their summer version.</li>
   <li><b>Left out at the edge:</b> a SimCity 3000 lot is 16 m per cell, often smaller than the SimCity 4 lot, so a prop whose centre falls outside it is left out. A fence that reaches up to 1 m past the edge is moved in.</li>
-  <li><b>Missing: SimCity 4's own props.</b> Many lots use props that come with SimCity 4 itself, such as its own shrubs and flowers. No download holds them and the page does not read a SimCity 4 install, so they stay missing. The page lists them by id in its note. We have not checked these ids against a SimCity 4 install: that they are SimCity 4's own comes from how the ids look.</li>
+  <li><b>Missing: SimCity 4's own props.</b> Many lots use props that come with SimCity 4 itself, such as its own shrubs and flowers. No download holds them, so they stay missing on a download's lots. The page lists them by id in its note. The two most used ids of our test pack are SimCity 4's own: we found both in a SimCity 4 install, as a quarter shrub and a quarter bush. On the lots of SimCity 4's own buildings (<a href="#sc4game">From your own SimCity 4</a>) these props are placed.</li>
   <li><b>No lot textures.</b> Driveways and paths are not drawn, so cars stand on SimCity 3000 lawn.</li>
 </ul>
-<p>In our test with a pack of 110 houses, 486 of its 5,190 prop rows were placed, on 72 of the buildings. 3,454 rows named 54 props found in no pack given. The two most used of those, in 1,380 and 804 rows, look by their ids like SimCity 4's own. We installed 6 of the houses twice, with and without props, and all 12 grew in Sacramento by the first autosave.</p>
+<p>In our test with a pack of 110 houses, 486 of its 5,190 prop rows were placed, on 72 of the buildings. 3,454 rows named 54 props found in no pack given. The two most used of those, in 1,380 and 804 rows, are SimCity 4's own. We installed 6 of the houses twice, with and without props, and all 12 grew in Sacramento by the first autosave.</p>
 <h3>Switching the props off for one building</h3>
 <p>The props are on for every building that got at least one. To turn them off for one building, set <code>"on": false</code> under <code>"x_sc4"</code>, <code>"props"</code> in its entry in <code>models.json</code>, then open the download again with that <code>models.json</code> (picked together with the <code>.zip</code>, or in the same folder) and install. The page keeps your choice each time you open the download again. Set it back to <code>true</code> to get them back.</p>
 <h3>Packs that hold only lots</h3>
 <p>Some SimCity 4 downloads hold only lots and building descriptions, and the buildings themselves come from other downloads. Others place a blank stand-in building and show only lot props. The page converts nothing from these and keeps Install off. Its note says so and names every building that is missing. When the readme lists where to get them, the note shows those links too. Download the building packs it names and open those.</p>
 <p>A pack that converts some buildings and lacks others gets the same list for the missing ones. A download that holds only props or textures has no buildings to convert.</p>
+<h3 id="sc4game">From your own SimCity 4: civic buildings, parks, rewards and landmarks</h3>
+<p>If SimCity 4 is installed on your PC, the page can take its own civic buildings, parks, rewards and landmarks. SimCity 4 sorts each building into groups (civic, park, reward, landmark, and for civic buildings the service: police, fire, school and so on), and the page follows them:</p>
+<ul>
+  <li><b>Civic buildings</b> become a second look of the SimCity 3000 button for the same service (<a href="#civic">Civic buildings</a>): SimCity 4's police stations under the Police Station button, its fire stations under Fire Station, its schools under School, and so on for jail, college, library, museum and hospital. The look keeps the stock building's lot, coverage and price.</li>
+  <li><b>Parks</b> become looks of a park button. SimCity 4 does not say which kind of park a park is, so the page goes by the name (a softball field goes under Baseball Field, a playground under Playground) and else by the size: the Small Park when it fits one cell, the Big Park when it fits 3x3. The card says which.</li>
+  <li><b>Rewards</b> become new rewards (<a href="#rewards">Rewards</a>). SimCity 4 keeps its reward rules in its own scripts, and the page reads them: when the rule counts the whole city, the reward unlocks at the same population in SimCity 3000 (the Mayor's House at 500, the Courthouse at 40,000). 36 of SimCity 4's 60 reward rules count the whole city. The others count only rich residents, jobs or the region, or no population at all, and get the page's default of 20,000. The card shows SimCity 4's rule. No SimCity 4 rule asks for a year.</li>
+  <li><b>Landmarks</b> go to the landmark menu (<a href="#landmarks">Landmarks</a>).</li>
+  <li>Buildings that share a name (three private schools, four houses of worship, the mayor's statues) are each converted and the first one is on.</li>
+  <li>The props of SimCity 4's own lots come along: its cars, shrubs and flower beds, since they are in the install too.</li>
+</ul>
+<ol>
+  <li>Select <b>Open SC4 game</b> and pick your SimCity 4 folder, the one that holds <code>SimCity_1.dat</code>. For Steam that is <code>steamapps\common\SimCity 4 Deluxe</code> in your Steam folder. You can also select <b>Open SC4 .zip</b> and pick the game's <code>.dat</code> files themselves.</li>
+  <li>The page reads only the game's seven data files, the large ones in pieces. It writes nothing into the SimCity 4 folder: select <b>Save models.json</b> to keep your choices, and pick that file together with the <code>.dat</code> files next time.</li>
+  <li>Switch on what you want and install as usual. Your choices of kind, button and population in the panel are kept when you open the game again with that <code>models.json</code>.</li>
+</ol>
+<p class="note"><b>These are EA's buildings from your own copy of SimCity 4.</b> Convert them for your own game. Never share the converted buildings or their pictures.</p>
+<p>What does not convert:</p>
+<ul>
+  <li>Homes, shops, offices, industry, utilities and transport buildings of the install. Only civic buildings, parks, rewards and landmarks are taken from an install.</li>
+  <li>Parks and rewards that are only lot props in SimCity 4 (the plazas, gardens, greens, basketball court, skateboard park and both stadiums): 21 buildings, named in the page's note.</li>
+  <li>Buildings that do not fit SimCity 3000's lots: a civic look keeps the stock building's lot (3x3 for a police station), and a reward or landmark can be up to 4x4. Larger ones stay off, with the reason on the card. Of 112 buildings converted from our install, 73 are on.</li>
+  <li>The lot textures (paths, paving), as for downloads.</li>
+</ul>
+<p>Our test, with the Steam SimCity 4 Deluxe: the page converted 112 of its 113 civic buildings, parks, rewards and landmarks with a model, the same files as our Python tool to the byte. In Madison the Small Police Station, the Small Fire Station and the Gazebo each appeared in their button's list window and were placed, the Mayor's House unlocked at population 500, was listed in Rewards and Opportunities and placed, and all four stood where they were after the city was saved and loaded again. The police look drew its own circle on the crime map: bulldozing it took 180 cyan pixels away and added none.</p>
 </section>
 
 <section class="fam" id="look">

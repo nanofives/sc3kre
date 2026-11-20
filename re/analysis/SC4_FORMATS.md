@@ -327,7 +327,7 @@ Python keeps those entries in `entries\` for the next run. The page keeps both i
 Lot object kind 1 (section 3), word 12 = an exemplar instance of type 0x1E, or a prop family (0x27812870). Over the 42
 JMyers lots: 2,266 prop rows, 231 distinct ids; against the BSC pack 646 rows are prop instances, 134 families, 1,486
 in neither (85 ids, the most used `1EDF0000` 602 rows and `28330000` 342: instance ids ending in `0000`, the pattern of
-SC4's own exemplars [UNCERTAIN: not checked, no SC4 install]). Prop exemplar properties the converter reads:
+SC4's own exemplars: confirmed in round 2026-11-19l, section 10.5). Prop exemplar properties the converter reads:
 
 | id | holds (BSC pack) |
 |---|---|
@@ -363,3 +363,104 @@ baked (section 9.4).
 is 16 m square, the SC4 lots 16 x 32-48 m), 378 seasonal variants of another season (DATE = 1 July), 3,454 in no pack
 given (54 ids), 6 whose model is in no pack given. Not baked: lot textures (driveways, paths, the SC4 grass), so cars
 stand on SC3's lawn.
+
+## 10. SimCity 4's own civic buildings, parks, rewards and landmarks (round 2026-11-19l, stream sc4civ)
+
+Read in place from the Steam SimCity 4 Deluxe install (EA's files, never copied: nothing of them is in the repository
+or docs). Readers: `catalog.install_files` / `Index.full`, `views.tex_key` / `compose_atlas`, `rewards.py`,
+`sc4conv.service_for`; the page the same (`sc4web.js`). Results: `verify/sc4civ/RESULTS.md`.
+
+### 10.1 The install's files
+
+| file | entries | held |
+|---|---|---|
+| SimCity_1.dat | 60,440 | 41,075 S3D, 8,957 exemplars, 388 cohorts, 158 Lua scripts (type 0xCA63E2A3), others |
+| SimCity_2..5.dat | 15,238 / 7,495 / 9,797 / 5,619 | FSH only |
+| EP1.dat (Rush Hour) | 4,099 | 2,278 FSH, 1,820 S3D, no exemplar |
+| SimCityLocale.DAT | 5,963 | 5,962 LText (the building names) |
+
+No TGI is in two of the 7 files (0 shared), so their order does not change what is read. `catalog.install_files`
+takes exactly these (a folder holding `SimCity_1.dat` at its top), never `Plugins`, `Regions`, `Intro.dat`, `Sound.dat`
+or the shop plugin in `Sku_Data`. Files from 16 MB are memory-mapped in Python and read by slices in the page: the
+whole install (720 MB) converts with 79.0 MB read.
+
+**Cohort parents matter here.** 3,160 of the 8,957 exemplars name a parent cohort, and 63 of the 113 civic / park /
+reward / landmark buildings with a model hold their exemplar type (0x10 = 2) only in the parent. `Index.full` reads an
+exemplar with its parents' properties under its own (8 deep, as `props.OwnSource.prop_value`); a parent the index does
+not hold adds nothing, so the downloads of sections 3-9 read as before.
+
+### 10.2 How SC4 files a building: OccupantGroups (0xAA1DD396)
+
+A list of u32 on every building exemplar. Counts over the install's 743 buildings (713 with an S3D model key, 30
+without), each value checked against the exemplar names (prefix) and the LText names:
+
+| group | buildings (with a model) | exemplar names | what the converter makes |
+|---|---|---|---|
+| 0x1005 | 42 (23) | 17 `CV*` (police, fire, schools, and so on) and 25 of the 32 parks | civic look (the service group decides the button) |
+| 0x1006 | 32 (11) | `PZ*` / `Pz*`: Gazebo, Tennis Court, Softball Field, plazas, gardens | civic look of a park button |
+| 0x150B | 53 (51) | `RW*`: Mayor's House, statues, City Hall, Courthouse, stadiums, Cemetery, Casino | reward |
+| 0x150A | 39 (39) | `Lm*` / `LM*`: Big Ben, Chrysler Building, Taj Mahal | landmark |
+
+The service is a second group: 0x1500 police (4: Small, Large, Deluxe Police Station, Police Kiosk), 0x1501 jail (2:
+City Jail, Federal Prison), 0x1502 fire (3), 0x1503 school (8, the private schools included), 0x1504 college (2),
+0x1505 library (2), 0x1506 museum (2), 0x1507 health (3: Medical Clinic, Large Medical Center, Disease Research
+Center), 0x1702 zoo (1, City Zoo). Other values seen (0x150D..0x151C, 0x1900..0x1942, 0x1A00..0x1A04) are not read
+[UNCERTAIN: meaning not needed]. A park carries no service group (its groups are 0x1005 / 0x1006 only), so its SC3
+button comes from its name ("Softball" gives the Baseball Field, "Playground" the Playground) or else its footprint (the
+Small Park when it fits 1x1, the Big Park when it fits 3x3): a choice of the converter, stated on the card.
+
+Precedence when a building has several: landmark, reward, park, civic. So Coit Tower (0x150A + 0x150C) is a landmark,
+the Private Schools (0x150B + 0x1503) are rewards, with a note on the card that they can be a School look instead.
+
+21 of these buildings have no model of their own (the plazas, gardens, greens, Playground, Basketball Court,
+Skateboard Park, both stadiums): their look is lot props. Not converted, named in the report.
+
+### 10.3 Rewards: the Lua conditions
+
+The exemplars hold no unlock rule. SimCity_1.dat's 158 Lua scripts (plain Latin-1 text, group 0x4A5E8EF6) hold 60
+records `a = create_reward_<advisor>('<building exemplar instance>')` (54 `cityplanning`, 6 `finances`), each with a
+`function a.condition()` that returns the "not yet" answer while the city falls short, for example
+`game.g_population < tuning_constants.MAYOR_HOUSE_POP`. One script sets the thresholds,
+`tuning_constants.<NAME> = <number>` (MAYOR_HOUSE_POP 500, CITYHALL1_POP 12500, COURTHOUSE_POP 40000). Records by
+building: 51 on the 53 reward buildings (City Hall phases 2 and 3 have none), 4 on civic buildings (Deluxe Police
+Station, Deluxe Fire Station, Large Elementary School, Large High School), 5 on utilities (Grand Rail Station, Solar,
+Nuclear and Hydrogen power, Large Water Pump).
+
+`rewards.lua_rewards` takes every `<population> < <threshold>` (a game variable ending in `population`, or a sum of
+them; a constant, a number times a constant, or a number). SC3's reward row has one population (the city) and one year
+(CIVIC_REWARD.md 2.1), so a comparison maps to it only when it counts the whole city: `g_population` (25 records),
+`g_city_r_population` (10), the sum of `g_city_r1/r2/r3_population` (1). 36 of 60 records map. The other 24 compare
+high-wealth residents, jobs (`g_city_rci_population`, `g_city_iht_population`, `g_city_co2/co3_population`), the
+region, or no population (Lighthouse: seaport volume; Toxic Waste Dump: funds) and get bldimport's default 20,000, with
+the SC4 condition on the card. Mayor rating, funds, missions and building counts have no SC3 column (card only). No
+condition reads the year (0 of 60): year 0. The Casino's `1.6 * tuning_constants.POPULATION_STEP_6` gives 24,000.
+
+### 10.4 SC4's own models: textures and atlases
+
+- **Texture group.** All 42,895 S3D entries (SimCity_1.dat + EP1.dat) are in group 0xBADB57F1, and the textures their
+  MATS name are FSH entries of group 0x1ABE787D (the S3D group holds no FSH). `views.tex_key` tries the S3D's own group
+  first (the downloads' BATs), then 0x1ABE787D for group 0xBADB57F1.
+- **Real meshes.** The zoom-5 views are not the 7-corner box of the BATs: up to 104 vertices in one mesh (the Library's
+  view 0 has 25, the Mayor's House 62). The 136 one-mesh views (of the 452 views of the 113 buildings) fit one orthographic camera to
+  0.67 px or better, elevation 44.1-45.9 degrees, 6.6-7.1 px per metre: the camera of the BATs (section 6). No back-wall
+  fill (`hidden_faces` is for the 7-corner box only).
+- **Atlases.** The other 316 views are 2 to 14 meshes (2,343 pieces) whose textures are pieces of one screen render
+  packed together: each piece fits its own camera to 0.6 px, and against the projection of the piece with the most
+  vertices it is moved (1,605 pieces) or moved and transposed, x and y swapped (738), not scaled (singular values of the
+  fitted 2 x 2 part 1.00 / 1.00, down to 0.90 on the smallest pieces). The offsets are not on a 256-pixel grid (unlike
+  the tower, 8.2), so `compose_tiles` declines them (joint fit error 9-108 px, the limit is 2 px) and `compose_atlas`
+  rebuilds one canvas per view: per piece a 2D fit decides transposed (determinant < 0), the mean offset rounded to whole
+  pixels says where its texels go (largest error after rounding 1.58 px), and the texels its triangles cover (a
+  separating-axis test on each texel square) are copied. The rebuilt views fit one camera to 1.30 px at most. 112 of
+  113 convert; one piece of the Large High School's view 3 is 59.66 px off [UNCERTAIN: another transform], skipped.
+- Night textures and seasons are not read, as for the downloads.
+
+### 10.5 Lot props of SC4's own lots
+
+The install is its own prop source (`props.OwnSource`): 7,337 prop rows over the 112 buildings' lots, 1,302 placed (77
+buildings), 4,247 outside the SC3 lot (SC4's civic lots are 1x1 to 20x9 tiles), 54 of another season, 0 missing, 1,734
+without a readable model: animated people (`Aper*`, resource key type 4 with no type-1 record: 567 of the rows of the
+first 60 buildings), effects (no model key) and resource key type 0 (98). The two most used prop ids the JMyers lots
+left unplaced (9.2) are SC4's own: `1EDF0000` is the prop exemplar `Flora2x2x2_QuarterShrub_1EDF` and `28330000`
+`Flora2x2x2_Quarterbush_2833` in SimCity_1.dat [CONFIRMED: instance keys of type-0x1E exemplars of the install]. Reading the
+install as a dependency source for downloads is the next stream (sc4baseprops).
