@@ -1569,6 +1569,14 @@ def apply_outputs(tree, led, files, tables, cross=None):
             if os.path.lexists(dst):
                 os.remove(dst)
             _prune(os.path.dirname(dst), os.path.join(tree, NETMOD))
+        # task overlaymerge 2026-11-21: the stock hashes sc3netmod OVMERGE needs to merge other mods' edits of the
+        # files the overlay shadows (overlay_base.py), beside overlay\, rebuilt whenever the overlay changes
+        base = os.path.join(tree, NETMOD, "overlay_base.txt")
+        if files:
+            import overlay_base
+            print(overlay_base.write_auto(tree))
+        elif os.path.lexists(base):
+            os.remove(base)
     else:
         for rel, data in sorted(files.items()):
             dst = os.path.join(tree, rel)

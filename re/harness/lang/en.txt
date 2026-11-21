@@ -444,6 +444,12 @@ lifespan.y=%ldy
 # sc3resize_restore.c
 lifespan.y_m=%ldy %ldm
 
+# ---- perf
+# sc3perf.c
+perf.ovwarn_files=Another mod changed files the roads mod replaces: %s
+# sc3perf.c
+perf.ovwarn_hint=The game does not see that change. Details in sc3netmod.log
+
 # ---- placehints
 # sc3resize_placehints.c
 placehints.airport=Airport

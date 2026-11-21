@@ -231,6 +231,10 @@ lifespan.that_age_funds=%d con vida útil. Fondos $%s
 lifespan.y=%lda
 lifespan.y_m=%lda %ldm
 
+# ---- perf
+perf.ovwarn_files=Otro mod cambió archivos que el mod de carreteras reemplaza: %s
+perf.ovwarn_hint=El juego no ve ese cambio. Detalles en sc3netmod.log
+
 # ---- placehints
 placehints.airport=Aeropuerto
 placehints.in_green=en verde
