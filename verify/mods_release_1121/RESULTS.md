@@ -97,3 +97,10 @@ Draft GitHub notes: `verify/mods_release_1121/gh_notes.md`.
 - Owner call to publish. Then: stage/release -> stage/release_1120_old, stage/release_1121 -> stage/release, LAN deploy
   (17 files), GitHub `sc3mods-2026-11-21` with the zip, "superseded" line on the 2026-11-20 notes, repo README mods section.
 - dev/rel1121 (smoke tree, branch child/rel1121 with no commits) can be pruned.
+
+## Published 2026-11-21
+
+Owner: "Yes, release". stage/release swapped (old: stage/release_1120_old), LAN deploy, served label 2026-11-21
+3,680 files. GitHub `sc3mods-2026-11-21`, target 08c0357, asset downloaded back, SHA-256
+AAD800C2676712978AD8A00BD7A3DB91667A0B59973759085B3E201E13497E65 matches. The 2026-11-20 notes start with a
+"superseded" line. Repo README updated (civic styles, no-pause row, SimCity 4-style picker, overlay merge).
