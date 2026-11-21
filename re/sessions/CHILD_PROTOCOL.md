@@ -39,6 +39,21 @@ quarantined files. Report them to the orchestrator.
 
 Load City lists `MAIN\Cities`: reach your tree with "Buscar en", or pass `-City`.
 
+### The building suite (importer, converter, pages: `re/tools/bldimport/webtest/run_all.sh`)
+
+Since 2026-11-20 (suitespeed, verify/suitespeed/RESULTS.md) the suite has modes. Use the cheapest one that covers
+your change, and the normal run once before you report:
+
+- While you work: `SUITE_CHANGED=1` runs only the steps your changed files can affect (a CSS-only change: 14 s, a
+  converter change: about 6 min). It prints what it skipped and why. Files it does not know run everything.
+- Before you report: the normal run (no SUITE_ switch): 41 steps, about 15 min cold and 6 to 7 min when the Python
+  references are cached. Same arguments and env as before (command lines in verify/lotshape/RESULTS.md),
+  `PROYECTOS_TEST_HUB=off` when SC4INSTALL is set, `PROYECTOS_TEST_MEM_GB=6`.
+- `SUITE_DEEP=1` (the whole SC4 install and the --sc4grow page step, every reference rebuilt, about 28 min) only when the
+  orchestrator asks or for a release, with `PROYECTOS_TEST_MEM_GB=8` (the --sc4grow step peaks at 5.4 GB).
+- `SUITE_REBUILD=1` forces the Python references to rebuild. `SUITE_JOBS=1` runs the old order one by one.
+- Wait on a run quietly (background run or Monitor) and report once at the end, not per step.
+
 ## 3. Account rules (children run on claude2, under a managed policy)
 
 - **No `git add` / `git commit`.** Leave changes in the worktree and list every file under "files owned" in your
