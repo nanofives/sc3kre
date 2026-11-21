@@ -134,6 +134,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   1024 cities load, reload and run without freezing or crashing.
 - Crash guards from thronevintagetech's SC3KU Enhancement Package: an object already at a zero count is never freed
   twice, and the demand valve layer's shutdown is protected.
+- Buildings on lots that are not square (landmarks and rewards such as a 2x3 or 3x4 lot from the building importer)
+  draw whole in every view, and saves keep their real size. The stock game always drew them as squares.
 
 ### Roads, avenues and highways (sc3netmod + road data)
 - Avenues with 2 lanes each way (right-hand traffic, lane markings), on slopes too, also where they pass under a
