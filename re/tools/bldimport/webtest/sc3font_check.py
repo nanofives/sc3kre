@@ -28,10 +28,18 @@ SMOOTH = {'TITLE9', 'TITLE12'}   # build_fonts.mjs / sc3font.js SMOOTH (owner 20
 
 
 def chrome(url, extra):
-    prof = tempfile.mkdtemp(prefix='sc3font')
-    return subprocess.run([CHROME, '--headless=new', '--hide-scrollbars', '--force-device-scale-factor=1', '--allow-file-access-from-files',
-                           '--user-data-dir=' + prof, '--virtual-time-budget=15000', '--window-size=900,760', *extra, url],
-                          capture_output=True, timeout=180, text=True, encoding='utf-8', errors='replace')
+    # task suitespeed (2026-11-20): one retry when Chrome itself fails to start (exit code, no DOM, no screenshot file);
+    # a page that runs and reports a wrong result is never retried
+    shot = next((x.split('=', 1)[1] for x in extra if x.startswith('--screenshot=')), None)
+    for attempt in (1, 2):
+        prof = tempfile.mkdtemp(prefix='sc3font')
+        r = subprocess.run([CHROME, '--headless=new', '--hide-scrollbars', '--force-device-scale-factor=1', '--allow-file-access-from-files',
+                            '--user-data-dir=' + prof, '--virtual-time-budget=15000', '--window-size=900,760', *extra, url],
+                           capture_output=True, timeout=180, text=True, encoding='utf-8', errors='replace')
+        started = r.returncode == 0 and ('--dump-dom' not in extra or r.stdout.strip()) and (shot is None or os.path.isfile(shot))
+        if started or attempt == 2:
+            return r
+        print('  chrome start-up failed (exit %s), starting it once more' % r.returncode)
 
 
 def result_of(dom):

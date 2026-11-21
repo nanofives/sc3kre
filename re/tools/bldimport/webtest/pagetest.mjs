@@ -12,6 +12,8 @@
 //        (task sc4baseprops: the game's .dat files picked with the download, or the game opened first (Open SC4 game,
 //        remembered for the page session) and the download alone after it: SC4's own props baked, installed)
 //   node pagetest.mjs --golden <dir> --game <tree> --case landmarkdesc --edit-desc "<file>=<text>"
+//   ... --sc4install <SimCity 4 folder> --sc4only "<exemplar>,<exemplar>"   (task suitespeed: the page converts only these
+//        buildings of the install, as sc4conv.py --only; the suite's normal mode, SUITE_DEEP=1 opens the whole install)
 //        (plop2: the entry's description blanked, typed into the panel's Description box, installed from the page's own
 //        models.json; the outputs, ids.json included, must equal bldimport.py's on golden_setup case landmarkdesc)
 //
@@ -25,6 +27,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startChrome } from './chrome.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const arg = (k, d = null) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
@@ -32,6 +35,7 @@ const golden = arg('golden'), tree = arg('game'), cs = arg('case', 'kenney');
 const modelsDir = arg('models', golden && path.join(golden, 'src', cs)), action = arg('action', 'install');
 const apply = process.argv.includes('--apply'), compare = !process.argv.includes('--no-compare'), shot = arg('shot');
 const sc4grow = process.argv.includes('--sc4grow');   // owner 2026-11-20: the page's "with shops, offices, industry and farms" box ticked
+const sc4only = arg('sc4only');           // suitespeed: the install set (sc4_install_set.json), opt.only of sc4web.js
 const sc4inst = arg('sc4install');         // task sc4civ: the player's SimCity 4 folder: its game .dat files are picked
 const INSTALL = ['SimCity_1.dat', 'SimCity_2.dat', 'SimCity_3.dat', 'SimCity_4.dat', 'SimCity_5.dat', 'EP1.dat', 'SimCityLocale.DAT'];
 const sc4zip = arg('sc4zip') || (sc4inst ? path.join(sc4inst, INSTALL[0]) : null);
@@ -53,30 +57,28 @@ const man = { models: { base: dirUrl(modelsDir), files: sc4zip ? [] : walk(model
   sc4: sc4zip ? { base: dirUrl(path.dirname(path.resolve(sc4zip))), files: sc4inst ? INSTALL.filter(f => fs.existsSync(path.join(sc4inst, f))) : [path.basename(sc4zip)],
     deps: sc4deps ? [{ base: dirUrl(path.dirname(path.resolve(sc4deps))), file: path.basename(sc4deps) }] : [],
     extra: sc4with ? instFiles(sc4with).map(f => ({ base: dirUrl(sc4with), file: f })) : [],
-    remember: sc4remember ? { base: dirUrl(sc4remember), files: instFiles(sc4remember) } : null, grow: sc4grow } : null,
+    remember: sc4remember ? { base: dirUrl(sc4remember), files: instFiles(sc4remember) } : null, grow: sc4grow, only: sc4only } : null,
   editDesc: editArg ? { file: editArg.slice(0, editArg.indexOf('=')), text: editArg.slice(editArg.indexOf('=') + 1) } : null };
 const manPath = path.join(golden || os.tmpdir(), `pagetest_${cs}_${action}.json`);
 fs.writeFileSync(manPath, JSON.stringify(man));
 const page = pathToFileURL(path.join(here, '..', 'classifier.html')).href + '?bldtest=' + encodeURIComponent(pathToFileURL(manPath).href) + (arg('wait') ? '&wait=' + arg('wait') : '');
-const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'bldweb-chrome-'));
-const ch = spawn(chrome, ['--headless=new', '--window-size=1280,1100', '--allow-file-access-from-files', '--remote-debugging-port=0', '--user-data-dir=' + prof,
-  '--no-first-run', '--no-default-browser-check', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', page], { stdio: 'ignore' });
-console.log(`chrome pid ${ch.pid}, page ${page.slice(0, 120)}...`);
-const stop = () => { try { execFileSync('taskkill', ['/PID', String(ch.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (e) { /* already gone */ } };
+const CHROME_FLAGS = ['--headless=new', '--window-size=1280,1100', '--allow-file-access-from-files', '--remote-debugging-port=0',
+  '--no-first-run', '--no-default-browser-check', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'];
+let prof = null, ch = { pid: 0 }, stop = () => {};   // suitespeed: started in try (chrome.mjs, one retry)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let total = 0, k = 0, bad = 0;
 const line = (what, ok, extra = '') => { k++; bad += !ok; console.log(`[${k}/${total}] ${what} ${ok ? 'PASS' : 'FAIL'}${extra ? ' ' + extra : ''}`); };
 try {
-  let port = null;
-  for (let t = 0; t < 100 && !port; t++) { await sleep(200); const f = path.join(prof, 'DevToolsActivePort'); if (fs.existsSync(f)) port = fs.readFileSync(f, 'utf8').split('\n')[0].trim(); }
-  if (!port) throw new Error('chrome did not open a debugging port');
-  let target = null;
-  for (let t = 0; t < 50 && !target; t++) { await sleep(200); const l = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); target = l.find(x => x.type === 'page' && x.url.startsWith('file:')); }
+  const c = await startChrome(chrome, CHROME_FLAGS, page, { prefix: 'bldweb-chrome-', findTarget: l => l.find(x => x.type === 'page' && x.url.startsWith('file:')) });
+  ({ ch, prof, stop } = c); const port = c.port, target = c.target;
+  console.log(`chrome pid ${ch.pid}, page ${page.slice(0, 120)}...`);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   let seq = 0; const waiters = new Map();
   ws.onmessage = ev => { const m = JSON.parse(ev.data); if (m.id && waiters.has(m.id)) { waiters.get(m.id)(m); waiters.delete(m.id); } };
-  const evalJs = expr => new Promise(res => { const id = ++seq; waiters.set(id, m => res(m.result && m.result.result && m.result.result.value)); ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression: expr, returnByValue: true } })); });
+  // suitespeed: a renderer that died (out of memory) never answers; give each call 120 s so the page's 900 s limit holds
+  const evalJs = expr => Promise.race([new Promise(res => { const id = ++seq; waiters.set(id, m => res(m.result && m.result.result && m.result.result.value)); ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression: expr, returnByValue: true } })); }),
+    sleep(120000).then(() => undefined)]);
   const t0 = Date.now(); let title = '';
   while (Date.now() - t0 < 900000) {
     title = await evalJs('document.title');
@@ -171,6 +173,6 @@ try {
     line('rendered in a Web Worker', /^worker/.test(res.worker || ''), res.worker);
   }
 } catch (e) { total = total || 1; line('pagetest', false, String(e.stack || e)); }
-finally { stop(); try { fs.rmSync(prof, { recursive: true, force: true }); } catch (e) { /* locked files of a closing chrome */ } }
+finally { stop(); try { if (prof) fs.rmSync(prof, { recursive: true, force: true }); } catch (e) { /* locked files of a closing chrome */ } }
 console.log(`${total - bad} of ${total} passed`);
 process.exit(bad ? 1 : 0);

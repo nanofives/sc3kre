@@ -11,24 +11,22 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startChrome } from './chrome.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const arg = (k, d = null) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const chrome = arg('chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 const page = pathToFileURL(path.join(here, '..', 'classifier.html')).href + '?demo=1';
-const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'gf-chrome-'));
-const ch = spawn(chrome, ['--headless=new', '--window-size=1280,1000', '--allow-file-access-from-files', '--remote-debugging-port=0', '--user-data-dir=' + prof,
-  '--no-first-run', '--no-default-browser-check', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--blink-settings=preferredColorScheme=0', 'about:blank'], { stdio: 'ignore' });
-const stop = () => { try { execFileSync('taskkill', ['/PID', String(ch.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (e) { /* already gone */ } };
+const CHROME_FLAGS = ['--headless=new', '--window-size=1280,1000', '--allow-file-access-from-files', '--remote-debugging-port=0',
+  '--no-first-run', '--no-default-browser-check', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--blink-settings=preferredColorScheme=0'];
+let prof = null, ch = { pid: 0 }, stop = () => {};   // suitespeed: started in try (chrome.mjs, one retry)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const FAMS = ['SC3 Main', 'SC3 Text', 'SC3 System', 'SC3 Name', 'SC3 Title', 'SC3 Button'];
 const checks = [];
 try {
-  let port = null;
-  for (let t = 0; t < 100 && !port; t++) { await sleep(200); const f = path.join(prof, 'DevToolsActivePort'); if (fs.existsSync(f)) port = fs.readFileSync(f, 'utf8').split('\n')[0].trim(); }
-  if (!port) throw new Error('chrome did not open a debugging port');
-  let target = null;
-  for (let t = 0; t < 50 && !target; t++) { await sleep(200); const l = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); target = l.find(x => x.type === 'page'); }
+  const c = await startChrome(chrome, CHROME_FLAGS, 'about:blank', { prefix: 'gf-chrome-', findTarget: l => l.find(x => x.type === 'page') });
+  ({ ch, prof, stop } = c); const port = c.port, target = c.target;
+  console.log(`chrome pid ${ch.pid}`);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   let seq = 0; const waiters = new Map();
@@ -57,7 +55,7 @@ try {
   checks.push(['OS dark mode: the page keeps the light look', r.dark && r.bg === 'rgb(216, 217, 255)' && r.scheme === 'light', `prefers dark ${r.dark}, background ${r.bg}, color-scheme ${r.scheme}`]);
   ws.close();
 } catch (e) { checks.push(['fonts_inline', false, String(e.stack || e)]); }
-finally { stop(); try { fs.rmSync(prof, { recursive: true, force: true }); } catch (e) { /* locked files of a closing chrome */ } }
+finally { stop(); try { if (prof) fs.rmSync(prof, { recursive: true, force: true }); } catch (e) { /* locked files of a closing chrome */ } }
 let bad = 0;
 checks.forEach(([n, ok, d], i) => { bad += !ok; console.log(`[${i + 1}/${checks.length}] ${n} ${ok ? 'PASS' : 'FAIL'}${d ? '\n      ' + d : ''}`); });
 console.log(`${checks.length - bad} of ${checks.length} passed`);

@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startChrome } from './chrome.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const arg = (k, d = null) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
@@ -37,20 +38,16 @@ const man = {
 const manPath = path.join(golden, 'sc3pack_pagetest.json');
 fs.writeFileSync(manPath, JSON.stringify(man));
 const page = pathToFileURL(path.join(here, 'sc3pack_view.html')).href + '?t=' + encodeURIComponent(pathToFileURL(manPath).href);
-const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'sc3pack-chrome-'));
-const ch = spawn(chrome, ['--headless=new', '--window-size=1280,1100', '--allow-file-access-from-files', '--remote-debugging-port=0', '--user-data-dir=' + prof,
-  '--no-first-run', '--no-default-browser-check', page], { stdio: 'ignore' });
-console.log(`chrome pid ${ch.pid}`);
-const stop = () => { try { execFileSync('taskkill', ['/PID', String(ch.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (e) { /* already gone */ } };
+const CHROME_FLAGS = ['--headless=new', '--window-size=1280,1100', '--allow-file-access-from-files', '--remote-debugging-port=0',
+  '--no-first-run', '--no-default-browser-check'];
+let prof = null, ch = { pid: 0 }, stop = () => {};   // suitespeed: started in try (chrome.mjs, one retry)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let total = packs.length + 3, k = 0, bad = 0;
 const line = (what, ok, extra = '') => { k++; bad += !ok; console.log(`[${k}/${total}] ${what} ${ok ? 'PASS' : 'FAIL'}${extra ? ' ' + extra : ''}`); };
 try {
-  let port = null;
-  for (let t = 0; t < 100 && !port; t++) { await sleep(200); const f = path.join(prof, 'DevToolsActivePort'); if (fs.existsSync(f)) port = fs.readFileSync(f, 'utf8').split('\n')[0].trim(); }
-  if (!port) throw new Error('chrome did not open a debugging port');
-  let target = null;
-  for (let t = 0; t < 50 && !target; t++) { await sleep(200); const l = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); target = l.find(x => x.type === 'page' && x.url.startsWith('file:')); }
+  const c = await startChrome(chrome, CHROME_FLAGS, page, { prefix: 'sc3pack-chrome-', findTarget: l => l.find(x => x.type === 'page' && x.url.startsWith('file:')) });
+  ({ ch, prof, stop } = c); const port = c.port, target = c.target;
+  console.log(`chrome pid ${ch.pid}, page ${page.slice(0, 120)}...`);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   let seq = 0; const waiters = new Map();
@@ -112,6 +109,6 @@ try {
   }
   ws.close();
 } catch (e) { total = total || 1; line('pagetest', false, String(e.stack || e)); }
-finally { stop(); try { fs.rmSync(prof, { recursive: true, force: true }); } catch (e) { /* locked files of a closing chrome */ } }
+finally { stop(); try { if (prof) fs.rmSync(prof, { recursive: true, force: true }); } catch (e) { /* locked files of a closing chrome */ } }
 console.log(`${k - bad} of ${k} passed`);
 process.exit(bad ? 1 : 0);

@@ -12,6 +12,9 @@ The install is EA's game, read in place (never copied): what is written under <d
   sub\conv\        sc4conv.py --only <4 buildings: a police station, a park, a reward, a landmark>
   sub\folder\, sub\out\  bldimport.py pack --out of sub\conv (the frames + game files the page must equal)
   grow\, grow_notes.json  sc4conv.py --growables --only <GROW_SUBSET> (task sc4ci: SC4's own shops, offices, industry)
+
+--set <sc4_install_set.json> (task suitespeed, 2026-11-20): conv\ and rerun\ hold the install set only (sc4conv.py
+--only <its exemplars>), the suite's normal mode. Without it: the whole install (SUITE_DEEP=1, releases).
 """
 import argparse
 import json
@@ -44,12 +47,21 @@ def main():
     ap.add_argument("--install", required=True)
     ap.add_argument("--game", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--set", help="sc4_install_set.json: convert only its buildings (the suite's normal mode)")
     a = ap.parse_args()
+    only = []
+    if a.set:
+        st = json.load(open(a.set, encoding="utf-8"))
+        names = [b["exemplar"] for b in st["buildings"]]
+        miss = [x for x in SUBSET.split(",") if x not in names]
+        if miss:
+            raise SystemExit("the install set must hold the packed subset: %s missing" % ", ".join(miss))
+        only = ["--only", ",".join(names)]
     py = sys.executable
     shutil.rmtree(a.out, ignore_errors=True)
     os.makedirs(a.out)
     conv = os.path.join(a.out, "conv")
-    run([py, SC4CONV, a.install, "--out", conv, "--notes-json", os.path.join(a.out, "notes.json")])
+    run([py, SC4CONV, a.install, "--out", conv, "--notes-json", os.path.join(a.out, "notes.json")] + only)
     # the rerun with the player's edits
     rr = os.path.join(a.out, "rerun")
     shutil.copytree(conv, rr)
@@ -62,7 +74,7 @@ def main():
     txt = json.dumps(j, indent=2, ensure_ascii=False) + "\n"
     open(os.path.join(rr, "old.json"), "w", encoding="utf-8", newline="\n").write(txt)
     open(os.path.join(rr, "models.json"), "w", encoding="utf-8", newline="\n").write(txt)
-    run([py, SC4CONV, a.install, "--out", rr])
+    run([py, SC4CONV, a.install, "--out", rr] + only)
     # the subset, packed
     sub = os.path.join(a.out, "sub", "conv")
     run([py, SC4CONV, a.install, "--out", sub, "--only", SUBSET])

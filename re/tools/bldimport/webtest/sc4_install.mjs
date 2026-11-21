@@ -1,7 +1,11 @@
 // sc4_install.mjs - task sc4civ (2026-11-19l): the player's own SimCity 4 install through the page's converter
 // (sc4web.js) against the Python route (sc4conv.py, bldimport.py), byte for byte. Needs sc4_install_setup.py's output.
 //
-//   node sc4_install.mjs --golden <dir from sc4_install_setup.py> --install "<SimCity 4 install folder>" --game <tree> [--frames]
+//   node sc4_install.mjs --golden <dir from sc4_install_setup.py> --install "<SimCity 4 install folder>" --game <tree> [--frames] [--set <sc4_install_set.json>]
+//
+// --set (task suitespeed, 2026-11-20): the suite's normal mode. The install is still listed and indexed whole, by
+// slices, but only the set's buildings convert (opt.only = sc4conv.py --only, as sc4_install_setup.py --set did); every
+// check below is the same. Without it the whole install converts (SUITE_DEEP=1, releases).
 //
 // The install is read as the page reads a picked folder: every file listed, the 7 game files kept, the large ones read
 // by slices (never whole: the test counts the bytes read). Checks, one line each ([N/M] name PASS|FAIL):
@@ -27,6 +31,9 @@ const W = req(path.join(here, '..', 'sc4web.js'));
 const arg = k => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : null; };
 const golden = arg('golden'), inst = arg('install'), gameDir = arg('game');
 const wantFrames = process.argv.includes('--frames');
+const setFile = arg('set');
+const ONLY = setFile ? JSON.parse(fs.readFileSync(setFile, 'utf8')).buildings.map(b => b.exemplar).join(',') : null;
+const only = ONLY ? { only: ONLY } : {};
 if (!golden || !inst || !gameDir) { console.log('usage: node sc4_install.mjs --golden <dir> --install <SC4 folder> --game <tree> [--frames]'); process.exit(2); }
 
 function walk(d, base = d, out = []) {
@@ -70,9 +77,9 @@ const log = s => console.log('  ' + s);
 // the whole install
 let t0 = Date.now();
 const src = await W.sourcesFrom(installInputs());
-const conv = await W.convert(src, { log: () => {} });
+const conv = await W.convert(src, { log: () => {}, ...only });
 const secs = ((Date.now() - t0) / 1000).toFixed(1);
-log(`install converted in ${secs} s, ${conv.models.length} models, ${(readBytes / 1048576).toFixed(1)} MB read`);
+log(`install converted in ${secs} s, ${conv.models.length} models${ONLY ? ' (the install set, ' + ONLY.split(',').length + ' exemplars)' : ''}, ${(readBytes / 1048576).toFixed(1)} MB read`);
 {
   const diff = [], pix = [];
   for (const rel of pyFiles) {
@@ -100,14 +107,14 @@ log(`install converted in ${secs} s, ${conv.models.length} models, ${(readBytes 
 // rerun: the player's edits kept
 {
   const oldText = fs.readFileSync(g('rerun', 'old.json'), 'utf8');   // sc4_install_setup.py's edits, as the page saves them
-  const convR = await W.convert(await W.sourcesFrom(installInputs()), { old: oldText, log: () => {} });
+  const convR = await W.convert(await W.sourcesFrom(installInputs()), { old: oldText, log: () => {}, ...only });
   const a = convR.models.find(m => m.x_sc4.exemplar === 'RW16x14_MayorsHouse_031F'), b = convR.models.find(m => m.x_sc4.exemplar === 'PZ11x9x11_Gazebo_1DDE');
   line('install rerun keeps a reward\'s population + switch and a civic look\'s base (= sc4conv.py)', a.population === 1234 && a.enabled === false && b.base === 'fountain' &&
     eqBytes(fs.readFileSync(g('rerun', 'models.json')), convR.files.get('models.json')));
 }
 // a second pick of the same folder gives the same files
 {
-  const convB = await W.convert(await W.sourcesFrom(installInputs()), { log: () => {} });
+  const convB = await W.convert(await W.sourcesFrom(installInputs()), { log: () => {}, ...only });
   const d = [...conv.files.keys()].filter(f => !eqBytes(conv.files.get(f), convB.files.get(f)));
   line(`install converted twice: the same ${convB.files.size} files`, !d.length && convB.files.size === conv.files.size, d.slice(0, 4).join(', '));
 }
