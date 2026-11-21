@@ -1,0 +1,289 @@
+{
+ "note": "suitespeed 2026-11-20: the SC4 install set of the suite's normal mode (sc4_install_setup.py --set, sc4_install.mjs --set, pagetest.mjs --sc4only). Chosen from the per-building line coverage of sc4conv.py over the whole install (sc4_set_cover.py, verify/suitespeed/RESULTS.md): these buildings reach every line of re/tools/sc4conv/*.py and re/tools/bldimport/*.py that the 113 civic / park / reward / landmark buildings reach, plus the cases the checks name and one of each service, reward rule and lot shape. SUITE_DEEP=1 converts the whole install. 'expect' = the page's cards and cards on for this set (pagetest.mjs --expect-install).",
+ "expect": {
+  "cards": 28,
+  "on": 23
+ },
+ "buildings": [
+  {
+   "exemplar": "CV24X24_4carLocalPrecinct_030C",
+   "why": "checked by name: civic police (sc4_install.mjs kinds, packed subset, the police look of the growables run)",
+   "kind": "civic",
+   "base": "police",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "CV12x14_2engineStationHouse_0310",
+   "why": "checked by name: civic fire",
+   "kind": "civic",
+   "base": "fire",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "PZ11x9x11_Gazebo_1DDE",
+   "why": "checked by name: small park; the rerun edits its base to fountain; packed subset",
+   "kind": "civic",
+   "base": "small_park",
+   "lot": [
+    1,
+    1
+   ]
+  },
+  {
+   "exemplar": "PZBaseball16x16x11_Backstop_1DBE",
+   "why": "checked by name: civic baseball, a 4x4 park",
+   "kind": "civic",
+   "base": "baseball",
+   "lot": [
+    4,
+    4
+   ]
+  },
+  {
+   "exemplar": "RW16x14_MayorsHouse_031F",
+   "why": "checked by name: reward with a population rule (500), non-square lot 2x3; the rerun edits it; packed subset; the page's Mayor's House check",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    2,
+    3
+   ]
+  },
+  {
+   "exemplar": "RW44x28_CourtHouse_0322",
+   "why": "checked by name: reward with a population rule (40000)",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "Lm16x16_Big Ben_04CD",
+   "why": "checked by name: landmark 1x1, tiled views; packed subset",
+   "kind": "landmark",
+   "base": null,
+   "lot": [
+    1,
+    1
+   ]
+  },
+  {
+   "exemplar": "Lm104x6_Hollywoodsign_04D2",
+   "why": "coverage: the only building reaching the joint tile fit of views.compose_tiles (views.py 196-222, 4 tiles per view), 7x7 landmark, off",
+   "kind": "landmark",
+   "base": null,
+   "lot": [
+    7,
+    7
+   ]
+  },
+  {
+   "exemplar": "PZPark3x6x5_Lifeguardtower_1DDD",
+   "why": "coverage: props.py 292-298 and lottex.py 91 (prop / lot texture rows only it reaches)",
+   "kind": "civic",
+   "base": "small_park",
+   "lot": [
+    1,
+    1
+   ]
+  },
+  {
+   "exemplar": "RW64x80_ConventionCtr_0343",
+   "why": "coverage: props.py 372-378, lottex.py 158; a 5x5 reward (lotshape) with 8-9 tiles per view",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    5,
+    5
+   ]
+  },
+  {
+   "exemplar": "CV12x14_urgentcareclinic_0311",
+   "why": "coverage: views.py 502; civic hospital",
+   "kind": "civic",
+   "base": "hospital",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "CV67x95_large-high-school_0389",
+   "why": "coverage: views.py 291 (a flat atlas piece left out, task sc4ci); the Large High School case, off",
+   "kind": "civic",
+   "base": "school",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "Lm160x16_GatewayArch_04D9",
+   "why": "coverage: sc4conv.py 401; the landmark without lot textures (textures.on false), 10x10, off",
+   "kind": "landmark",
+   "base": null,
+   "lot": [
+    10,
+    10
+   ]
+  },
+  {
+   "exemplar": "PZ17x9x15_RangerStation_1F34",
+   "why": "coverage: props.py 278",
+   "kind": "civic",
+   "base": "small_park",
+   "lot": [
+    1,
+    1
+   ]
+  },
+  {
+   "exemplar": "CV10x24_SmallLibrary_0319",
+   "why": "civic library (one of each SC4 service)",
+   "kind": "civic",
+   "base": "library",
+   "lot": [
+    2,
+    2
+   ]
+  },
+  {
+   "exemplar": "CV24x22_ScienceHistoryArtMuseum_031D",
+   "why": "civic museum",
+   "kind": "civic",
+   "base": "museum",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "CV38x48_Jail_0337",
+   "why": "civic jail, tiled views",
+   "kind": "civic",
+   "base": "jail",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "CV44x44_CityCollege_031C",
+   "why": "civic college, tiled views",
+   "kind": "civic",
+   "base": "college",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "CV28x28_K-8SmallSchool_0314",
+   "why": "civic school, 2 tiles on two views",
+   "kind": "civic",
+   "base": "school",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "PZ16x32x2_tennis-court_298F",
+   "why": "big park",
+   "kind": "civic",
+   "base": "big_park",
+   "lot": [
+    3,
+    3
+   ]
+  },
+  {
+   "exemplar": "RW40x40_ToxicDump_0341",
+   "why": "reward with no population condition: the default 20000",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    4,
+    4
+   ]
+  },
+  {
+   "exemplar": "RW24x30_PrivateSchool2_0379",
+   "why": "reward whose condition counts one wealth only: the default 20000; also a school service; lot 4x2",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    4,
+    2
+   ]
+  },
+  {
+   "exemplar": "RW44x28_UnivAdminTower_033D",
+   "why": "reward whose condition sums r1+r2+r3: population 15000",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    4,
+    4
+   ]
+  },
+  {
+   "exemplar": "Lm60x70_SeafirstTower_04B0",
+   "why": "landmark on a 5x5 lot (lotshape: 5x5 allowed)",
+   "kind": "landmark",
+   "base": null,
+   "lot": [
+    5,
+    5
+   ]
+  },
+  {
+   "exemplar": "Lm64x24_Sphynx_04D1",
+   "why": "non-square landmark lot 4x2",
+   "kind": "landmark",
+   "base": null,
+   "lot": [
+    4,
+    2
+   ]
+  },
+  {
+   "exemplar": "Lm128x60_EmpireStateBuilding_04D4",
+   "why": "tall tiled landmark, 8x8, off (over 5x5)",
+   "kind": "landmark",
+   "base": null,
+   "lot": [
+    8,
+    8
+   ]
+  },
+  {
+   "exemplar": "RW32x32_Cemetery_0347",
+   "why": "rewards sharing a name: the first (name order) is on",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    5,
+    5
+   ]
+  },
+  {
+   "exemplar": "RW32x32_Cemetery_037b",
+   "why": "rewards sharing a name: the next one is off",
+   "kind": "reward",
+   "base": null,
+   "lot": [
+    5,
+    5
+   ]
+  }
+ ]
+}

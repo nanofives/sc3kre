@@ -63,6 +63,10 @@
         window.bc.rememberSc4Game(await window.SC4WEB.sourcesFrom(window.SC4WEB.fileInputs(gf)));
       }
       if (man.sc4.grow) document.getElementById('sc4Grow').checked = true;   // owner 2026-11-20: the growables box
+      if (man.sc4.only) {                   // task suitespeed: the install set (the page's convert gets opt.only)
+        const W = window.SC4WEB, conv = W.convert;
+        W.convert = (src, o = {}) => conv.call(W, src, Object.assign({}, o, { only: man.sc4.only }));
+      }
       const t1 = performance.now();
       await window.bc.openSc4(window.SC4WEB.fileInputs(files), { name: man.sc4.files.join(', ') });
       const S = window.bc.S;
