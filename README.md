@@ -76,6 +76,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 - Civic looks and new rewards from the [building importer](https://nanofives.github.io/sc3kre/buildings/): a civic
   button with looks opens a list of the original building and your looks, with picture and price, and builds the
   one you pick. Your rewards unlock at the population and year you set.
+- Civic buildings in every style: the civic list also offers the game's own European and Asian versions of police and
+  fire stations, schools, hospitals, parks and more, with no import needed.
 - Buildings placed from a menu, and road, rail, highway and power line drags, can go over zoned buildings,
   which are demolished first (bulldozing added to the cost, undo puts them back).
 - Zoning over buildings of another zone type, and de-zoning, demolish them (same type left alone).
@@ -109,6 +111,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 
 ### Simulation (sc3simrun)
 - The date and the simulation keep going while you move the camera.
+- Optional (mods page row "No pause in pop-ups", off by default): the city keeps running while the budget, the
+  preferences, the landmark list or the Rewards list is open.
 - Working buildings are no longer torn down at random and rebuilt as the same kind of building (the game's
   "anarchy" roll). Upgrades to pricier or denser buildings still happen. `simrun.ini [churn]` sets each roll.
 - Sirens no longer play on every emergency vehicle in view one after the other: only vehicles that rolled a siren
@@ -189,9 +193,11 @@ in `mods\netmod`, which a new release replaces.
   and the city has a military base, and the game's own helicopter sound.
 
 ### More buildings in zones (road data in `mods\netmod`)
-- All three building styles in one city: the European and Asian buildings grow next to the North American ones at
-  random, as buildings of their own. A city keeps the style it was saved with (most European cities are saved with
-  the European style), so for an even mix use a city saved with the default style, such as Sacramento or Madison.
+- Building styles as in SimCity 4: the style picked in City Properties decides the style of the buildings that grow
+  from then on, and the buildings already standing keep their look. The "Mix all three styles" box grows the European,
+  Asian and North American buildings side by side. Each city saves its choice.
+- Other mods that change the same game files as the road mod (such as a farm mod editing the building lists or
+  SYS.PAK) are merged into the road mod's copies when the game starts. What cannot be merged is named on screen.
 - Building Architect slots: 16 zoned buildings, each a copy of a game building, that you can put your own Building
   Architect building on with the Replace button of the building's query window (same lot size). The game's buildings
   keep growing too.
