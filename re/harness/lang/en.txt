@@ -590,11 +590,15 @@ resize.mt_keys=P and 1-4 keys
 # sc3resize.c
 resize.mt_landfill=Landfills
 # sc3resize.c
+resize.mt_lotrect=Non-square buildings
+# sc3resize.c
 resize.mt_mods=Mods
 # sc3resize.c
 resize.mt_netmod=Avenues and highways
 # sc3resize.c
 resize.mt_newreward=New rewards
+# sc3resize.c
+resize.mt_nopause=No pause in pop-ups
 # sc3resize.c
 resize.mt_note=Changes apply the next time the game starts.
 # sc3resize.c
@@ -629,7 +633,6 @@ resize.mt_sirens=Siren fix
 resize.mt_stationwarn=Station warnings
 # sc3resize.c
 resize.mt_stylemix=Building style mix
-resize.mt_lotrect=Non-square buildings
 # sc3resize.c
 resize.mt_terrpanel=Larger terrain panel
 # sc3resize.c

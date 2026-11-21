@@ -9201,6 +9201,7 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_hwyspeed"),  "Autos rápidos en autopista", "Faster highway cars" }, NULL, "SC3SIMRUN_HWYSPEED" },
     { { SC3KEY("resize.mt_sandbox"),   "Sandbox: sin abandono",   "Sandbox: no abandonment" }, NULL, "+SC3SIMRUN_SANDBOX" },
     { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" },
+    { { SC3KEY("resize.mt_nopause"),   "Sin pausa en ventanas",   "No pause in pop-ups" },    NULL, "+SC3SIMRUN_NOPAUSE" },   /* nopause 2026-11-21: sc3simrun NOPAUSE */
     { { SC3KEY("resize.mt_civvar"),    "Cívicos: varios aspectos", "Civic buildings: more looks" }, NULL, "-SC3RESIZE_CIVVAR" },
     { { SC3KEY("resize.mt_newreward"), "Premios nuevos",          "New rewards" },            NULL, "-SC3RESIZE_NEWREWARD" } };
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
@@ -9259,6 +9260,9 @@ static void mt_vis_all(void *win, int on) {
    18 would put it at 438; at 17 with a 4 px gap under the rows it is at 418; 16 since lotdraw 2026-11-20: 17 feature
    rows at 16 end where 16 at 17 did, city checkbox still at 418) */
 #define MT_FEAT_DY 16
+/* left column rows under "Simulacion y edificios": 19 px until nopause 2026-11-21, 17 since its fifth row (5 x 19 would
+   end at 365, past the features column's 356, and push the city checkbox onto Volver; 5 x 17 ends at 355) */
+#define MT_LEFT_DY 17
 static int mt_build(void *fac, void *win, int es, DWORD col) {
     int n = 0, i, ym = 84, yf = 84;
     n += ho_add_label(fac, win, MT_TITLE, SC3TR(es, "resize.mt_title", "Activar mods y funciones", "Turn mods and features on or off"), 18, 40, 440);
@@ -9275,12 +9279,12 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
     for (i = 0; i < MT_N; i++) {   /* '+' rows (default off), then '-' rows (default on, civmod) */
         const MT_ROW *r = &k_mt_rows[i];
         if (r->dll || r->env[0] != '+') continue;
-        n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19;
+        n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += MT_LEFT_DY;
     }
     for (i = 0; i < MT_N; i++) {
         const MT_ROW *r = &k_mt_rows[i];
         if (r->dll || r->env[0] != '-') continue;
-        n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19;
+        n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += MT_LEFT_DY;
     }
     i = (ym > yf ? ym : yf) + 4;   /* 16 feature rows at 17 px, 4 px gap (hwyspeed: +8 put the city checkbox at 422,
                                       its text under Volver's box): city checkbox at 418, Volver at local y 436 */
