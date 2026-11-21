@@ -540,6 +540,24 @@ resize.city_keeps_running_while=City keeps running while scrolling
 # sc3resize.c
 resize.copy_id=Copy ID
 # sc3resize_civic.c
+resize.cs_as=Asian
+# sc3resize_civic.c
+resize.cs_desc_look=%s style, the game's own art. Same service and same price as the original.
+# sc3resize_civic.c
+resize.cs_desc_stock=The game's own building, in this city's style (%s).
+# sc3resize_civic.c
+resize.cs_eu=European
+# sc3resize_civic.c
+resize.cs_na=North American
+# sc3resize_civic.c
+resize.cs_ras=Asia
+# sc3resize_civic.c
+resize.cs_reu=Europe
+# sc3resize_civic.c
+resize.cs_rna=North America
+# sc3resize_civic.c
+resize.cs_row=%s: %s
+# sc3resize_civic.c
 resize.cv_look=Look %d of %d: %s
 # sc3resize_civic.c
 resize.cv_look_stock=Look %d of %d: original
@@ -579,6 +597,8 @@ resize.mt_button=Turn mods on/off...
 resize.mt_churn=Building renewal
 # sc3resize.c
 resize.mt_city=Now, in this city (on OK, no restart)
+# sc3resize.c
+resize.mt_civstyle=Civic buildings: game styles
 # sc3resize.c
 resize.mt_civvar=Civic buildings: more looks
 # sc3resize.c

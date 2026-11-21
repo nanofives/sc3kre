@@ -33,6 +33,14 @@ third of the time. Members a set does not re-skin keep the base art, exactly as 
 The new ids are above 0xFFFF, so they never collide with netpack variant / growable ids (frame-table, name and
 pixel keys of those are keyed by a 16-bit id); they do share the building occupant key space with growables, so the
 merge checks them against every stock exemplar and every other package.
+
+Civic looks (task civicstyle 2026-11-21, "civic": true on an entry): the set exemplars of the stock civic buildings and
+parks a civic button builds (CIVIC_BASES, re/analysis/CIVIC_REWARD.md section 1) are copied the same way (verbatim,
+id + offset, their frame tables and pixels), with NO family line: nothing grows them. sc3resize CIVSTYLE offers them in
+the civic list window. The set exemplar keeps the base's type id (prop 0x65) and footprint (prop 0x66 x and z; only
+the height differs), checked here for every copy, so the copy is counted, covered and priced as its base
+(CIVIC_REWARD.md 1.1). The "00000000" entry with "civic": true adds the stock exemplar of every civic base another
+civic entry re-skins, so a city whose own set re-skins it can still place the North American look.
 """
 import os
 import re
@@ -44,6 +52,12 @@ PIX_TYPES = (0, 1)                                # pixels, anchor
 SET_DIR = "Apps/Res/Sprites/BuildingSets"
 PIX_FILE = "Apps/Res/Sprites/%08X_netpack_set.DAT"
 KEY_RE = re.compile(rb"Key:\s*(\d+),(\d+),(\d+),(\d+)")
+
+
+# task civicstyle: base instances of the stock civic exemplars {0x207EDC0E, 0x57E, inst} the civic commands build:
+# the 17 plain ones (SIMGEOM 0x1000a896 -> 0x1000b1a3) and the Marina (0x1000afc0, shore tool). CIVIC_REWARD.md 1.
+CIVIC_BASES = (0xd2, 0x1f41, 0xd3, 0xd1, 0x1f94, 0xd6, 0xf5, 0xd4, 0xd, 0xd5, 0xda, 0xd7, 0x234b, 0x234c, 0x234e,
+               0x1f96, 0xed, 0xf8)
 
 
 class StyleError(Exception):
@@ -91,14 +105,37 @@ def _text(buf, prop, props_fn):
     return None
 
 
-def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, reskinned, pname):
+def _u32s(buf, prop, props_fn):
+    for p, t, n, off, ln in props_fn(buf):
+        if p == prop and t == 3:
+            return struct.unpack_from("<%dI" % n, buf, off)
+    return None
+
+
+def _civic_check(np, where, bid, ex, base_ex):
+    """the copy must keep its base's type id (0x65) and footprint (0x66 x and z)"""
+    t1, t0 = _u32s(ex, 0x65, np.tkb1_props), _u32s(base_ex, 0x65, np.tkb1_props)
+    l1, l0 = _u32s(ex, 0x66, np.tkb1_props), _u32s(base_ex, 0x66, np.tkb1_props)
+    if not t1 or t1 != t0:
+        raise StyleError("%s: civic %d: type %r differs from the base's %r" % (where, bid, t1, t0))
+    if not l1 or not l0 or len(l1) != 3 or len(l0) != 3 or (l1[0], l1[2]) != (l0[0], l0[2]):
+        raise StyleError("%s: civic %d: lot %r differs from the base's %r" % (where, bid, l1, l0))
+
+
+def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, reskinned, pname, civic=()):
     """task stylepick (2026-11-21): set "00000000" = North American copies. For every family member that another set
     of the same manifest re-skins, the BASE exemplar (stock Occupant/*.IXF, verbatim) re-keyed at id + offset. Its
     prop 0x67 names the stock frame table, which no set archive shadows (sets only shadow the TKB1 exemplar at the base
     key, BUILDING_PICK.md section 0), so the copy draws the North American art even while a city's own building set
     is European or Asian. No frame tables or pixels are added. sc3netmod STYLEPICK serves these lines only when a city
     with a set skin asks for North American art; with STYLEPICK off it drops them, so the stock mix ratio is kept."""
-    exemplars, lines = [], []
+    exemplars, lines, civ = [], [], []
+    for bid in sorted(civic):                      # task civicstyle: North American civic looks, no family line
+        nid = bid + offset
+        if nid in stock_buildings:
+            raise StyleError("%s: id %d (%d + offset) already has a stock building exemplar" % (where, nid, bid))
+        exemplars.append((nid, stock_buildings[bid][1]))
+        civ.append(bid)
     for bid in sorted(reskinned):
         nid = bid + offset
         if nid in stock_buildings:
@@ -109,11 +146,11 @@ def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, 
         for f, w in reskinned[bid]:
             lines.append({"family": f, "id": nid, "weight": w * weight,
                           "comment": "%d [North American copy]" % bid})
-    if not exemplars:
+    if not lines:
         raise StyleError("%s: no other set of this manifest re-skins a family member" % where)
     return {"set": set_id, "offset": offset, "weight": weight, "where": where, "_pack": pname,
             "exemplars": exemplars, "tables": [], "pix_group": None, "pixels": [], "lines": lines,
-            "families": sorted({ln["family"] for ln in lines})}
+            "families": sorted({ln["family"] for ln in lines}), "civic": civ}
 
 
 def compile_entries(np, stock, man, buildfam, stock_buildings):
@@ -123,6 +160,7 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
     out = []
     seen_sets = set()
     reskinned = {}                                 # task stylepick: base id -> [(family, weight)] any set re-skins
+    civic_skinned = set()                          # task civicstyle: civic bases a "civic" entry re-skins
     base_spec = None
     for n, s in enumerate(man.get("style_sets", [])):
         where = "%s style_set %d (%s)" % (pname, n + 1, s.get("set"))
@@ -163,6 +201,15 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
                     members.setdefault(bid, []).append((f, w))
         if not members:
             raise StyleError("%s: the set re-skins no family member" % where)
+        civ = []                                   # task civicstyle: civic set exemplars, copied with no family line
+        if s.get("civic"):
+            for bid in CIVIC_BASES:
+                if bid in set_bld and bid not in members:
+                    if bid not in stock_buildings:
+                        raise StyleError("%s: civic base %d has no stock exemplar" % (where, bid))
+                    _civic_check(np, where, bid, set_bld[bid], stock_buildings[bid][1])
+                    civ.append(bid)
+            civic_skinned.update(civ)
         for bid, fl in members.items():            # task stylepick: union over the sets, for the base copies
             have = reskinned.setdefault(bid, [])
             for fw in fl:
@@ -170,7 +217,7 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
                     have.append(fw)
         exemplars, tables, pix_keys, lines = [], {}, [], []
         pix_seen = set()
-        for bid in sorted(members):
+        for bid in sorted(members) + civ:
             nid = bid + offset
             if nid in stock_buildings:
                 raise StyleError("%s: id %d (%d + offset) already has a stock building exemplar" % (where, nid, bid))
@@ -191,7 +238,7 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
                         pix_keys.append(r)
             name = _text(ex, 0x64, np.tkb1_props) or str(bid)
             exemplars.append((nid, ex))
-            for f, w in members[bid]:
+            for f, w in members.get(bid, ()):
                 lines.append({"family": f, "id": nid, "weight": w * weight,
                               "comment": ("%s [set %08x]" % (name, set_id)).replace("\r", " ").replace("\n", " ")})
         groups = {g for g, _ in pix_keys}
@@ -202,7 +249,7 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
         out.append({"set": set_id, "offset": offset, "weight": weight, "where": where, "_pack": pname,
                     "exemplars": exemplars, "tables": [(k[1], k[2], k[0], p) for k, p in sorted(tables.items())],
                     "pix_group": pix_group, "pixels": pix, "lines": lines,
-                    "families": sorted({ln["family"] for ln in lines})})
+                    "families": sorted({ln["family"] for ln in lines}), "civic": civ})
     if base_spec:
         n, s, where = base_spec
         offset, weight = s["offset"], s.get("weight", 1)
@@ -210,5 +257,6 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
             raise StyleError("%s: offset must be an integer above 65535 (ids stay clear of netpack's 16-bit ids)" % where)
         if not isinstance(weight, int) or weight < 1:
             raise StyleError("%s: weight must be a positive integer (0 drops the line, SIMGEOM 0x10001250)" % where)
-        out.append(_base_entry(stock, fams, stock_buildings, s, where, 0, offset, weight, reskinned, pname))
+        out.append(_base_entry(stock, fams, stock_buildings, s, where, 0, offset, weight, reskinned, pname,
+                               sorted(civic_skinned) if s.get("civic") else ()))
     return out

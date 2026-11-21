@@ -31,6 +31,21 @@ To get the old behaviour back (picking a style redraws every building), untick "
 Turn mods on/off page and restart. Same switch outside the game: `SC3NETMOD_STYLEPICK=0`. With "Building style mix"
 unticked no copies grow at all, whatever the style.
 
+## Civic buildings in every style (sc3resize "Civic buildings: game styles")
+
+The European and Asian versions of the civic buildings and parks are added too, but nothing grows them: you pick
+them. Press a civic button that has them and the list window opens with one row per style, for example
+"Norteamérica: Comisaría", "Europa: Comisaría", "Asia: Comisaría". The first row is the game's own building, drawn
+in your city's style. Pick a row and place it as usual. Every look keeps the original's size, price and service.
+
+Which buttons have them: Police, Fire, School, Museum, Baseball and Marina have European and Asian versions; Jail,
+Hospital, College, Library, Small Park, Big Park, Playground, Pond and Fountain have an Asian one. Zoo, Bus Stop,
+Train Station and Subway have none.
+
+Untick "Civic buildings: game styles" on the Turn mods on/off page (`SC3RESIZE_CIVSTYLE=0`) and the buttons work as
+without the mod again. Placed looks stay. A city with placed looks loads without the mods: each one comes back as
+the game's own building of the same kind.
+
 ## Getting the even mix
 
 Each city remembers its own style. Many of the shipped cities (Berlin, London, Moscow and others) are saved with the

@@ -489,3 +489,57 @@ flyout) and the hotkey path.
   fixed line per entry. The stock dialog takes that text from the advisor's records, not from the attrib.
 - **Price** is `budget vt+0x54(type id)` (the site check's build price, RELOCATE.md 1), the same for the original and
   its looks (same type id). Clearing and levelling are added by the stock tool at the pointer, as always.
+
+## 7. Built: civic looks from the game's own styles (civicstyle, round 2026-11-21)
+
+Simtropolis 2026-11-21: "mix and match what schools/parks/hospitals/etc. appear in a city". Code: `cs_*` / `cv_looks`
+in `re/harness/src/sc3resize_civic.c` (CIVSTYLE), data: netpack `style_mix` 1.2.0 (`"civic": true`,
+`re/tools/netmod/netpack_stylesets.py`). Measurements: `verify/civicstyle/RESULTS.md`.
+
+### 7.1 Which civic buildings have set art (offline, every claim a data read)
+
+A building set holds TKB1 exemplars at the SAME keys as the base (BUILDING_PICK.md 0). Read of the two set archives
+(`BuildingSets/e523f3fb/BST_0004.dat`, `6523f3d5/MBE_0015.dat`) against the 18 civic bases of section 1:
+
+| base | European e523f3fb | Asian 6523f3d5 |
+|---|---|---|
+| Police 0xd2, Fire 0xd3, School 0x1f94, Museum 0xd4, Baseball 0xd7, Marina 0xf8 | yes | yes |
+| Jail 0x1f41, Hospital 0xd1, College 0xd6, Library 0xf5, Small Park 0xd, Big Park 0xd5, Playground 0x234b, Pond 0x234c, Fountain 0x234e | no | yes |
+| Zoo 0xda, Bus Stop 0x1f96, Train Station 0xed (and Subway 0xe9, Rail To Subway 0x3e8a) | no | no |
+
+Every set exemplar differs from its base only in prop 0x66 middle value (height; x and z equal, so the same
+footprint), 0x67 (its own frame table, groups 0x5432D60F / 0x547B7DF6), 0x6d (name key, group 0x453BBDE0, instance
+already base + 400000 / + 1500000, a stock [DBSegments] string) and for some 0x6f. Type id 0x65 is the base's in all
+21. The three other Small Park exemplars (0x2348, 0x2349, 0x234d) have Asian art too, but no button builds them
+(section 4), so they are not offered.
+
+### 7.2 Exemplars and art (style_mix 1.2.0)
+
+`"civic": true` on a style set entry copies those set exemplars verbatim at base + offset with their frame tables
+and pixels (the same writer as the growable copies, no family line, so nothing grows them), and checks type id and
+footprint against the base. On the "00000000" entry it adds the stock exemplar of every civic base a civic entry
+re-skins at base + 2600000: its 0x67 names the stock table `{0x6300, 0x6400, base}` in `CSATTRIB.IXF`, which no set
+archive shadows (no 0x6300/0x6301 record of group 0x6400 in either set DAT), so it draws North American in a city
+whose own set re-skins the base. Merge result in the 25-package tree: 6 + 15 + 15 civic copies. A manifest without
+`"civic"` compiles byte-identically to before (1.1.0 checked).
+
+### 7.3 The look list per press
+
+`cv_looks(base)`: the original (base key), then the other two styles whose copy is in the attrib cache (asked once
+per base, SIMUI `0x1008e985` vt+0x18), then the bldimport looks. The original's style is the city's skin (scheme
+manager `[[0x4fa86c]+0x108]`, `+0x58` loaded, `+0x50` set, as sc3netmod's `sp_skin`): in a North American city
+the list is North America / Europe / Asia; in a European city Europe (the base key) / North America (+2600000) /
+Asia. The list window (section 6), the cycle (CIVDLG off) and the cost label all read that list. The rows are
+renamed "<region>: <name>" after the dialog has built them, with `cIGZWinListBox::ModifyString` (vt+0x20, CodeView
+`cv_vtables.tsv`), because the copies keep their set's name ("Comisaría" three times).
+
+The Marina is not a plain case: its command builds `FUN_1000a246` (shore tool) at SIMGEOM `0x1000afc0` with the same
+`(&key, 0, 0)` args. That call's rel32 now goes to `cv_call_m` (cv_pick, then `0x1000a246`). `0x1000a246` itself is
+also called by `sc3_geom_create_occupant_from_key 0x10007e64` (picker, relocate), which is not hooked.
+
+### 7.4 Trap: the lab's modal jobs
+
+`civmod_lab.py hotkey` runs the city view's DefOnHotKey inside a Frida DispatchMessageA hook, and the list window's
+modal loop runs inside that call. When the job returned and the Python side detached at once, the game faulted
+once at a no-module address with the message loop on the stack (1 in 3 presses). A wrapper that keeps the session
+attached 4 s after the job returned ran 19 presses over 5 runs with no fault (now in `civmod_lab.py`). Not a mod bug.

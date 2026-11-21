@@ -23,18 +23,20 @@ def manifest(euro=1, asian=1):
     return {
         "netpack": 1,
         "name": "style_mix",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "author": "sc3kre",
         "description": "All three building styles grow side by side at random: every European (set e523f3fb) and "
                        "Asian (set 6523f3d5) building that re-skins a zoned building is added as a NEW building "
                        "(id + 400000 / id + 1500000) next to the North American one, so nothing stock is replaced. "
                        "With sc3netmod STYLEPICK (default) the city's building style (Options > City Properties) picks "
                        "which style new buildings use, and the Mix box grows all three; the North American copies "
-                       "(id + 2600000) let a city saved with a European or Asian style grow North American buildings.",
+                       "(id + 2600000) let a city saved with a European or Asian style grow North American buildings. "
+                       "The European and Asian civic buildings and parks are added too (never grown): sc3resize lists "
+                       "them in the civic list window as North American / European / Asian looks.",
         "style_sets": [
-            {"set": EURO, "offset": 400000, "weight": euro},
-            {"set": ASIAN, "offset": 1500000, "weight": asian},
-            {"set": BASE, "offset": 2600000, "weight": 1},     # task stylepick: North American copies
+            {"set": EURO, "offset": 400000, "weight": euro, "civic": True},
+            {"set": ASIAN, "offset": 1500000, "weight": asian, "civic": True},
+            {"set": BASE, "offset": 2600000, "weight": 1, "civic": True},   # task stylepick: North American copies
         ],
     }
 

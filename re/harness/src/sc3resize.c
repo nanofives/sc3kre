@@ -9204,6 +9204,7 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" },
     { { SC3KEY("resize.mt_nopause"),   "Sin pausa en ventanas",   "No pause in pop-ups" },    NULL, "+SC3SIMRUN_NOPAUSE" },   /* nopause 2026-11-21: sc3simrun NOPAUSE */
     { { SC3KEY("resize.mt_civvar"),    "Cívicos: varios aspectos", "Civic buildings: more looks" }, NULL, "-SC3RESIZE_CIVVAR" },
+    { { SC3KEY("resize.mt_civstyle"),  "Cívicos: estilos del juego", "Civic buildings: game styles" }, NULL, "-SC3RESIZE_CIVSTYLE" },   /* civicstyle 2026-11-21 */
     { { SC3KEY("resize.mt_newreward"), "Premios nuevos",          "New rewards" },            NULL, "-SC3RESIZE_NEWREWARD" } };
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
 static int g_mt_on0[MT_N];   /* state shown when the page was built */
@@ -9263,8 +9264,10 @@ static void mt_vis_all(void *win, int on) {
    the city checkbox at 434, under Volver; 18 rows at 15 end at 354, city checkbox at 417) */
 #define MT_FEAT_DY 15
 /* left column rows under "Simulacion y edificios": 19 px until nopause 2026-11-21, 17 since its fifth row (5 x 19 would
-   end at 365, past the features column's 356, and push the city checkbox onto Volver; 5 x 17 ends at 355) */
-#define MT_LEFT_DY 17
+   end at 365, past the features column's 356, and push the city checkbox onto Volver; 5 x 17 ends at 355); 15 since
+   civicstyle 2026-11-21: its sixth row at 17 ends at 362 (city checkbox 425, under Volver), 6 x 15 at 350, inside the
+   features column's 354, so the notes and the city checkbox stay at 358 / 417 */
+#define MT_LEFT_DY 15
 static int mt_build(void *fac, void *win, int es, DWORD col) {
     int n = 0, i, ym = 84, yf = 84;
     n += ho_add_label(fac, win, MT_TITLE, SC3TR(es, "resize.mt_title", "Activar mods y funciones", "Turn mods and features on or off"), 18, 40, 440);
@@ -19011,9 +19014,11 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0;
               g_civvar = GetPrivateProfileIntA("buildings", "civicvariants", 1, bp) ? 1 : 0;     /* CIVVAR (civmod) */
               g_civdlg = GetPrivateProfileIntA("buildings", "civiclist", 1, bp) ? 1 : 0;        /* CIVDLG (civdlg) */
+              g_civstyle = GetPrivateProfileIntA("buildings", "civicstyles", 1, bp) ? 1 : 0;    /* CIVSTYLE (civicstyle) */
               g_newreward = GetPrivateProfileIntA("buildings", "newrewards", 1, bp) ? 1 : 0; }   /* NEWREWARD (civmod) */
           if (GetEnvironmentVariableA("SC3RESIZE_CIVVAR", v, sizeof(v))) g_civvar = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CIVDLG", v, sizeof(v))) g_civdlg = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_CIVSTYLE", v, sizeof(v))) g_civstyle = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NEWREWARD", v, sizeof(v))) g_newreward = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);

@@ -777,3 +777,27 @@ perf.ovwarn_hint=Spelet ser inte den ändringen. Detaljer i sc3netmod.log
 resize.mt_stylepick=Stil: bara nya byggnader
 # en: Mix all three styles
 resize.sp_mix=Blanda alla tre stilarna
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Asian
+resize.cs_as=Asiatisk
+# en: %s style, the game's own art. Same service and same price as the original.
+resize.cs_desc_look=Stil %s, med spelets egen grafik. Samma tjänst och samma pris som originalet.
+# en: The game's own building, in this city's style (%s).
+resize.cs_desc_stock=Spelets originalbyggnad, i den här stadens stil (%s).
+# en: European
+resize.cs_eu=Europeisk
+# en: North American
+resize.cs_na=Nordamerikansk
+# en: %s: %s
+resize.cs_row=%s: %s
+# en: Civic buildings: game styles
+resize.mt_civstyle=Offentliga byggnader: spelstilar
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Asia
+resize.cs_ras=Asien
+# en: Europe
+resize.cs_reu=Europa
+# en: North America
+resize.cs_rna=Nordamerika

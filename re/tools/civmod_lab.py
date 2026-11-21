@@ -11,7 +11,7 @@ hook on a private WM_APP message (the place_direct.py pattern), with exceptions:
                                                             (civtest) 0x3b opens Rewards and Opportunities, 0x12 arms
                                                             Demolish. A modal dialog runs inside the call, so the job
                                                             returns only after the dialog closes: start it in the
-                                                            background (timeout 60), dump, post the OK click
+                                                            background, dump, post the OK click (waits up to 600 s, stays attached 4 s after)
   py -3.12 re/tools/civmod_lab.py command 0xC2FF057A    (civtest) the same GetCommand the hotkey makes (view +0x230
                                                             vt+0xc, riid 0x6856f7), for a class id with no hotkey
                                                             (library, museum, zoo, ...); the command is released, not
@@ -137,7 +137,10 @@ rpc.exports = {
 """.replace("%WM%", str(WM_LAB))
 
 
-def frida_job(job, timeout=20.0):
+def frida_job(job, timeout=20.0, linger=0.0):
+    """linger: seconds to stay attached after the result (civicstyle 2026-11-21: a hotkey / command job runs a modal
+    window inside the DispatchMessageA hook; detaching the moment it returned faulted the game once at a no-module
+    address with the message loop on the stack, and a 20 s timeout detached while the window was still open)"""
     import ctypes
     import frida
     import sc3pause
@@ -157,6 +160,7 @@ def frida_job(job, timeout=20.0):
             time.sleep(0.25)
             r = sc.exports_sync.take()
             if r:
+                time.sleep(linger)
                 return r[0]
         return {"job": job, "error": "timeout"}
     finally:
@@ -171,9 +175,9 @@ def main(argv):
     ap.add_argument("--right", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "hotkey":
-        print(json.dumps(frida_job({"kind": "hotkey", "id": int(a.args[0], 0)})))
+        print(json.dumps(frida_job({"kind": "hotkey", "id": int(a.args[0], 0)}, timeout=600, linger=4)))
     elif a.cmd == "command":
-        print(json.dumps(frida_job({"kind": "command", "id": int(a.args[0], 0)})))
+        print(json.dumps(frida_job({"kind": "command", "id": int(a.args[0], 0)}, timeout=600, linger=4)))
     elif a.cmd == "empty":
         print(json.dumps(frida_job({"kind": "empty", "box": [int(v) for v in a.args[:4]], "n": int(a.args[4])}, timeout=120)))
     elif a.cmd == "tool":

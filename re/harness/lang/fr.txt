@@ -777,3 +777,27 @@ perf.ovwarn_hint=Le jeu ne voit pas ce changement. Détails dans sc3netmod.log
 resize.mt_stylepick=Style : nouveaux bâtiments seuls
 # en: Mix all three styles
 resize.sp_mix=Mélanger les trois styles
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Asian
+resize.cs_as=Asiatique
+# en: %s style, the game's own art. Same service and same price as the original.
+resize.cs_desc_look=Style %s, avec les graphismes du jeu. Même service et même prix que l'original.
+# en: The game's own building, in this city's style (%s).
+resize.cs_desc_stock=Le bâtiment d'origine du jeu, dans le style de cette ville (%s).
+# en: European
+resize.cs_eu=Européen
+# en: North American
+resize.cs_na=Nord-américain
+# en: %s: %s
+resize.cs_row=%s: %s
+# en: Civic buildings: game styles
+resize.mt_civstyle=Bâtiments civiques : styles du jeu
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Asia
+resize.cs_ras=Asie
+# en: Europe
+resize.cs_reu=Europe
+# en: North America
+resize.cs_rna=Amérique du Nord
