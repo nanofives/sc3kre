@@ -249,7 +249,9 @@ function BLDWEB_LIB() {
     contrast: 1.0, grain: 0.0, tone: [0.75, 1.33] });
   STYLES.baked_raw = Object.assign({}, STYLES.baked, { tone: null });
   STYLES.baked_sharp = Object.assign({}, STYLES.baked, { zoom4: 'native' });
-  const PEEL_LAYERS = 4;
+  // task sc4trees (bldrender): peel until no sample stands on a transparent texel (was 4 layers: the black patches on
+  // converted SC4 trees); every extra peel rasterizes inside the box of the samples still open
+  const PEEL_LAYERS = 256;
   // np.power(float32, float32 0.75) on the Python tool's numpy is not correctly rounded: over every luminance a
   // texel can give (641,191 float32 values, both matmul paths) it differs from fround(Math.pow) on these 67, as
   // [input bits, numpy result bits] (task sc4web, measured with numpy 2.5 on this PC). Other inputs: fround(Math.pow).
@@ -890,7 +892,18 @@ function BLDWEB_LIB() {
     }
     return out;
   }
-  function rasterize(sx, sy, dep, nt, w, h, withBary, zmin) {   // sx, sy, dep: Float64Array nt*3; zmin: depth peeling
+  function rasterize(sx, sy, dep, nt, w, h, withBary, zmin, box, open) {   // sx, sy, dep: Float64Array nt*3; zmin: depth peeling
+    // box [i0, i1, j0, j1] inclusive (task sc4trees): only samples inside it are drawn; open (Uint8Array w*h): a
+    // triangle whose clipped box holds no open sample is skipped (bldrender open_)
+    const bi0 = box ? box[0] : 0, bi1 = box ? box[1] : w - 1, bj0 = box ? box[2] : 0, bj1 = box ? box[3] : h - 1;
+    let sat = null;
+    if (open) {                              // summed-area table, (h + 1) x (w + 1)
+      sat = new Int32Array((h + 1) * (w + 1));
+      for (let j = 0; j < h; j++) {
+        let run = 0;
+        for (let i = 0; i < w; i++) { run += open[j * w + i]; sat[(j + 1) * (w + 1) + i + 1] = sat[j * (w + 1) + i + 1] + run; }
+      }
+    }
     const zb = new Float64Array(w * h).fill(Infinity);
     const ib = withBary ? new Int32Array(w * h).fill(-1) : null;
     const bb = withBary ? new Float32Array(w * h * 3) : null;
@@ -898,9 +911,10 @@ function BLDWEB_LIB() {
       const x0 = sx[3 * k], x1 = sx[3 * k + 1], x2 = sx[3 * k + 2], y0 = sy[3 * k], y1 = sy[3 * k + 1], y2 = sy[3 * k + 2];
       const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
       if (Math.abs(area) < 1e-12) continue;
-      const i0 = Math.max(Math.floor(Math.min(x0, x1, x2) - 0.5), 0), i1 = Math.min(Math.ceil(Math.max(x0, x1, x2) - 0.5), w - 1);
-      const j0 = Math.max(Math.floor(Math.min(y0, y1, y2) - 0.5), 0), j1 = Math.min(Math.ceil(Math.max(y0, y1, y2) - 0.5), h - 1);
+      const i0 = Math.max(Math.floor(Math.min(x0, x1, x2) - 0.5), bi0), i1 = Math.min(Math.ceil(Math.max(x0, x1, x2) - 0.5), bi1);
+      const j0 = Math.max(Math.floor(Math.min(y0, y1, y2) - 0.5), bj0), j1 = Math.min(Math.ceil(Math.max(y0, y1, y2) - 0.5), bj1);
       if (i0 > i1 || j0 > j1) continue;
+      if (sat && sat[(j1 + 1) * (w + 1) + i1 + 1] - sat[j0 * (w + 1) + i1 + 1] - sat[(j1 + 1) * (w + 1) + i0] + sat[j0 * (w + 1) + i0] === 0) continue;
       const d0 = dep[3 * k], d1 = dep[3 * k + 1], d2 = dep[3 * k + 2];
       for (let j = j0; j <= j1; j++) {
         const py = j + 0.5, row = j * w;
@@ -1102,9 +1116,12 @@ function BLDWEB_LIB() {
     // task sc4web (bldrender task sc4conv): a sample whose texel is transparent (alpha < 0.5) takes the next
     // surface behind it, up to PEEL_LAYERS times
     const alphaMats = mesh.mats.filter(m => m.alpha).length;
+    // task sc4trees: only the samples the last peel refilled are tested again (the others keep their surface)
+    let chk = null;
     for (let layer = 0; layer < (alphaMats ? PEEL_LAYERS : 0); layer++) {
-      const hole = new Uint8Array(ib.length); let any = false;
+      const hole = new Uint8Array(ib.length); let any = false, hi0 = SW, hi1 = -1, hj0 = SH, hj1 = -1;
       for (let q = 0; q < ib.length; q++) {
+        if (chk && !chk[q]) continue;
         const id = ib[q];
         if (id < 0 || id >= nm) continue;
         const al = mesh.mats[mesh.mat[id]].alpha;
@@ -1112,16 +1129,21 @@ function BLDWEB_LIB() {
         const o = 6 * id, b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
         const uu = (mesh.uv[o] * b0 + mesh.uv[o + 2] * b1) + mesh.uv[o + 4] * b2;
         const vv = (mesh.uv[o + 1] * b0 + mesh.uv[o + 3] * b1) + mesh.uv[o + 5] * b2;
-        if (al.d[texIndex(al, uu, vv)] < 0.5) { hole[q] = 1; any = true; }
+        if (al.d[texIndex(al, uu, vv)] < 0.5) {
+          hole[q] = 1; any = true;
+          const hi = q % SW, hj = (q - hi) / SW;
+          if (hi < hi0) hi0 = hi; if (hi > hi1) hi1 = hi; if (hj < hj0) hj0 = hj; if (hj > hj1) hj1 = hj;
+        }
       }
       if (!any) break;
       const zmin = new Float64Array(ib.length).fill(Infinity);
       for (let q = 0; q < ib.length; q++) if (hole[q]) zmin[q] = zb[q];
-      const p2 = rasterize(sx, sy, dep, nt, SW, SH, true, zmin);
+      const p2 = rasterize(sx, sy, dep, nt, SW, SH, true, zmin, [hi0, hi1, hj0, hj1], hole);
       for (let q = 0; q < ib.length; q++) if (hole[q]) {
         ib[q] = p2.ib[q]; zb[q] = p2.zb[q];
         bb[3 * q] = p2.bb[3 * q]; bb[3 * q + 1] = p2.bb[3 * q + 1]; bb[3 * q + 2] = p2.bb[3 * q + 2];
       }
+      chk = hole;
     }
     // covered samples in row-major order
     let M = 0; for (let q = 0; q < ib.length; q++) if (ib[q] >= 0) M++;

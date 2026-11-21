@@ -363,6 +363,23 @@ since round sc4lottex (section 12).
 is 16 m square, the SC4 lots 16 x 32-48 m), 378 seasonal variants of another season (DATE = 1 July), 3,454 in no pack
 given (54 ids), 6 whose model is in no pack given. Lot textures (driveways, paths): section 12.
 
+### 9.5 How many see-through layers a converted lot stacks (round 2026-11-20, stream sc4trees)
+
+Every prop texture the converter wrote for the install's 113 buildings (415 PNGs) and the JMyers pack with BSC +
+install props (135) has alpha 0 or 255 only. Hagia Sofia's 48 prop textures are all FSH 0x60 (DXT1). Their clear
+texels decode to (0, 0, 0, 0), which is DXT1's index-3 colour when c0 <= c1 (`fsh._dxt_colour_block`). 31 of the JMyers
+set keep a non-zero colour under alpha 0. bldrender samples the nearest texel and tests alpha < 0.5, so it never mixes
+a clear texel's colour into a visible one.
+
+What a converted lot does need is deep peeling. Each prop is a view box whose front faces, back walls and floor
+(views.hidden_faces) are clear around the tree, and the props overlap the house's box and each other. Rasterize
+passes measured at zoom 3 (the first pass + one per peel, until no sample stands on a clear texel): Hagia Sofia 15 to
+19, the install's buildings up to 18, JMyers houses up to 16. bldrender and bldweb.js used to stop after 4 peels, and a
+sample still on a clear texel took that texel's colour: the black patches on SC4 trees (verify/lotshape owner_shots
+04). After 4 peels, 76 of the install's 113 buildings (274 of 452 zoom-3 frames, 85,335 pixels) and all 110 JMyers
+houses (412 of 440 frames, 32,698 pixels) still had such samples. Since sc4trees the loop runs until no sample is open
+(cap 256). Numbers and pictures: verify/sc4trees/RESULTS.md.
+
 ## 10. SimCity 4's own civic buildings, parks, rewards and landmarks (round 2026-11-19l, stream sc4civ)
 
 Read in place from the Steam SimCity 4 Deluxe install (EA's files, never copied: nothing of them is in the repository

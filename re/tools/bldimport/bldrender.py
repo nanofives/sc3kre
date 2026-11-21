@@ -134,7 +134,14 @@ DEFAULT_STYLE = "stock"
 # task sc4conv switches (2026-11-18h). Both are inert for models without transparent texels / sc3slot groups.
 ALPHA_TEST = os.environ.get("SC3BLD_ALPHA", "1") != "0"      # texture alpha < 0.5 = see-through (depth peeling)
 SLOT_GROUPS = os.environ.get("SC3BLD_SLOTGROUPS", "1") != "0"  # OBJ group/object sc3slot<r> = drawn in slot r only
-PEEL_LAYERS = 4
+# task sc4trees (2026-11-20): peel until no sample stands on a transparent texel (was a fixed 4 layers). A converted
+# SC4 lot stacks more see-through surfaces than that: each tree prop is a view box with back walls and a floor, all
+# transparent around the tree, and the trees overlap, so after 4 peels some samples still stood on a clear texel and
+# took its colour, (0, 0, 0) in every SC4 texture: the black patches on Hagia Sofia's trees. PEEL_LAYERS is only a
+# guard against a runaway loop; every extra peel rasterizes inside the box of the samples still open and skips a triangle
+# whose box holds none of them (the same arithmetic per sample, so the frames are what an unclipped peel gives).
+# SC3BLD_PEEL=4 gives the old frames.
+PEEL_LAYERS = int(os.environ.get("SC3BLD_PEEL", "256"))
 # task sc4lottex (2026-11-20): faces in an OBJ group / object named `sc3ground` are ground art (a converted SC4 lot's
 # driveways and paths): drawn in every slot and lit like the lawn below them (the rim of the stock lots, no tone,
 # saturation, grain or contrast of the model), never a shadow caster; where their texture is transparent the sample is
@@ -362,24 +369,33 @@ def depth_of(t):
     return t[..., 1] * F[0] + t[..., 0] * F[1] + t[..., 2] * F[2]
 
 
-def rasterize(sx, sy, dep, w, h, cull=None, zmin=None):
+def rasterize(sx, sy, dep, w, h, cull=None, zmin=None, box=None, open_=None):
     """Triangles (N,3) in sample space -> (tri id buffer (h, w) int32 (-1 empty), barycentrics (h, w, 3), depth).
     Pixel (i, j) samples at (i + 0.5, j + 0.5). zmin (h, w): a sample only takes surfaces farther than it (depth
-    peeling for alpha-tested textures; inf = take nothing there)."""
+    peeling for alpha-tested textures; inf = take nothing there). box (i0, i1, j0, j1), inclusive: only samples
+    inside it are drawn (task sc4trees: a peel's open samples; the others keep -1 / inf). open_ (h, w) bool: a
+    triangle whose clipped box holds no True sample is skipped (it could only draw samples a peel throws away)."""
     zb = np.full((h, w), np.inf)
     ib = np.full((h, w), -1, dtype=np.int32)
     bb = np.zeros((h, w, 3), dtype=np.float32)
+    bi0, bi1, bj0, bj1 = box if box is not None else (0, w - 1, 0, h - 1)
+    sat = None
+    if open_ is not None:                                        # summed-area table of the open samples
+        sat = np.zeros((h + 1, w + 1), dtype=np.int64)
+        sat[1:, 1:] = open_.astype(np.int64).cumsum(0).cumsum(1)
     for k in range(sx.shape[0]):
         x0, x1, x2 = sx[k]
         y0, y1, y2 = sy[k]
         area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
         if abs(area) < 1e-12:
             continue
-        i0 = max(int(math.floor(min(x0, x1, x2) - 0.5)), 0)
-        i1 = min(int(math.ceil(max(x0, x1, x2) - 0.5)), w - 1)
-        j0 = max(int(math.floor(min(y0, y1, y2) - 0.5)), 0)
-        j1 = min(int(math.ceil(max(y0, y1, y2) - 0.5)), h - 1)
+        i0 = max(int(math.floor(min(x0, x1, x2) - 0.5)), bi0)
+        i1 = min(int(math.ceil(max(x0, x1, x2) - 0.5)), bi1)
+        j0 = max(int(math.floor(min(y0, y1, y2) - 0.5)), bj0)
+        j1 = min(int(math.ceil(max(y0, y1, y2) - 0.5)), bj1)
         if i0 > i1 or j0 > j1:
+            continue
+        if sat is not None and sat[j1 + 1, i1 + 1] - sat[j0, i1 + 1] - sat[j1 + 1, i0] + sat[j0, i0] == 0:
             continue
         px = np.arange(i0, i1 + 1) + 0.5
         py = np.arange(j0, j1 + 1)[:, None] + 0.5
@@ -578,10 +594,12 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
     dep = depth_of(t)
     ib, bb, zb = rasterize(sx, sy, dep, Ww * ss, Hh * ss)
     alpha_mats = [k for k, m in enumerate(mesh["mats"]) if m.get("alpha") is not None]
+    chk = ib >= 0
     for _ in range(PEEL_LAYERS if alpha_mats else 0):
         # task sc4conv: a sample whose texel is transparent (alpha < 0.5) takes the next surface behind it
+        # task sc4trees: only the samples the last peel refilled are tested again (the others keep their surface)
         hole = np.zeros(ib.shape, dtype=bool)
-        c = ib >= 0
+        c = chk & (ib >= 0)
         ids = ib[c]
         nm = len(mesh["tri"])
         mod = ids < nm
@@ -600,10 +618,14 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
         hole[c] = cm
         if not hole.any():
             break
-        ib2, bb2, zb2 = rasterize(sx, sy, dep, Ww * ss, Hh * ss, zmin=np.where(hole, zb, np.inf))
+        hr = np.where(hole.any(1))[0]
+        hc = np.where(hole.any(0))[0]
+        ib2, bb2, zb2 = rasterize(sx, sy, dep, Ww * ss, Hh * ss, zmin=np.where(hole, zb, np.inf),
+                                  box=(int(hc[0]), int(hc[-1]), int(hr[0]), int(hr[-1])), open_=hole)
         ib[hole] = ib2[hole]
         bb[hole] = bb2[hole]
         zb[hole] = zb2[hole]
+        chk = hole
     cov = ib >= 0
     rgb = np.zeros(ib.shape + (3,), dtype=np.float32)
     if cov.any():
