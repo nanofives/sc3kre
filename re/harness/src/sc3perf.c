@@ -2984,9 +2984,12 @@ static int in_exec(DWORD a) {
 }
 /* return address = a CALL ends exactly at `a` (same encodings as sc3resize rz_is_retaddr) */
 static int is_retaddr(DWORD a) {
-    const BYTE *p = (const BYTE *)a;
-    BYTE m;
+    BYTE c[8], m;
+    const BYTE *p = c + 7;   /* p[-7..-1] = the 7 bytes before a */
     if (!in_exec(a) || !in_exec(a - 7)) return 0;
+    /* in_exec's ranges were listed when the stall began: a DLL that unloads since (a Frida agent detaching, seen
+       2026-11-21 in nopause) leaves them stale, so copy the bytes under a guard instead of reading them in place */
+    __try { memcpy(c, (const void *)(a - 7), 7); } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
     if (p[-5] == 0xE8) return 1;
     m = p[-1];
     if (p[-2] == 0xFF && ((m >> 3) & 7) == 2 &&
