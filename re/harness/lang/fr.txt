@@ -761,3 +761,7 @@ resize.cd_lookn=Aspect %d sur %d
 resize.cd_price=Prix : $%s
 # en: Choose a look
 resize.cd_title=Choisir un aspect
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: No pause in pop-ups
+resize.mt_nopause=Pas de pause en fenêtre

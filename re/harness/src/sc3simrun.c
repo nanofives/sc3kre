@@ -79,6 +79,8 @@
  *                                     under that share of the valve range; env SC3SIMRUN_GENTLE=1/0, _GENTLE_SHARE)
  *                                     [hwyspeed] enabled=1 factor_pct=150 threshold=66000 (HWYSPEED block: animated
  *                                     cars on highway and ramp lanes x factor; env SC3SIMRUN_HWYSPEED=1/0, _HWYSPEED_PCT)
+ *                                     [sim] run_under_windows=0 (NOPAUSE block: 1 = Budget, Preferencias and the
+ *                                     landmark / Rewards lists do not pause the sim; env SC3SIMRUN_NOPAUSE=1/0)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
  *         sc3simrun_sirens(DWORD out[4]) = siren states recorded, cooldown blocks, siren-actor updates, removals.
  *         sc3simrun_lvwrap(DWORD out[4]) = average stores, stores over 255, last true average, last cell count.
@@ -230,16 +232,162 @@ static void who2(const char *what, void *self, void *ret) {
     logf("K %s t=%I64u +0x144(before)=%lu ret=%s 0x%08lX", what, epoch_ms(),
          *(DWORD *)((BYTE *)self + 0x144), b ? b + 1 : name, 0x10000000 + (DWORD)ret - (DWORD)m);
 }
-static DWORD __fastcall co_hold(void *self) { who2("HOLD   ", self, _ReturnAddress()); return g_co_hold(self); }
-static DWORD __fastcall co_release(void *self) { who2("RELEASE", self, _ReturnAddress()); return g_co_release(self); }
+static int g_co_trace;                            /* log every hold / release caller (SC3SIMRUN_TRACE=1) */
+static int nopause_hold(void *self, DWORD ret);
+static int nopause_release(void *self, DWORD ret);
+static DWORD __fastcall co_hold(void *self) {
+    void *ret = _ReturnAddress();
+    if (g_co_trace) who2("HOLD   ", self, ret);
+    if (nopause_hold(self, (DWORD)ret)) return *(DWORD *)((BYTE *)self + 0x144);   /* skipped: stock returns +0x144 */
+    return g_co_hold(self);
+}
+static DWORD __fastcall co_release(void *self) {
+    void *ret = _ReturnAddress();
+    if (g_co_trace) who2("RELEASE", self, ret);
+    if (nopause_release(self, (DWORD)ret)) return *(DWORD *)((BYTE *)self + 0x144);
+    return g_co_release(self);
+}
 static int cohold_arm(HMODULE simcity) {
     DWORD *slot = (DWORD *)((BYTE *)simcity + 0x1347c), old;
+    if (slot[0] == (DWORD)co_hold && slot[1] == (DWORD)co_release) return 1;   /* already in (NOPAUSE armed first) */
     if (slot[0] != (DWORD)simcity + 0x58ac || slot[1] != (DWORD)simcity + 0x590e) return 0;
     if (!VirtualProtect(slot, 8, PAGE_EXECUTE_READWRITE, &old)) return 0;
     g_co_hold = (PFN_Co)slot[0]; g_co_release = (PFN_Co)slot[1];
     slot[0] = (DWORD)co_hold; slot[1] = (DWORD)co_release;
     (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     return 1;
+}
+
+/* ============================================================ NOPAUSE
+ * Owner 2026-11-21 ("Yes, add a switch", after popslow, verify/popslow/RESULTS.md): keep the simulation running while
+ * the Budget, Preferencias (and the mods pages inside it), landmark list and Rewards list windows are open. Query is
+ * left stock (lab switch only), see k_np_sites. Stock: each of those windows takes two coordinator holds through
+ * cISC3City::SimHiddenPause (SIMCITY 0x100058ac, city
+ * vt+0x21c: clock Pause, +0x144 += 1, heartbeat vt+0x1c(1)) and gives both back through SimHiddenUnpause (0x1000590e,
+ * vt+0x220) when it closes (popslow hold trace, identical stock and mods):
+ *   1. the window's own call, return addresses in k_np_sites;
+ *   2. the city view's message handler SIMSPR cIGZWin::DoMessage 0x10048d7a: message 0x62ba7b42 holds (ret 0x100490ac),
+ *      0x62ba7b43 releases (ret 0x10049074). That message is not specific to these five windows.
+ * Fix (the city vtable 0x10013260 slots +0x21c / +0x220, the same pair the trace hook wraps): a hold from one of the
+ * window sites is not passed on and is counted; a SIMSPR hold is not passed on only while such a window hold is counted
+ * (any other modal window keeps the stock pause); a release is skipped only while its own counter is above 0. Every
+ * other caller (camera hold, zoom, the civic look picker in sc3resize, ...) is stock.
+ * Each return address is checked at arming to follow `call [reg+0x21c]` / `call [reg+0x220]` (FF 9x imm32); a site that
+ * differs is left stock and logged.
+ * Config: simrun.ini [sim] run_under_windows=0 (default, stock); env SC3SIMRUN_NOPAUSE=1/0 wins (mods page row "Sin
+ * pausa en ventanas": sc3resize MODTOGGLE writes [env] SC3SIMRUN_NOPAUSE=1 when checked). SC3SIMRUN_NOPAUSE_QUERY=1
+ * (lab) adds the query window. Off = the slots are not touched (unless
+ * SC3SIMRUN_TRACE=1, which only logs). Export sc3simrun_nopause(out[7]) for measurement. */
+static int g_np_on = 0, g_np_query = 0, g_np_armed;
+typedef struct { const char *dll; DWORD hold_ret, rel_ret; const char *what; int lab; } NP_SITE;
+static const NP_SITE k_np_sites[] = {
+    { "SIMMISC.DLL", 0x1000c294, 0x1000c301, "budget", 0 },              /* cIGZGameCommand::Execute 0x1000c22f */
+    { "SIMUI.DLL",   0x10010a84, 0x10010b85, "preferences", 0 },         /* cIGZGameCommand::Execute 0x10010a56 */
+    { "SIMUI.DLL",   0x100119c2, 0x10011ac9, "landmark/rewards list", 0 },   /* FUN_10011919 */
+    /* QUERY is lab only (SC3SIMRUN_NOPAUSE_QUERY=1): sc3_ui_query_handle_tile 0x10010c39 also takes cISC3City::Lock
+       (vt+0x234, right after the hold) and gives it back only at its end (vt+0x238, before the release), around the
+       dialog and the code after it that uses the clicked occupant. With the hold skipped and the lock kept, measured
+       2026-11-21: the clock counted 125 days in 20 s with the query window open while the bar date and population
+       stayed where they were, and the date caught up after the window closed (verify/nopause/RESULTS.md). */
+    { "SIMUI.DLL",   0x10010c97, 0x1001148f, "query", 1 } };
+#define NP_N ((int)(sizeof(k_np_sites) / sizeof(k_np_sites[0])))
+static DWORD g_np_hold[NP_N], g_np_rel[NP_N];   /* live addresses, 0 = site left stock */
+static DWORD g_np_spr_hold, g_np_spr_rel;
+static volatile LONG g_np_win[NP_N], g_np_spr;  /* holds skipped and not yet released */
+static volatile LONG g_np_stats[4];             /* window holds skipped, SIMSPR holds skipped, SIMSPR holds passed, releases skipped */
+
+static void nopause_ini(const char *path) {
+    char env[8];
+    if (path[0]) g_np_on = GetPrivateProfileIntA("sim", "run_under_windows", 0, path) ? 1 : 0;
+    if (GetEnvironmentVariableA("SC3SIMRUN_NOPAUSE", env, sizeof(env))) g_np_on = env[0] == '1';
+    if (GetEnvironmentVariableA("SC3SIMRUN_NOPAUSE_QUERY", env, sizeof(env))) g_np_query = env[0] == '1';
+}
+
+/* ret must follow `call dword ptr [reg+disp32]` (FF 90..97 except 94 = SIB, disp32 = the slot) */
+static int np_call_before(DWORD ret, DWORD slot) {
+    BYTE *b = (BYTE *)ret - 6;
+    if (!ret || IsBadReadPtr(b, 6)) return 0;
+    return b[0] == 0xFF && (b[1] & 0xF8) == 0x90 && b[1] != 0x94 && *(DWORD *)(b + 2) == slot;
+}
+
+static DWORD np_live(HMODULE m, DWORD va) { return m ? (DWORD)m + (va - 0x10000000) : 0; }
+
+static int nopause_arm(HMODULE simcity) {
+    int i, n = 0;
+    HMODULE m;
+    for (i = 0; i < NP_N; i++) {
+        const NP_SITE *s = &k_np_sites[i];
+        g_np_hold[i] = g_np_rel[i] = 0;
+        if (s->lab && !g_np_query) { logf("NOPAUSE> %s: stock (lab only, SC3SIMRUN_NOPAUSE_QUERY=1)", s->what); continue; }
+        while (!(m = GetModuleHandleA(s->dll))) Sleep(5);
+        g_np_hold[i] = np_live(m, s->hold_ret);
+        g_np_rel[i] = np_live(m, s->rel_ret);
+        if (!np_call_before(g_np_hold[i], 0x21c) || !np_call_before(g_np_rel[i], 0x220)) {
+            logf("NOPAUSE> %s: %s 0x%08lX / 0x%08lX do not follow call [+0x21c] / [+0x220] - left stock",
+                 s->what, s->dll, s->hold_ret, s->rel_ret);
+            g_np_hold[i] = g_np_rel[i] = 0;
+        } else n++;
+    }
+    while (!(m = GetModuleHandleA("SIMSPR.DLL"))) Sleep(5);
+    g_np_spr_hold = np_live(m, 0x100490ac);
+    g_np_spr_rel = np_live(m, 0x10049074);
+    if (!np_call_before(g_np_spr_hold, 0x21c) || !np_call_before(g_np_spr_rel, 0x220)) {
+        logf("NOPAUSE> SIMSPR 0x100490ac / 0x10049074 do not follow call [+0x21c] / [+0x220] - city view hold left stock");
+        g_np_spr_hold = g_np_spr_rel = 0;
+    }
+    if (!n) return 0;
+    g_np_armed = 1;                              /* before the slots: the hooks read it */
+    if (!cohold_arm(simcity)) { g_np_armed = 0; logf("NOPAUSE> city vtable +0x21c / +0x220 are not stock - NOT armed"); return 0; }
+    return n;
+}
+
+/* UI thread (the windows' own code and the city view's DoMessage) */
+static int nopause_hold(void *self, DWORD ret) {
+    int i;
+    LONG open = 0;
+    (void)self;
+    if (!g_np_armed) return 0;
+    for (i = 0; i < NP_N; i++)
+        if (g_np_hold[i] && ret == g_np_hold[i]) {
+            InterlockedIncrement(&g_np_win[i]); InterlockedIncrement(&g_np_stats[0]);
+            logf("NOPAUSE> %s opened: its hold skipped, the sim keeps running", k_np_sites[i].what);
+            return 1;
+        }
+    if (!g_np_spr_hold || ret != g_np_spr_hold) return 0;
+    for (i = 0; i < NP_N; i++) open += g_np_win[i];
+    if (open > 0) { InterlockedIncrement(&g_np_spr); InterlockedIncrement(&g_np_stats[1]); return 1; }
+    InterlockedIncrement(&g_np_stats[2]);
+    logf("NOPAUSE> modal window outside the list: city view hold kept (stock pause)");
+    return 0;
+}
+
+static int nopause_release(void *self, DWORD ret) {
+    int i;
+    (void)self;
+    if (!g_np_armed) return 0;
+    for (i = 0; i < NP_N; i++)
+        if (g_np_rel[i] && ret == g_np_rel[i] && g_np_win[i] > 0) {
+            InterlockedDecrement(&g_np_win[i]); InterlockedIncrement(&g_np_stats[3]);
+            logf("NOPAUSE> %s closed: its release skipped", k_np_sites[i].what);
+            return 1;
+        }
+    if (g_np_spr_rel && ret == g_np_spr_rel && g_np_spr > 0) {
+        InterlockedDecrement(&g_np_spr); InterlockedIncrement(&g_np_stats[3]);
+        return 1;
+    }
+    return 0;
+}
+
+/* out[0..3] = window holds skipped, SIMSPR holds skipped, SIMSPR holds passed, releases skipped; out[4] = window holds
+   open, out[5] = SIMSPR holds open, out[6] = armed. Returns the switch. */
+__declspec(dllexport) int __cdecl sc3simrun_nopause(DWORD *out) {
+    int i;
+    if (out && !IsBadWritePtr(out, 7 * 4)) {
+        for (i = 0; i < 4; i++) out[i] = (DWORD)g_np_stats[i];
+        out[4] = 0; for (i = 0; i < NP_N; i++) out[4] += (DWORD)g_np_win[i];
+        out[5] = (DWORD)g_np_spr; out[6] = (DWORD)g_np_armed;
+    }
+    return g_np_on;
 }
 
 /* ============================================================ GZ message post (from sc3probe.c gz_msg) */
@@ -276,6 +424,7 @@ static void sirens_ini(const char *path);
 static void lvwrap_ini(const char *path);
 static void abandon_ini(const char *path);
 static void hwyspeed_ini(const char *path);
+static void nopause_ini(const char *path);
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -295,6 +444,7 @@ static void ini_read(void) {
     lvwrap_ini(path);
     abandon_ini(path);
     hwyspeed_ini(path);
+    nopause_ini(path);
 }
 
 /* ============================================================ FREEZE */
@@ -1426,6 +1576,11 @@ static DWORD WINAPI sampler(LPVOID param) {
         else logf("### GENTLE: off (stock negative-demand roll)");
     }
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
+    g_co_trace = trace;
+    if (g_np_on) {
+        int n = nopause_arm(simcity);
+        logf("### NOPAUSE: on, %d of %d window sites armed, city view hold %s", n, NP_N, g_np_spr_hold ? "armed" : "stock");
+    } else logf("### NOPAUSE: off (stock: Budget, Preferencias and the landmark / Rewards lists pause the sim)");
     if (g_anim_armed) {
         HMODULE strt;
         while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);

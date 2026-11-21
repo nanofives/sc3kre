@@ -761,3 +761,7 @@ resize.cd_lookn=Ansicht %d von %d
 resize.cd_price=Preis: $%s
 # en: Choose a look
 resize.cd_title=Ansicht wählen
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: No pause in pop-ups
+resize.mt_nopause=Keine Pause bei Fenstern

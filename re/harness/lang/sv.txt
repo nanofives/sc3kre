@@ -761,3 +761,7 @@ resize.cd_lookn=Utseende %d av %d
 resize.cd_price=Pris: $%s
 # en: Choose a look
 resize.cd_title=Välj utseende
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: No pause in pop-ups
+resize.mt_nopause=Ingen paus i popup-fönster
