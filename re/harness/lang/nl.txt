@@ -777,3 +777,27 @@ perf.ovwarn_hint=Het spel ziet die wijziging niet. Details in sc3netmod.log
 resize.mt_stylepick=Stijl: alleen nieuwe gebouwen
 # en: Mix all three styles
 resize.sp_mix=Alle drie stijlen mengen
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Asian
+resize.cs_as=Aziatisch
+# en: %s style, the game's own art. Same service and same price as the original.
+resize.cs_desc_look=Stijl %s, met de graphics van het spel. Zelfde dienst en zelfde prijs als het origineel.
+# en: The game's own building, in this city's style (%s).
+resize.cs_desc_stock=Het originele gebouw van het spel, in de stijl van deze stad (%s).
+# en: European
+resize.cs_eu=Europees
+# en: North American
+resize.cs_na=Noord-Amerikaans
+# en: %s: %s
+resize.cs_row=%s: %s
+# en: Civic buildings: game styles
+resize.mt_civstyle=Openbare gebouwen: spelstijlen
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Asia
+resize.cs_ras=Azië
+# en: Europe
+resize.cs_reu=Europa
+# en: North America
+resize.cs_rna=Noord-Amerika

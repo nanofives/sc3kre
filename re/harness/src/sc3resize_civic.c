@@ -53,12 +53,40 @@
  *    types are declared whenever the loader runs, mods on or off (a city holding a placed reward of an undeclared type
  *    faulted at 0x1000b392 and the game exited on load, measured). Here only the guard: rw_unlock_test unlocks a type
  *    only when sc3mods_reward_types() lists it as declared, so an undeclared reward can never be placed.
- * Switches: sc3resize.ini [buildings] civicvariants= / newrewards= / civiclist= (default 1), env SC3RESIZE_CIVVAR /
- * SC3RESIZE_NEWREWARD / SC3RESIZE_CIVDLG (the "Activar mods" page writes the first two env ones). Read once at start:
- * the hooks are code patches. */
+ *
+ * CIVSTYLE (child civicstyle, round 2026-11-21; evidence verify/civicstyle/RESULTS.md, re/analysis/CIVIC_REWARD.md
+ * section 7). Simtropolis: "mix and match what schools/parks/hospitals/etc. appear in a city". The two stock building
+ * sets hold their own exemplar and art for 15 of the civic bases (European 6, Asian 15), at the SAME key as the base
+ * (BUILDING_PICK.md 0), so only the city's own set is ever drawn. netpack style_mix 1.2.0 ("civic": true,
+ * netpack_stylesets.py) copies each set exemplar verbatim at base + 400000 (European) / + 1500000 (Asian) with its
+ * frame table and pixels, and the stock exemplar at base + 2600000 (the North American look, for a city whose own set
+ * re-skins the base). Type id and footprint are the base's (checked at install), so a copy is counted, covered and
+ * priced as the base; no family lists them, so nothing grows them. Here: a press builds a look list, cv_looks():
+ * the original (base key, drawn in the city's set), then the other two styles whose copy is in the attrib cache, then
+ * the bldimport looks. The list window and the cycle serve that list. Copies are found by key in the attrib cache, so
+ * without style_mix 1.2.0 (or without sc3netmod, which serves the overlay) the buttons are what they were.
+ * The Marina is not a plain case: it builds through FUN_1000a246 (shore tool), called at SIMGEOM 0x1000afc0 with
+ * the same (&key, 0, 0) args; that call's rel32 goes to cv_call_m (cv_pick, then 0x1000a246). The callee itself is
+ * also used by sc3_geom_create_occupant_from_key 0x10007e64 (picker, relocate), which is left alone.
+ *
+ * Switches: sc3resize.ini [buildings] civicvariants= / newrewards= / civiclist= / civicstyles= (default 1), env
+ * SC3RESIZE_CIVVAR / SC3RESIZE_NEWREWARD / SC3RESIZE_CIVDLG / SC3RESIZE_CIVSTYLE (the "Activar mods" page writes
+ * CIVVAR, NEWREWARD and CIVSTYLE). Read once at start: the hooks are code patches. CIVSTYLE off and no bldimport look
+ * = no hook at all (stock). */
 #define CV_GROUP    0xB1D10002   /* bldimport's plugin exemplar group (bldimport.py LM_GROUP) */
-#define CV_MAXB     17           /* the 17 plain civic commands */
+#define CV_MAXB     18           /* the 17 plain civic commands + the Marina */
 #define CV_MAXV     12
+#define CV_MAXL     (CV_MAXV + 4)   /* a press: original + 3 style looks + the bldimport looks */
+#define CS_OFF_E    400000       /* style_mix copies: European (set e523f3fb) */
+#define CS_OFF_A    1500000      /*                   Asian (set 6523f3d5) */
+#define CS_OFF_N    2600000      /*                   North American (the stock exemplar) */
+#define CS_SPAN     65536
+static int g_civstyle = 1;
+static const DWORD k_cs_base[CV_MAXB] = { 0xd2, 0x1f41, 0xd3, 0xd1, 0x1f94, 0xd6, 0xf5, 0xd4, 0xd, 0xd5, 0xda, 0xd7,
+                                          0x234b, 0x234c, 0x234e, 0x1f96, 0xed, 0xf8 };   /* netpack_stylesets.CIVIC_BASES */
+typedef struct { DWORD grp, inst; int style; int v; } CV_LOOK;   /* style 0 none, 1 NA, 2 E, 3 A; v = bldimport index + 1 */
+typedef struct { DWORD base; int known, hE, hA, hN; DWORD lgrp, linst; int cyc; } CS_STATE;
+static CS_STATE g_cs[CV_MAXB];
 #define RW_TYPE_LO  38000        /* bldimport reward type ids = their ids (bldimport.py ID_FIRST..ID_LAST) */
 #define RW_TYPE_HI  38999
 #define RW_MAX      64
@@ -68,6 +96,7 @@ static CV_BASE g_cv[CV_MAXB];
 static int     g_cv_n;
 static BYTE   *g_cv_geom;
 static DWORD   g_cv_ctor;                     /* SIMGEOM+0x9443: the plain building tool constructor */
+static DWORD   g_cv_ctor_m;                   /* SIMGEOM+0xa246: the Marina's shore tool constructor */
 static BYTE   *g_rw_adv;                      /* SIMADV base */
 static DWORD   g_rw_hit, g_rw_miss;           /* SIMADV+0xa832 (set unlocked), +0xa800 (the stock sub chain) */
 static DWORD   g_rw_type[RW_MAX];
@@ -132,27 +161,142 @@ static void cv_load(void) {
 }
 
 /* CIVDLG (child civdlg, round 2026-11-19k): the look chosen in the list window for the press in progress (cd_getcmd
-   sets it around the stock factory call, cv_pick applies it). -1 = no pick: the press cycles (CIVDLG off). */
+   sets it around the stock factory call, cv_pick applies it). Since civicstyle the pick is a key (grp, inst), not an
+   index. g_cd_force = 0: no pick, the press cycles (CIVDLG off) or builds the original (a press with the window up). */
 static int   g_civdlg = 1;
-static int   g_cd_force = -1;
-static DWORD g_cd_forcebase;
+static int   g_cd_force;
+static DWORD g_cd_forcebase, g_cd_fgrp, g_cd_finst;
 
-/* the press: the key the factory is about to build. stdcall from cv_stub, game thread. */
-static void __stdcall cv_pick(DWORD *key) {
+typedef DWORD (__cdecl *CD_F0)(void);
+
+/* ---------------------------------------------------------------------------------------- CIVSTYLE look list */
+/* the city's skin (the set archives loaded), as sc3netmod sp_skin: scheme manager [app + 0x108], app = [SC3U
+   0x4fa86c], vtable SIMINIT+0x2f528, +0x58 archives loaded, +0x50 the set (GetCurrentBuildingSet 0x100054a8).
+   -> 1 North American (set 0 / none loaded), 2 European, 3 Asian, 0 another set or unreadable. */
+static int cs_skin(void) {
+    BYTE *app, *s, *ini = (BYTE *)GetModuleHandleA("SIMINIT.DLL");
+    DWORD set;
+    __try {
+        if (!ini || IsBadReadPtr((void *)0x4fa86c, 4)) return 0;
+        app = *(BYTE **)0x4fa86c;
+        if (!app || IsBadReadPtr(app + 0x108, 4)) return 0;
+        s = *(BYTE **)(app + 0x108);
+        if (!s || IsBadReadPtr(s, 0x60) || *(BYTE **)s != ini + 0x2f528) return 0;
+        set = s[0x58] ? *(DWORD *)(s + 0x50) : 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+    return set == 0 ? 1 : set == 0xE523F3FB ? 2 : set == 0x6523F3D5 ? 3 : 0;
+}
+
+static const char *cs_word(int style) {
+    int es = ho_spanish();
+    switch (style) {
+    case 1: return SC3TR(es, "resize.cs_na", "Norteamericano", "North American");
+    case 2: return SC3TR(es, "resize.cs_eu", "Europeo", "European");
+    case 3: return SC3TR(es, "resize.cs_as", "Asi\xe1tico", "Asian");
+    }
+    return "";
+}
+
+/* the list rows: a short region word first, so it stays visible when the listbox clips a long name (measured: at 800x600
+   "Comisaria (Norteamericano)" lost its last 2 letters) */
+static const char *cs_region(int style) {
+    int es = ho_spanish();
+    switch (style) {
+    case 1: return SC3TR(es, "resize.cs_rna", "Norteamérica", "North America");
+    case 2: return SC3TR(es, "resize.cs_reu", "Europa", "Europe");
+    case 3: return SC3TR(es, "resize.cs_ras", "Asia", "Asia");
+    }
+    return "";
+}
+
+/* is {0x207EDC0E, 0x57E, inst} in the occupant attrib cache (SIMUI FUN_1008e985, vt+0x18 = get by key) */
+static int cs_has(void *cache, DWORD inst) {
+    DWORD key[3];
+    void *att = NULL;
+    key[0] = 0x207EDC0E; key[1] = 0x57E; key[2] = inst;
+    if (!(ho_v(cache, 0x18, 2, (DWORD)key, (DWORD)&att, 0, 0, 0) & 0xff) || !att) return 0;
+    ho_v(att, 8, 0, 0, 0, 0, 0, 0);
+    return 1;
+}
+
+static CS_STATE *cs_state(DWORD base) {
     int i;
+    for (i = 0; i < CV_MAXB; i++) if (k_cs_base[i] == base) { g_cs[i].base = base; return &g_cs[i]; }
+    return NULL;
+}
+
+static CV_BASE *cv_find(DWORD base) {
+    int i;
+    for (i = 0; i < g_cv_n; i++) if (g_cv[i].base == base) return &g_cv[i];
+    return NULL;
+}
+
+/* the looks a press of the civic button of `base` offers, original first. Game thread. */
+static int cv_looks(DWORD base, CV_LOOK *L) {
+    CS_STATE *st = cs_state(base);
+    CV_BASE *b = g_civvar ? cv_find(base) : NULL;
+    int n = 1, j;
+    L[0].grp = 0x57E; L[0].inst = base; L[0].style = 0; L[0].v = 0;
+    if (g_civstyle && st) {
+        __try {
+            if (!st->known) {   /* the attrib cache does not change after start-up: ask once per base */
+                HMODULE S = GetModuleHandleA("SIMUI.DLL");
+                void *cache = S ? (void *)((CD_F0)((BYTE *)S + 0x8e985))() : NULL;
+                if (cache) {
+                    st->hE = cs_has(cache, base + CS_OFF_E); st->hA = cs_has(cache, base + CS_OFF_A);
+                    st->hN = cs_has(cache, base + CS_OFF_N); st->known = 1;
+                    logf("CIVSTYLE> base 0x%lX: European copy %s, Asian copy %s, North American copy %s", base,
+                         st->hE ? "yes" : "no", st->hA ? "yes" : "no", st->hN ? "yes" : "no");
+                }
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { }
+        if (st->known && (st->hE || st->hA)) {
+            int sk = cs_skin(), skinned = (sk == 2 && st->hE) || (sk == 3 && st->hA);
+            L[0].style = skinned ? sk : (sk ? 1 : 0);      /* what the base key draws in this city */
+            if (skinned && st->hN) { L[n].grp = 0x57E; L[n].inst = base + CS_OFF_N; L[n].style = 1; L[n].v = 0; n++; }
+            if (st->hE && L[0].style != 2) { L[n].grp = 0x57E; L[n].inst = base + CS_OFF_E; L[n].style = 2; L[n].v = 0; n++; }
+            if (st->hA && L[0].style != 3) { L[n].grp = 0x57E; L[n].inst = base + CS_OFF_A; L[n].style = 3; L[n].v = 0; n++; }
+            if (n == 1) L[0].style = 0;
+        }
+    }
+    for (j = 0; b && j < b->n && n < CV_MAXL; j++) { L[n].grp = b->grp[j]; L[n].inst = b->inst[j]; L[n].style = 0; L[n].v = j + 1; n++; }
+    return n;
+}
+
+/* the name a look shows next to the pointer (the style word or the bldimport name) */
+static const char *cv_lname(DWORD base, const CV_LOOK *l) {
+    CV_BASE *b = cv_find(base);
+    if (l->style) return cs_word(l->style);
+    if (l->v && b) return b->name[l->v - 1];
+    return NULL;
+}
+
+/* the press: the key the factory is about to build. stdcall from cv_call / cv_call_m, game thread. */
+static void __stdcall cv_pick(DWORD *key) {
+    CV_LOOK L[CV_MAXL];
+    CS_STATE *st;
+    CV_BASE *b;
+    DWORD base;
+    int n, i, k = 0;
     __try {
         if (key[0] != 0x207EDC0E || key[1] != 0x57E) return;
-        for (i = 0; i < g_cv_n; i++) {
-            CV_BASE *b = &g_cv[i];
-            if (b->base != key[2]) continue;
-            if (g_cd_force >= 0 && g_cd_forcebase == b->base) b->look = g_cd_force;   /* CIVDLG: the list's pick */
-            else if (g_civdlg) b->look = 0;    /* CIVDLG on but no pick (a press inside the open window): stock */
-            else b->look = (b->look + 1) % (b->n + 1);
-            if (b->look > 0) { key[1] = b->grp[b->look - 1]; key[2] = b->inst[b->look - 1]; }
-            logf("CIVVAR> button of base 0x%lX: look %d of %d, %s, key 0x%08lX 0x%08lX 0x%08lX", b->base, b->look + 1,
-                 b->n + 1, b->look ? b->name[b->look - 1] : "stock", key[0], key[1], key[2]);
-            return;
+        base = key[2];
+        n = cv_looks(base, L);
+        if (n < 2) return;
+        st = cs_state(base); b = cv_find(base);
+        if (g_cd_force && g_cd_forcebase == base) {          /* CIVDLG: the list's pick */
+            for (i = 0; i < n; i++) if (L[i].grp == g_cd_fgrp && L[i].inst == g_cd_finst) { k = i; break; }
+        } else if (g_civdlg) k = 0;                           /* CIVDLG on but no pick (a press inside the open window) */
+        else {                                                /* CIVDLG off: presses cycle */
+            if (st) { k = st->cyc % n; st->cyc = k + 1; }    /* cyc = the last look + 1, 0 = none yet: stock first */
+            else if (b) { b->look = (b->look + 1) % n; if (b->look < 0) b->look = 0; k = b->look; }
         }
+        if (k > 0) { key[1] = L[k].grp; key[2] = L[k].inst; }
+        if (st) { st->lgrp = L[k].grp; st->linst = L[k].inst; }
+        if (b) b->look = k;
+        {   const char *nm = cv_lname(base, &L[k]);
+            logf("CIVVAR> button of base 0x%lX: look %d of %d, %s, key 0x%08lX 0x%08lX 0x%08lX", base, k + 1, n,
+                 k ? (nm ? nm : "?") : (L[0].style ? cs_word(L[0].style) : "stock"), key[0], key[1], key[2]); }
     } __except (EXCEPTION_EXECUTE_HANDLER) { }
 }
 
@@ -166,17 +310,43 @@ static __declspec(naked) void cv_call(void) {
         jmp  dword ptr [g_cv_ctor]
     }
 }
+/* the target of SIMGEOM 0x1000afc0 call 0x1000a246 (Marina): the same args (&key, 0, 0), ecx = the tool */
+static __declspec(naked) void cv_call_m(void) {
+    __asm {
+        pushad
+        push dword ptr [esp + 36]
+        call cv_pick
+        popad
+        jmp  dword ptr [g_cv_ctor_m]
+    }
+}
+
+/* the base a look key belongs to (a style copy, a bldimport look or the base itself), 0 = none */
+static DWORD cv_base_of(const DWORD *k) {
+    int i, j;
+    if (k[1] == 0x57E) {
+        DWORD x = k[2];
+        if (x >= CS_OFF_E && x < CS_OFF_E + CS_SPAN) x -= CS_OFF_E;
+        else if (x >= CS_OFF_A && x < CS_OFF_A + CS_SPAN) x -= CS_OFF_A;
+        else if (x >= CS_OFF_N && x < CS_OFF_N + CS_SPAN) x -= CS_OFF_N;
+        if (cs_state(x) || cv_find(x)) return x;
+        return 0;
+    }
+    for (i = 0; i < g_cv_n; i++) for (j = 0; j < g_cv[i].n; j++) if (k[1] == g_cv[i].grp[j] && k[2] == g_cv[i].inst[j]) return g_cv[i].base;
+    return 0;
+}
 
 /* the cost label's prefix (sc3resize_placehints.c ph_label): the city view's current tool (view +0x228) is a building
-   tool (SIMGEOM vtables 0x29504 / 0x295e4 / 0x2968c / 0x29734) whose key (tool +0x108) is a base with variants or one of
-   its variants -> "Aspecto 2 de 3: <name>". 0 = no prefix. Game thread. */
+   tool (SIMGEOM vtables 0x29504 / 0x295e4 / 0x2968c / 0x29734) whose key (tool +0x108) is a look of a button with
+   several looks -> "Aspecto 2 de 3: <name>". 0 = no prefix. Game thread. */
 static int cv_label(BYTE *view, char *out, int cap) {
     static const DWORD bvt[4] = { 0x29504, 0x295e4, 0x2968c, 0x29734 };
+    CV_LOOK L[CV_MAXL];
     BYTE *t;
-    DWORD *k;
-    int i, j, ok = 0, es = ho_spanish();
+    DWORD *k, base;
+    int i, n, ok = 0, es = ho_spanish();
     out[0] = 0;
-    if (!g_cv_geom || !g_cv_n || !view) return 0;
+    if (!g_cv_geom || !view) return 0;
     __try {
         if (IsBadReadPtr(view, 0x22c)) return 0;
         t = *(BYTE **)(view + 0x228);
@@ -184,19 +354,19 @@ static int cv_label(BYTE *view, char *out, int cap) {
         for (i = 0; i < 4; i++) if (*(DWORD *)t == (DWORD)g_cv_geom + bvt[i]) ok = 1;
         if (!ok) return 0;
         k = (DWORD *)(t + 0x108);
-        if (k[0] != 0x207EDC0E) return 0;
-        for (i = 0; i < g_cv_n; i++) {
-            CV_BASE *b = &g_cv[i];
-            if (k[1] == 0x57E && k[2] == b->base) {
-                wsprintfA(out, SC3TR(es, "resize.cv_look_stock", "Aspecto %d de %d: original", "Look %d of %d: original"), 1, b->n + 1);
+        if (k[0] != 0x207EDC0E || !(base = cv_base_of(k))) return 0;
+        n = cv_looks(base, L);
+        if (n < 2) return 0;
+        for (i = 0; i < n; i++) if (k[1] == L[i].grp && k[2] == L[i].inst) {
+            const char *nm = cv_lname(base, &L[i]);
+            char cp[64];
+            if (!i && !L[0].style) {
+                wsprintfA(out, SC3TR(es, "resize.cv_look_stock", "Aspecto %d de %d: original", "Look %d of %d: original"), 1, n);
                 return 1;
             }
-            for (j = 0; j < b->n; j++) if (k[1] == b->grp[j] && k[2] == b->inst[j]) {
-                char nm[64];
-                lstrcpynA(nm, b->name[j], sizeof(nm));
-                wsprintfA(out, SC3TR(es, "resize.cv_look", "Aspecto %d de %d: %s", "Look %d of %d: %s"), j + 2, b->n + 1, nm);
-                return 1;
-            }
+            lstrcpynA(cp, nm ? nm : "?", sizeof(cp));
+            wsprintfA(out, SC3TR(es, "resize.cv_look", "Aspecto %d de %d: %s", "Look %d of %d: %s"), i + 1, n, cp);
+            return 1;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) { out[0] = 0; }
     (void)cap;
@@ -236,15 +406,15 @@ static int cv_label(BYTE *view, char *out, int cap) {
  * row: the "Activar mods" page's two columns are full (see MODTOGGLE). */
 #define CD_MODE 0x3C1D1A10   /* our catalog mode id: not one of the stock six (0x22e92581 0x62e92553 0x62e925a2
                                 0xc2f291a9 0xe2e92527 0xa2f7d03a), so no advisor answers it */
-static const DWORD k_cd_cls[17][2] = {   /* plain civic command class id -> base instance (CIVIC_REWARD.md section 1) */
+#define CD_NCLS 18
+static const DWORD k_cd_cls[CD_NCLS][2] = {   /* civic command class id -> base instance (CIVIC_REWARD.md section 1) */
     { 0x42ff052f, 0xd2 },   { 0x22ff053f, 0x1f41 }, { 0x22ff054c, 0xd3 },   { 0xe2ff0555, 0xd1 },   { 0xc2ff0563, 0x1f94 },
     { 0xc2ff0571, 0xd6 },   { 0xc2ff057a, 0xf5 },   { 0x62ff0585, 0xd4 },   { 0x02ff05aa, 0xd },    { 0x82ff05b7, 0xd5 },
     { 0x22ff05ca, 0xda },   { 0x62ff05d1, 0xd7 },   { 0xc2ff05e0, 0x234b }, { 0x22ff05ea, 0x234c }, { 0x22ff05f3, 0x234e },
-    { 0x02ff04fe, 0x1f96 }, { 0x22ff058f, 0xed } };
+    { 0x02ff04fe, 0x1f96 }, { 0x22ff058f, 0xed },
+    { 0x42ff05c2, 0xf8 } };   /* civicstyle: the Marina (shore tool FUN_1000a246, hooked at 0x1000afc0) */
 static DWORD g_cd_handler;      /* SIMGEOM+0xa896 */
 static int   g_cd_busy;
-
-typedef DWORD (__cdecl *CD_F0)(void);
 
 /* "1,234" */
 static void cd_money(char *out, LONG v) {
@@ -267,14 +437,21 @@ static void cd_setstr(void *item, DWORD prop, const char *text) {
    (sc3_ui_build_catalog_picker_window, list +0x3c, picture +0x38), which arrives inside DoModalWin, not in Init:
    measured, a selection call before DoModalWin read a NULL +0x38 (SIMUI+0x690EF). The builder selects an entry itself
    only from the saved catalog preferences, which our mode has none of. Game thread (the frame heartbeat, which keeps
-   running in the modal loop). */
+   running in the modal loop).
+   CIVSTYLE: the builder writes each row as the attrib's name (attrib vt+0x3c GetName, SIMUI 0x10068603), and the style
+   copies keep their set's name ("Comisaria" three times), so the rows are rewritten here as "<region>: <name>" with
+   cIGZWinListBox::ModifyString (vt+0x20, CodeView cv_vtables: +0x1c InsertString, +0x20 ModifyString(const
+   cIGZString &, long), +0x28 SetSelection). */
 static BYTE *g_cd_sel_obj;
 static void *g_cd_sel_win;
 static int   g_cd_sel_idx;
+static char  g_cd_rows[CV_MAXL][96];
+static int   g_cd_rows_n;
 static void cd_tick(void) {
     BYTE *obj = g_cd_sel_obj, *S;
     void *lb;
     DWORD a[1];
+    int i, m = 0;
     if (!obj) return;
     __try {
         lb = *(void **)(obj + 0x3c);
@@ -287,6 +464,13 @@ static void cd_tick(void) {
             ho_str_free(s);
             ho_v(g_cd_sel_win, 0x154, 0, 0, 0, 0, 0, 0);                          /* invalidate */
         }
+        for (i = 0; i < g_cd_rows_n; i++) if (g_cd_rows[i][0]) {                 /* CIVSTYLE: "<region>: <name>" rows */
+            BYTE s[0x20];
+            ho_str(s, g_cd_rows[i]);
+            m += ho_v(lb, 0x20, 2, (DWORD)s, (DWORD)i, 0, 0, 0) & 0xff;          /* ModifyString(text, index) */
+            ho_str_free(s);
+        }
+        if (g_cd_rows_n) logf("CIVSTYLE> %d of %d list row(s) renamed with their style", m, g_cd_rows_n);
         ho_v(lb, 0x28, 2, (DWORD)g_cd_sel_idx, 1, 0, 0, 0);                     /* select, as the builder does */
         if (!obj[0x29] || *(int *)(obj + 0x2c) != g_cd_sel_idx) {               /* no notification: fill it directly */
             S = (BYTE *)GetModuleHandleA("SIMUI.DLL");
@@ -296,14 +480,18 @@ static void cd_tick(void) {
     } __except (EXCEPTION_EXECUTE_HANDLER) { g_cd_sel_obj = NULL; logf("CIVDLG> fault 0x%08lX selecting the entry", GetExceptionCode()); }
 }
 
-/* the list window for one base: 0 = original, k = look k, -1 = closed / Esc / failed. Game thread, inside GetCommand. */
-static int cd_dialog(CV_BASE *b) {
+/* the list window for one base and its looks L[0..n-1] (L[0] = original): index picked, -1 = closed / Esc / failed.
+   Game thread, inside GetCommand. */
+static int cd_dialog(DWORD base, const CV_LOOK *L, int n) {
     BYTE *S = (BYTE *)GetModuleHandleA("SIMUI.DLL"), *obj;
     void *city = NULL, *gz, *cat = NULL, *win = NULL, *wm, *cache, *layer, *bud = NULL, *mw;
     DWORD key[3], *k;
-    int i, n = b->n + 1, res = -1, pre, paused = 0, ok = 0, es = ho_spanish();
+    CS_STATE *st = cs_state(base);
+    CV_BASE *b = cv_find(base);
+    int i, res = -1, pre = 0, paused = 0, ok = 0, es = ho_spanish(), styled = 0;
     char t[200], m[24];
     if (!S) return -1;
+    for (i = 0; i < n; i++) styled |= L[i].style != 0;
     __try {
         city = (void *)((CD_F0)(S + 0x8e7da))();
         if (!city) { logf("CIVDLG> no city: window not opened"); return -1; }
@@ -318,14 +506,26 @@ static int cd_dialog(CV_BASE *b) {
         cache = (void *)((CD_F0)(S + 0x8e985))();                              /* occupant attrib cache */
         layer = (void *)ho_v(city, 0x138, 0, 0, 0, 0, 0, 0);                    /* BuildingLayer */
         if (layer && !IsBadReadPtr(layer, 0x34)) bud = *(void **)((BYTE *)layer + 0x30);
+        g_cd_rows_n = 0;
         for (i = 0; i < n; i++) {
             void *item, *att = NULL, *ag;
-            DWORD type = 0;
+            DWORD type = 0, lot = 0;
             LONG price = -1;
-            key[0] = 0x207EDC0E; key[1] = i ? b->grp[i - 1] : 0x57E; key[2] = i ? b->inst[i - 1] : b->base;
+            char nm[64];
+            nm[0] = 0;
+            key[0] = 0x207EDC0E; key[1] = L[i].grp; key[2] = L[i].inst;
             if (cache && (ho_v(cache, 0x18, 2, (DWORD)key, (DWORD)&att, 0, 0, 0) & 0xff) && att) {
+                BYTE s[0x20];
+                const char *c;
                 ag = (void *)ho_v(att, 0x4c, 0, 0, 0, 0, 0, 0);                  /* CityAgentType */
                 if (ag) type = ho_v(ag, 0x10, 0, 0, 0, 0, 0, 0);
+                lot = (ho_v(att, 0x40, 0, 0, 0, 0, 0, 0) << 8) | ho_v(att, 0x44, 0, 0, 0, 0, 0, 0);   /* SizeInCellsX / Z */
+                if (styled) {                                                    /* GetName -> the row text */
+                    ho_str(s, NULL);
+                    if ((ho_v(att, 0x3c, 1, (DWORD)s, 0, 0, 0, 0) & 0xff) && (c = (const char *)ho_v(s, 0x14, 0, 0, 0, 0, 0, 0)) && !IsBadReadPtr(c, 1))
+                        lstrcpynA(nm, c, sizeof(nm));
+                    ho_str_free(s);
+                }
                 ho_v(att, 8, 0, 0, 0, 0, 0, 0);
             } else logf("CIVDLG> entry %d key 0x%08lX 0x%08lX: not in the attrib cache (the list shows no name)", i, key[1], key[2]);
             if (bud && type) price = (LONG)ho_v(bud, 0x54, 1, type, 0, 0, 0, 0);   /* the build price by type (site check) */
@@ -341,21 +541,35 @@ static int cd_dialog(CV_BASE *b) {
             }
             wsprintfA(t, SC3TR(es, "resize.cd_lookn", "Aspecto %d de %d", "Look %d of %d"), i + 1, n);
             cd_setstr(item, 0x22f291ae, t);
-            cd_setstr(item, 0x2ebe76b, i ? SC3TR(es, "resize.cd_desc_look", "Aspecto importado. Da el mismo servicio y cuesta lo mismo que el original.",
-                                                 "Imported look. Same service and same price as the original.")
-                                         : SC3TR(es, "resize.cd_desc_stock", "El edificio original del juego.", "The game's own building."));
+            if (L[i].style) {
+                wsprintfA(t, i ? SC3TR(es, "resize.cs_desc_look", "Estilo %s, con el arte del propio juego. Da el mismo servicio y cuesta lo mismo que el original.",
+                                       "%s style, the game's own art. Same service and same price as the original.")
+                               : SC3TR(es, "resize.cs_desc_stock", "El edificio original del juego, en el estilo de esta ciudad (%s).",
+                                       "The game's own building, in this city's style (%s)."), cs_word(L[i].style));
+                cd_setstr(item, 0x2ebe76b, t);
+            } else
+                cd_setstr(item, 0x2ebe76b, i ? SC3TR(es, "resize.cd_desc_look", "Aspecto importado. Da el mismo servicio y cuesta lo mismo que el original.",
+                                                     "Imported look. Same service and same price as the original.")
+                                             : SC3TR(es, "resize.cd_desc_stock", "El edificio original del juego.", "The game's own building."));
             ho_v(obj, 0x18, 1, (DWORD)item, 0, 0, 0, 0);                        /* AddItem */
-            logf("CIVDLG> entry %d: key 0x%08lX 0x%08lX type %lu price %ld", i, key[1], key[2], type, price);
+            g_cd_rows[g_cd_rows_n][0] = 0;
+            if (styled && L[i].style && nm[0])
+                wsprintfA(g_cd_rows[g_cd_rows_n], SC3TR(es, "resize.cs_row", "%s: %s", "%s: %s"), cs_region(L[i].style), nm);
+            g_cd_rows_n++;
+            logf("CIVDLG> entry %d: key 0x%08lX 0x%08lX type %lu lot %lux%lu price %ld%s%s", i, key[1], key[2], type, lot >> 8, lot & 0xff,
+                 price, L[i].style ? " style " : "", L[i].style ? cs_word(L[i].style) : "");
         }
+        if (!styled) g_cd_rows_n = 0;
         if (!(ho_v(cat, 0x10, 0, 0, 0, 0, 0, 0) & 0xff)) { logf("CIVDLG> catalog Init failed: window not opened"); goto rel; }
         win = (void *)ho_v(cat, 0x14, 0, 0, 0, 0, 0, 0);
         if (!win) { logf("CIVDLG> catalog has no window"); goto rel; }
         ho_v(win, 4, 0, 0, 0, 0, 0, 0);                                          /* AddRef, as 0x10011919 */
-        pre = b->look > 0 && b->look < n ? b->look : 0;                          /* the last pick is selected */
+        for (i = 1; i < n; i++)                                                   /* the last pick is selected */
+            if (st ? (L[i].grp == st->lgrp && L[i].inst == st->linst) : (b && L[i].v == b->look)) { pre = i; break; }
         g_cd_sel_win = win; g_cd_sel_idx = pre; g_cd_sel_obj = obj;   /* by cd_tick: the controls exist only once the window is shown */
         wm = (void *)((CD_F0)(S + 0x85091))();
         mw = (void *)ho_v(wm, 0xc, 0, 0, 0, 0, 0, 0);                            /* GetMainWindow */
-        logf("CIVDLG> base 0x%lX: list window open, %d entries, entry %d selected", b->base, n, pre);
+        logf("CIVDLG> base 0x%lX: list window open, %d entries, entry %d selected", base, n, pre);
         ho_v(wm, 0x9c, 2, (DWORD)mw, (DWORD)win, 0, 0, 0);                       /* DoModalWin(main, win) */
         g_cd_sel_obj = NULL;
         ok = ho_v(cat, 0x18, 0, 0, 0, 0, 0, 0) & 0xff;                           /* OK pressed with a selection */
@@ -365,12 +579,14 @@ static int cd_dialog(CV_BASE *b) {
             if (att) {
                 k = (DWORD *)ho_v(att, 0x14, 0, 0, 0, 0, 0, 0);                  /* Key */
                 for (i = 0; k && i < n; i++)
-                    if (k[1] == (i ? b->grp[i - 1] : 0x57E) && k[2] == (i ? b->inst[i - 1] : b->base)) { res = i; break; }
+                    if (k[1] == L[i].grp && k[2] == L[i].inst) { res = i; break; }
                 ho_v(att, 8, 0, 0, 0, 0, 0, 0);
             }
         }
-        if (res >= 0) logf("CIVDLG> base 0x%lX: picked entry %d of %d (%s)", b->base, res + 1, n, res ? b->name[res - 1] : "original");
-        else logf("CIVDLG> base 0x%lX: window closed without a pick (%s): no tool", b->base, ok ? "OK with no entry" : "Esc / close");
+        if (res >= 0) {
+            const char *nm = res ? cv_lname(base, &L[res]) : (L[0].style ? cs_word(L[0].style) : NULL);
+            logf("CIVDLG> base 0x%lX: picked entry %d of %d (%s)", base, res + 1, n, res ? (nm ? nm : "?") : nm ? nm : "original");
+        } else logf("CIVDLG> base 0x%lX: window closed without a pick (%s): no tool", base, ok ? "OK with no entry" : "Esc / close");
         ho_v(wm, 0x28, 1, (DWORD)win, 0, 0, 0, 0);                               /* DestroyWindow */
         ho_v(win, 8, 0, 0, 0, 0, 0, 0);
     rel:
@@ -384,28 +600,31 @@ static int cd_dialog(CV_BASE *b) {
         if (paused && city) __try { ho_v(city, 0x220, 0, 0, 0, 0, 0, 0); } __except (EXCEPTION_EXECUTE_HANDLER) { }
         res = -1;
     }
+    g_cd_rows_n = 0;
     return res;
 }
 
 /* SIMGEOM factory vtable 0x100291f4 slot +0x18 (thiscall: class id, riid, void **out) */
 static BYTE __fastcall cd_getcmd(void *self, void *edx, DWORD cls, DWORD riid, void **out) {
+    CV_LOOK L[CV_MAXL];
     DWORD a[3], r;
-    int i, j, pick;
+    int i, n, pick;
     (void)edx;
     if (g_civdlg && !g_cd_busy && (!g_hwnd || GetWindowThreadProcessId(g_hwnd, NULL) == GetCurrentThreadId()))
-        for (i = 0; i < 17; i++) if (k_cd_cls[i][0] == cls) {
-            for (j = 0; j < g_cv_n; j++) if (g_cv[j].base == k_cd_cls[i][1]) break;
-            if (j == g_cv_n) break;                       /* no looks: stock */
+        for (i = 0; i < CD_NCLS; i++) if (k_cd_cls[i][0] == cls) {
+            DWORD base = k_cd_cls[i][1];
+            n = cv_looks(base, L);
+            if (n < 2) break;                             /* no looks: stock */
             g_cd_busy = 1;
-            pick = cd_dialog(&g_cv[j]);
+            pick = cd_dialog(base, L, n);
             g_cd_busy = 0;
             if (pick < 0) { if (out) *out = NULL; return 0; }
-            g_cd_force = pick; g_cd_forcebase = g_cv[j].base;
+            g_cd_force = 1; g_cd_forcebase = base; g_cd_fgrp = L[pick].grp; g_cd_finst = L[pick].inst;
             break;
         }
     a[0] = cls; a[1] = riid; a[2] = (DWORD)out;
     r = rz_thiscall_ret(self, (void *)g_cd_handler, a, 3);
-    g_cd_force = -1;
+    g_cd_force = 0;
     return (BYTE)r;
 }
 
@@ -422,29 +641,39 @@ static void cd_install(BYTE *geom) {
 
 static void cv_install(void) {
     static const BYTE want[6] = { 0x57, 0x57, 0x8d, 0x45, 0xc4, 0x50 };   /* 0x1000b19d, then the call at +6 */
+    static const BYTE want_m[6] = { 0x57, 0x8d, 0x45, 0xc4, 0x57, 0x50 }; /* 0x1000afba push edi; lea eax,[ebp-0x3c]; push edi; push eax */
     HMODULE g = NULL;
-    BYTE *s;
+    BYTE *s, *sm;
     DWORD old;
     int st = 0, i, nv = 0;
-    if (!g_civvar) { logf("CIVVAR> off (sc3resize.ini [buildings] civicvariants=0 or SC3RESIZE_CIVVAR=0)"); return; }
-    cv_load();
+    if (!g_civvar && !g_civstyle) { logf("CIVVAR> off (civicvariants=0 / SC3RESIZE_CIVVAR=0) and CIVSTYLE off (civicstyles=0 / SC3RESIZE_CIVSTYLE=0): stock buttons"); return; }
+    if (g_civvar) cv_load();
+    else { g_cv_n = 0; logf("CIVVAR> off (sc3resize.ini [buildings] civicvariants=0 or SC3RESIZE_CIVVAR=0): no imported looks"); }
+    if (!g_civstyle) logf("CIVSTYLE> off (sc3resize.ini [buildings] civicstyles=0 or SC3RESIZE_CIVSTYLE=0): no style looks");
     for (i = 0; i < g_cv_n; i++) nv += g_cv[i].n;
-    if (!g_cv_n) {
+    if (!g_cv_n && !g_civstyle) {
         char p[MAX_PATH];
         cv_path(p, sizeof(p), "bldimport\\bldimport_civic.ini");
         logf("CIVVAR> no civic variants (%s %s): not installed, the civic buttons are stock", p, cv_exists(p) ? "lists none" : "not found");
         return;
     }
     while (st++ < 300 && !(g = GetModuleHandleA("SIMGEOM.DLL"))) Sleep(100);
-    if (!g) { logf("CIVVAR> SIMGEOM.DLL not loaded: off"); g_cv_n = 0; return; }
+    if (!g) { logf("CIVVAR> SIMGEOM.DLL not loaded: off"); g_cv_n = 0; g_civstyle = 0; return; }
     s = (BYTE *)g + 0xb1a3;
     if (memcmp(s - 6, want, sizeof(want)) || s[0] != 0xe8 || (DWORD)(s + 5 + *(LONG *)(s + 1)) != (DWORD)g + 0x9443) {
-        logf("CIVVAR> SIMGEOM+0xb1a3 differs from shipped: not installed"); g_cv_n = 0; return; }
+        logf("CIVVAR> SIMGEOM+0xb1a3 differs from shipped: not installed"); g_cv_n = 0; g_civstyle = 0; return; }
     g_cv_geom = (BYTE *)g;
     g_cv_ctor = (DWORD)g + 0x9443;
-    if (!VirtualProtect(s, 5, PAGE_EXECUTE_READWRITE, &old)) { logf("CIVVAR> SIMGEOM+0xb1a3 not writable: off"); g_cv_n = 0; return; }
+    if (!VirtualProtect(s, 5, PAGE_EXECUTE_READWRITE, &old)) { logf("CIVVAR> SIMGEOM+0xb1a3 not writable: off"); g_cv_n = 0; g_civstyle = 0; return; }
     InterlockedExchange((LONG volatile *)(s + 1), (LONG)((DWORD)cv_call - (DWORD)(s + 5)));   /* no restore (task onramp) */
     FlushInstructionCache(GetCurrentProcess(), s, 5);
+    sm = (BYTE *)g + 0xafc0;   /* civicstyle: the Marina's call 0x1000afc0 call 0x1000a246 */
+    if (!memcmp(sm - 6, want_m, sizeof(want_m)) && sm[0] == 0xe8 && (DWORD)(sm + 5 + *(LONG *)(sm + 1)) == (DWORD)g + 0xa246 &&
+        VirtualProtect(sm, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        g_cv_ctor_m = (DWORD)g + 0xa246;
+        InterlockedExchange((LONG volatile *)(sm + 1), (LONG)((DWORD)cv_call_m - (DWORD)(sm + 5)));   /* no restore */
+        FlushInstructionCache(GetCurrentProcess(), sm, 5);
+    } else logf("CIVVAR> SIMGEOM+0xafc0 (Marina) differs from shipped: the Marina keeps one look");
     for (i = 0; i < g_cv_n; i++) {
         char t[400];
         int j, n = 0;
@@ -452,7 +681,9 @@ static void cv_install(void) {
         for (j = 0; j < g_cv[i].n && n < 330; j++) n += wsprintfA(t + n, " 0x%lX:0x%lX \"%.24s\"", g_cv[i].grp[j], g_cv[i].inst[j], g_cv[i].name[j]);
         logf("CIVVAR> %s", t);
     }
-    logf("CIVVAR> on: %d civic button(s) with %d variant look(s) (SIMGEOM+0xb1a3)", g_cv_n, nv);
+    logf("CIVVAR> on: %d civic button(s) with %d imported look(s), style looks %s (SIMGEOM+0xb1a3%s)", g_cv_n, nv,
+         g_civstyle ? "on (style_mix copies +400000 / +1500000 / +2600000 found in the attrib cache at the first press)" : "off",
+         g_cv_ctor_m ? ", Marina +0xafc0" : "");
     cd_install((BYTE *)g);   /* CIVDLG: the list window instead of the cycle */
 }
 

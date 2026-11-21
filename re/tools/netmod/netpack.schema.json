@@ -379,7 +379,8 @@
         "set": {"type": "string", "pattern": "^[0-9A-Fa-f]{8}$", "description": "The set's folder name under Apps/Res/Sprites/BuildingSets (= its SC3CityScheme.ini [BuildingSets] key): e523f3fb (European names) or 6523f3d5 (Asian names). 00000000 (task stylepick) = North American copies: the stock exemplar of every member another set of the manifest re-skins, so a city whose own building set is European or Asian can still grow North American art (sc3netmod STYLEPICK)."},
         "offset": {"type": "integer", "minimum": 65536, "description": "New occupant id = base id + offset. 400000 (e523f3fb) and 1500000 (6523f3d5) follow the sets' own frame-table numbering and are free."},
         "weight": {"type": "integer", "minimum": 1, "default": 1, "description": "Multiplier on each copied member's stock weight. 1 for every set = each style a third of the time for buildings both sets re-skin."},
-        "families": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Only these BUILDFAM families (default: every family)."}
+        "families": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Only these BUILDFAM families (default: every family)."},
+        "civic": {"type": "boolean", "default": false, "description": "Task civicstyle: also copy the set exemplars of the stock civic buildings and parks a civic button builds (police, fire, school, parks, marina and so on), verbatim at id + offset with their frame tables and pixels and NO family line, so nothing grows them. sc3resize CIVSTYLE lists them in the civic list window. With set 00000000: the stock exemplar of every civic building another civic entry re-skins (the North American look for a city whose own set re-skins it)."}
       }
     },
     "growable": {

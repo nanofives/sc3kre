@@ -1398,7 +1398,8 @@ def merge(stock, packs):
                            for g in growables]
     report["style_sets"] = [{"set": st["set"], "offset": st["offset"], "weight": st["weight"],            # task stylemix
                              "buildings": len(st["exemplars"]), "tables": len(st["tables"]),
-                             "pixel_records": len(st["pixels"]), "lines": len(st["lines"]), "families": st["families"]}
+                             "pixel_records": len(st["pixels"]), "lines": len(st["lines"]), "families": st["families"],
+                             "civic": st.get("civic", [])}                                       # task civicstyle
                             for st in styles]
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
@@ -1824,6 +1825,8 @@ def _print_report(report):
         print("  style set %08x  ids +%d  %d buildings, %d frame tables, %d pixel records, %d family lines in %s"
               % (st["set"], st["offset"], st["buildings"], st["tables"], st["pixel_records"], st["lines"],
                  st["families"]))
+        if st.get("civic"):                                                     # task civicstyle
+            print("    civic looks (no family line): %s" % ", ".join("%d+%d" % (b, st["offset"]) for b in st["civic"]))
     for w in report["warnings"]:
         print("  WARNING " + w)
     for w in report.get("info", []):
