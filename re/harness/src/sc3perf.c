@@ -337,12 +337,56 @@ static void ov_paint(HDC dc, int x0, int y0, int s, const char *busy) {
     SelectObject(dc, of);
 }
 
+/* ===== OVWARN (task overlaymerge 2026-11-21, verify/overlaymerge/RESULTS.md). sc3netmod serves its own copies of some
+   game files (mods\netmod\overlay) and merges what other mods change in the originals (OVMERGE). A change it cannot
+   merge (a TilingRules text, a line both sides changed) is not seen by the game: sc3netmod_ovmerge_status() returns
+   how many files and their names, and these two red lines show it on screen (main menu and city) for the first 90 s
+   of the session, whatever the FPS / busy switches say. Asked until 30 s after the first frame (sc3netmod may load
+   later). SC3PERF_OVWARN=0 turns it off. Nothing is drawn when every change merged or none was made. */
+#include "sc3lang.h"
+static char   g_ovwarn[400];
+static int    g_ovwarn_asked;
+static double g_ovwarn_t0, g_ovwarn_until;
+static void ovwarn_add(char *busy) {
+    if (!g_ovwarn_asked) {
+        HMODULE nm = GetModuleHandleA("sc3netmod.dll");
+        int (*f)(char *, int) = nm ? (int (*)(char *, int))GetProcAddress(nm, "sc3netmod_ovmerge_status") : NULL;
+        const char *off = getenv("SC3PERF_OVWARN");
+        char names[256];
+        int n, es;
+        if (!g_ovwarn_t0) g_ovwarn_t0 = now_ms();
+        if (off && off[0] == '0') { g_ovwarn_asked = 1; logf("OVWARN> off (SC3PERF_OVWARN=0)"); return; }
+        if (!f) { if (now_ms() - g_ovwarn_t0 > 30000) g_ovwarn_asked = 1; return; }
+        g_ovwarn_asked = 1;
+        names[0] = 0;
+        if ((n = f(names, sizeof(names))) <= 0) { logf("OVWARN> sc3netmod: no unmerged change, nothing to show"); return; }
+        names[sizeof(names) - 1] = 0;
+        es = !lstrcmpA(sc3lang_code(1), "es");
+        _snprintf(g_ovwarn, sizeof(g_ovwarn) - 1, "%s", SC3TR(es, "perf.ovwarn_files",
+                  "Otro mod cambi\xf3 archivos que el mod de carreteras reemplaza: %s", "Another mod changed files the roads mod replaces: %s"));
+        g_ovwarn[sizeof(g_ovwarn) - 1] = 0;
+        {   char t[400];
+            _snprintf(t, sizeof(t) - 1, g_ovwarn, names); t[sizeof(t) - 1] = 0;
+            _snprintf(g_ovwarn, sizeof(g_ovwarn) - 1, "%s\n%s", t, SC3TR(es, "perf.ovwarn_hint",
+                      "El juego no ve ese cambio. Detalles en sc3netmod.log", "The game does not see that change. Details in sc3netmod.log"));
+            g_ovwarn[sizeof(g_ovwarn) - 1] = 0; }
+        g_ovwarn_until = now_ms() + 90000;
+        logf("OVWARN> %d file(s) with a change the game does not see (%s): shown on screen for 90 s", n, names);
+    }
+    if (g_ovwarn[0] && now_ms() < g_ovwarn_until) {
+        size_t l = strlen(busy);
+        if (l && l < 510) { busy[l++] = '\n'; busy[l] = 0; }
+        if (l < 511) { strncat(busy, g_ovwarn, 511 - l); busy[511] = 0; }
+    }
+}
+
 static int ov_text(char *busy) {   /* 1 = something to draw */
     EnterCriticalSection(&g_busycs);
     memcpy(busy, g_busy_text, 512);
     LeaveCriticalSection(&g_busycs);
     busy[511] = 0;
     if (!g_busy_show) busy[0] = 0;
+    ovwarn_add(busy);                 /* OVWARN */
     return g_overlay || busy[0];
 }
 

@@ -47,6 +47,10 @@ etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
  *    diagonal drags side by side get a median. SC3NETMOD_DAV=0 turns it off.
  * 7. STYLEMIX (task stylemix 2026-11-18, in the OVERLAY block): SC3NETMOD_STYLEMIX=0 serves BUILDFAM.IXF with the
  *    style-mix family lines at weight 0, so no new European / Asian copies grow; saved ones keep loading.
+ * 8. OVMERGE (task overlaymerge 2026-11-21, sc3netmod_ovmerge.c, in the OVERLAY block): a stock file the overlay shadows
+ *    that another mod changed after our install is merged into the served copy (IXF records, SYS.PAK ini lines), using
+ *    the stock hashes in mods\netmod\overlay_base.txt; what cannot be merged is logged "### ovmerge" and shown on
+ *    screen by sc3perf (OVWARN). SC3NETMOD_OVMERGE=0 turns it off.
  * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
  * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */
@@ -821,6 +825,7 @@ static const char *ov_rel(LPCSTR in, char *full) {
  * The exemplars (OccupantAttribs_Korea.IXF) and the set art (CSAttrib_Korea.IXF, *_netpack_set.DAT) are still
  * served, so mix buildings already in a save load with their own look. Copies left by dead processes are deleted. */
 static char g_nomix[MAX_PATH];       /* the filtered BUILDFAM copy, "" = STYLEMIX on or nothing to filter */
+static char **g_nomix_alt;           /* = g_ovalt (OVMERGE), set before nomix_init runs */
 #define NOMIX_REL "Apps\\Res\\BUILDFAM.IXF"
 
 static int nomix_filter(BYTE *b, DWORD n) {          /* -> number of Key lines zeroed */
@@ -874,6 +879,8 @@ static void nomix_init(void) {
     if (!n || n >= sizeof(tmp) - 40) { logf("### stylemix: no temp folder, style mix stays on"); return; }
     nomix_sweep(tmp);
     _snprintf(src, sizeof(src), "%s%s", g_ovdir, NOMIX_REL); src[sizeof(src) - 1] = 0;
+    for (i = 0; i < g_novfiles; i++)                                  /* OVMERGE: filter the merged copy */
+        if (!lstrcmpiA(g_ovfiles[i], NOMIX_REL) && g_nomix_alt && g_nomix_alt[i]) lstrcpynA(src, g_nomix_alt[i], sizeof(src));
     h = CreateFileA(src, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (h == INVALID_HANDLE_VALUE) { logf("### stylemix: cannot open %s (%lu), style mix stays on", src, GetLastError()); return; }
     n = GetFileSize(h, NULL);
@@ -896,6 +903,8 @@ static void nomix_init(void) {
          "%s served from %s (%lu bytes)", hits, NOMIX_REL, g_nomix, n);
 }
 
+#include "sc3netmod_ovmerge.c"     /* OVMERGE (task overlaymerge 2026-11-21): other mods' edits of shadowed files */
+
 /* `in` names a file the overlay holds -> overlay path in `out`, 1 */
 static int ov_map(LPCSTR in, char *out) {
     char full[MAX_PATH];
@@ -908,6 +917,7 @@ static int ov_map(LPCSTR in, char *out) {
                 lstrcpynA(out, g_nomix, MAX_PATH);
                 return 1;
             }
+            if (g_ovalt && g_ovalt[i]) { lstrcpynA(out, g_ovalt[i], MAX_PATH); return 1; }   /* OVMERGE: merged copy */
             _snprintf(out, MAX_PATH, "%s%s", g_ovdir, g_ovfiles[i]);
             out[MAX_PATH - 1] = 0;
             return 1;
@@ -1185,6 +1195,8 @@ static void overlay_init(void) {
         g_ovdirlen = lstrlenA(g_ovdir);
         if (GetFileAttributesA(g_ovdir) != INVALID_FILE_ATTRIBUTES) ov_walk("");
         logf("overlay: %s, %d file(s)", g_ovdir, g_novfiles);
+        ovmerge_init();                                   /* OVMERGE: SC3NETMOD_OVMERGE=0 */
+        g_nomix_alt = g_ovalt;
         nomix_init();                                     /* STYLEMIX: SC3NETMOD_STYLEMIX=0 */
     }
     if (!g_novfiles && !g_filelog) return;

@@ -765,3 +765,9 @@ resize.cd_title=Ansicht wählen
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: No pause in pop-ups
 resize.mt_nopause=Keine Pause bei Fenstern
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Another mod changed files the roads mod replaces: %s
+perf.ovwarn_files=Ein anderer Mod hat Dateien geändert, die der Straßenmod ersetzt: %s
+# en: The game does not see that change. Details in sc3netmod.log
+perf.ovwarn_hint=Das Spiel sieht diese Änderung nicht. Details in sc3netmod.log

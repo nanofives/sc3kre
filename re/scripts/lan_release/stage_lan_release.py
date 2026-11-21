@@ -128,6 +128,15 @@ def main():
             for f in fs:
                 rel = os.path.relpath(os.path.join(r, f), a.game)
                 place(os.path.join(r, f), os.path.join(out, rel))
+    # overlaymerge 2026-11-21: the stock hashes sc3netmod OVMERGE merges other mods' edits with (netpack install writes
+    # it beside overlay\). A source tree from before then has none: build it here from the source's stock Apps.
+    ob = os.path.join(a.game, "mods", "netmod", "overlay_base.txt")
+    if not os.path.isfile(ob) and os.path.isdir(os.path.join(a.game, "mods", "netmod", "overlay")):
+        sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..", "tools", "netmod")))
+        import overlay_base
+        print(overlay_base.write_auto(a.game))
+    if os.path.isfile(ob):
+        place(ob, os.path.join(out, "mods", "netmod", "overlay_base.txt"))
     for f in ("sc3_update.ps1", "update.bat"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(out, f))
     # sc3mods_patch.ps1 (one level up, re/scripts) adds the sc3mods.dll import to this PC's SC3U.exe. sc3_update runs
