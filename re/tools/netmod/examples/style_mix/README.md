@@ -12,6 +12,25 @@ growing as they always did. Landmarks, civic buildings and industry aren't affec
 
 The new buildings use the game's own European and Asian art, so the package doesn't ship any art of its own.
 
+## Picking a style, like SimCity 4 (sc3netmod "Style: new buildings only")
+
+With the road mod's style switch on (the default), the building style in Options > City Properties works like
+SimCity 4: it picks which style **new** buildings grow in, and the buildings already standing keep their look. There
+is no long "change in progress" any more, nothing is redrawn.
+
+- Pick North American, European or Asian and untick **Mix all three styles**: new lots grow in that style.
+- Tick **Mix all three styles**: new lots grow in all three at random (the style mix described here).
+- Each city remembers its choice in its save. A city saved before this version starts with the mix ticked and its
+  own style picked, so it keeps growing what it grew before.
+- The New City window has the same box.
+- A city saved with a European or Asian style keeps drawing its old buildings that way. If you then pick North
+  American, the new buildings come from the North American copies (ids + 2600000), so they really are North
+  American.
+
+To get the old behaviour back (picking a style redraws every building), untick "Style: new buildings only" on the
+Turn mods on/off page and restart. Same switch outside the game: `SC3NETMOD_STYLEPICK=0`. With "Building style mix"
+unticked no copies grow at all, whatever the style.
+
 ## Getting the even mix
 
 Each city remembers its own style. Many of the shipped cities (Berlin, London, Moscow and others) are saved with the

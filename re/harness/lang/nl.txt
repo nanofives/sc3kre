@@ -771,3 +771,9 @@ resize.mt_nopause=Geen pauze bij pop-ups
 perf.ovwarn_files=Een andere mod heeft bestanden gewijzigd die de wegenmod vervangt: %s
 # en: The game does not see that change. Details in sc3netmod.log
 perf.ovwarn_hint=Het spel ziet die wijziging niet. Details in sc3netmod.log
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Style: new buildings only
+resize.mt_stylepick=Stijl: alleen nieuwe gebouwen
+# en: Mix all three styles
+resize.sp_mix=Alle drie stijlen mengen

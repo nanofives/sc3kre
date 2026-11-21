@@ -334,3 +334,39 @@ keys still resolve.
 - `cRZIniFile::EnumEntries` order: assumed to be file order for `[DBSegments]` priority.
 
 The one-off helper scripts used (PE vtable reader, TKB1 dumper, family coverage table) were not kept in the repo.
+
+## 8. The in-game style picker, and making it pick new buildings only (task stylepick 2026-11-21)
+
+Static reading, then the game run in `verify/stylepick/RESULTS.md`.
+
+- **The picker** is Options > City Properties: `SYS.PAK MenuItem.INI` item `0x1000900A` (`Root\Options\CityProperties`)
+  = command `0x855a2dc4` with parameter 0. SIMUI factory `0x10011f0b` -> command ctor `0x10011b02` -> Execute
+  `0x10011bc5`: it builds the dialog (`new 0x1b0`, ctor `0x1005b6f4(mode)`), runs it modal, and on OK calls
+  scheme `vt+0x18 SetCityScheme(dlg+0x114 landscape, +0x118 flora, +0x11c building set, mode == 0)`. Mode 0 then
+  copies name, mayor and the two flags into the city. Modes 2 / 3 (New City / new terrain, SIMINIT `0x1000985b`) and 1
+  (SIMINIT `0x1000b7c5`) are the same window with the difficulty and start-year rows. [CONFIRMED @ SIMUI 0x10011bc5,
+  0x1005b6f4] The mode 0 dialog reads its current values from scheme `vt+0x20`, `vt+0x48`, `vt+0x64` (`0x1005b6f4`);
+  the other modes read Prefs `+4 / +8 / +0xc`. Dialog messages: `0x1005bb2e` (slot `0xc` of vtable `0x100aa878`),
+  build on `0xa2bf8ace` (`0x1005e570`), OK = control `0x2552483d` (`0x1005e3a1`). [CONFIRMED]
+- **SetCityScheme** (`0x10006589`) compares each argument with the current value (`+0x18` landscape, `+0x2c` flora,
+  `+0x50` building set). Only a changed building set unloads the old set (`0x10006b0a`), loads the new one
+  (`0x1000641b`), re-Inits the live occupants of their keys (`0x10006f69`), re-applies BAT replacements and calls
+  `0x10006ec9`. With the same building set none of that runs. [CONFIRMED @ 0x10006589]
+- **Family weights can change at run time.** `0x10006ec9` (Linux demo name `cSC3CitySchemeMgr::UpdateDevelopers`
+  [LINUX-HINT]) removes every resource of type `0x81f53d09` and calls ZoneLayer `vt+0x90(1)`, which re-reads the
+  developers, rules and families. The families are parsed again by SIMGEOM `0x10001250` (called only from
+  `0x10001130`, at `0x10001170`), which fills the family's `{attrib, weight}` vector at `+0x20` and the count at
+  `+0x1c`; family `vt+0x10` returns `+0x1c` (`0x1001adc4`), `vt+0x14` copies that many pairs (`0x100010fe`).
+  [CONFIRMED] Measured: after a City Properties OK the 31 families are parsed again (`62 family parse(s)`).
+- **Save and load.** The stock record `{0x0525A6B9, 0x4525A6E2, 1}` is written by SIMCITY `0x10004ccd` (Linux
+  `cSC3City::SaveCitySchemeInfo`, thiscall, called at SIMCITY `0x10004458`) as three u32 from scheme `vt+0x64`,
+  `vt+0x48`, `vt+0x20` through segment `vt+0x30` / stream `vt+0x88`, and read by SIMINIT `0x10009e1f` (Linux
+  `cSC3CmdLoadCity::SetCityScheme`, thiscall, called at SIMINIT `0x10008f9c`) through segment `vt+0x20` / stream
+  `vt+0x38`. [CONFIRMED] A record under another instance is never asked for by the stock game: a save with the extra
+  stylepick record loads in the stock game (`-Stock`, measured).
+- **What STYLEPICK does** (sc3netmod `sc3netmod_stylepick.c`): City Properties calls SetCityScheme with the current
+  building set, so nothing re-skins, and the picked style plus a "Mix" flag filter each family after it is parsed.
+  A New City keeps building set 0. A loaded city keeps its saved set. Style and flag go to
+  `{0x0525A6B9, 0x4525A6E2, 0x5354594C}`. style_mix 1.1.0 adds North American copies (ids + 2600000, stock
+  exemplars, stock frame tables in `CSAttrib*.IXF` that no set archive holds: 141 of 141 checked) so a city drawn in a
+  set can grow North American art.

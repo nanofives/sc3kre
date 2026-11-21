@@ -9197,6 +9197,7 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_terrpanel"), "Panel de terreno ampliado", "Larger terrain panel" }, NULL, "SC3RESIZE_TERRPANEL" },
     { { SC3KEY("resize.mt_weather"),   "Interruptor de clima",    "Weather switch" },         NULL, "SC3RESIZE_WEATHER" },
     { { SC3KEY("resize.mt_stylemix"),  "Mezcla de estilos",       "Building style mix" },     NULL, "SC3NETMOD_STYLEMIX" },
+    { { SC3KEY("resize.mt_stylepick"), "Estilo: solo edificios nuevos", "Style: new buildings only" }, NULL, "SC3NETMOD_STYLEPICK" },   /* task stylepick */
     { { SC3KEY("resize.mt_lotrect"),   "Edificios no cuadrados",  "Non-square buildings" },   NULL, "SC3PERF_LOT_RECT" },   /* lotdraw: sc3perf LOTRECT */
     { { SC3KEY("resize.mt_hwyspeed"),  "Autos rápidos en autopista", "Faster highway cars" }, NULL, "SC3SIMRUN_HWYSPEED" },
     { { SC3KEY("resize.mt_sandbox"),   "Sandbox: sin abandono",   "Sandbox: no abandonment" }, NULL, "+SC3SIMRUN_SANDBOX" },
@@ -9258,8 +9259,9 @@ static void mt_vis_all(void *win, int on) {
 /* page C controls: mods left, features right, 19 px rows (features 18 px since stylemix 2026-11-18: 15 rows at 19
    pushed the SALTFIX city checkbox to local y 435, onto Volver at 436; 17 px since hwyspeed 2026-11-18: 16 rows at
    18 would put it at 438; at 17 with a 4 px gap under the rows it is at 418; 16 since lotdraw 2026-11-20: 17 feature
-   rows at 16 end where 16 at 17 did, city checkbox still at 418) */
-#define MT_FEAT_DY 16
+   rows at 16 end where 16 at 17 did, city checkbox still at 418; 15 since stylepick 2026-11-21: its 18th row at 16 put
+   the city checkbox at 434, under Volver; 18 rows at 15 end at 354, city checkbox at 417) */
+#define MT_FEAT_DY 15
 /* left column rows under "Simulacion y edificios": 19 px until nopause 2026-11-21, 17 since its fifth row (5 x 19 would
    end at 365, past the features column's 356, and push the city checkbox onto Volver; 5 x 17 ends at 355) */
 #define MT_LEFT_DY 17
@@ -10114,6 +10116,12 @@ static void qi_install(HMODULE sui) {
     if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f") && g_queryid)
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
+
+/* SPMIX (task stylepick 2026-11-21): the box sits under the Buildings icons of City Properties (639x368; the icons
+   end at local y 249, the "user-made buildings" label starts at 292, measured from the dialog children) */
+#define SPX_X 249
+#define SPX_Y 256
+#include "sc3resize_stylepick.c"   /* SPMIX: "Mix all three styles" box in City Properties (SC3RESIZE_SPMIX=0) */
 
 /* ================= GRAPHAXIS (child graphaxis 2026-10-30). Owner: "los graficos deberian tener una barra vertical de
  * referencia a la izquierda, que desaparezca si se encienden muchos graficos".
@@ -18881,6 +18889,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
+          spx_install(sui);  /* SPMIX: "Mix all three styles" box in City Properties (task stylepick) */
           tp_install(sui);   /* TERRPANEL: taller terrain editor panel */
           wx_startup();      /* WEATHER: saved rain and clouds switch */
           cf_install();      /* CHEATFIX */
@@ -18974,6 +18983,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SPMIX", v, sizeof(v))) g_spmix = atoi(v);   /* task stylepick */
           if (GetEnvironmentVariableA("SC3RESIZE_LANDFILL", v, sizeof(v))) g_landfill = atoi(v);   /* task landfill */
           if (GetEnvironmentVariableA("SC3RESIZE_RESTORE", v, sizeof(v))) g_restore = atoi(v);     /* task restore */
           if (GetEnvironmentVariableA("SC3RESIZE_RSICON", v, sizeof(v))) g_rs_icon = atoi(v);      /* round restoreui */

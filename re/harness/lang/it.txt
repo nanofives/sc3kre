@@ -771,3 +771,9 @@ resize.mt_nopause=Nessuna pausa nei pop-up
 perf.ovwarn_files=Un altro mod ha cambiato file che il mod delle strade sostituisce: %s
 # en: The game does not see that change. Details in sc3netmod.log
 perf.ovwarn_hint=Il gioco non vede questa modifica. Dettagli in sc3netmod.log
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Style: new buildings only
+resize.mt_stylepick=Stile: solo edifici nuovi
+# en: Mix all three styles
+resize.sp_mix=Mescola i tre stili

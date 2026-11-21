@@ -640,6 +640,8 @@ resize.mt_stationwarn=Station warnings
 # sc3resize.c
 resize.mt_stylemix=Building style mix
 # sc3resize.c
+resize.mt_stylepick=Style: new buildings only
+# sc3resize.c
 resize.mt_terrpanel=Larger terrain panel
 # sc3resize.c
 resize.mt_title=Turn mods and features on or off
@@ -685,6 +687,8 @@ resize.show_notice=Show notice
 resize.show_profiler=Show profiler
 # sc3resize.c
 resize.smooth=Smooth
+# sc3resize_stylepick.c
+resize.sp_mix=Mix all three styles
 # sc3resize_terrpanel.c
 resize.tp_forest=Dense forest
 # sc3resize_terrpanel.c

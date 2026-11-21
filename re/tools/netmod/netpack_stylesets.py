@@ -91,12 +91,39 @@ def _text(buf, prop, props_fn):
     return None
 
 
+def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, reskinned, pname):
+    """task stylepick (2026-11-21): set "00000000" = North American copies. For every family member that another set
+    of the same manifest re-skins, the BASE exemplar (stock Occupant/*.IXF, verbatim) re-keyed at id + offset. Its
+    prop 0x67 names the stock frame table, which no set archive shadows (sets only shadow the TKB1 exemplar at the base
+    key, BUILDING_PICK.md section 0), so the copy draws the North American art even while a city's own building set
+    is European or Asian. No frame tables or pixels are added. sc3netmod STYLEPICK serves these lines only when a city
+    with a set skin asks for North American art; with STYLEPICK off it drops them, so the stock mix ratio is kept."""
+    exemplars, lines = [], []
+    for bid in sorted(reskinned):
+        nid = bid + offset
+        if nid in stock_buildings:
+            raise StyleError("%s: id %d (%d + offset) already has a stock building exemplar" % (where, nid, bid))
+        if bid not in stock_buildings:
+            raise StyleError("%s: base exemplar %d not found in Apps/Res/Occupant" % (where, bid))
+        exemplars.append((nid, stock_buildings[bid][1]))
+        for f, w in reskinned[bid]:
+            lines.append({"family": f, "id": nid, "weight": w * weight,
+                          "comment": "%d [North American copy]" % bid})
+    if not exemplars:
+        raise StyleError("%s: no other set of this manifest re-skins a family member" % where)
+    return {"set": set_id, "offset": offset, "weight": weight, "where": where, "_pack": pname,
+            "exemplars": exemplars, "tables": [], "pix_group": None, "pixels": [], "lines": lines,
+            "families": sorted({ln["family"] for ln in lines})}
+
+
 def compile_entries(np, stock, man, buildfam, stock_buildings):
     """-> [style dict] for one package. np = the netpack module (TKB1 helpers)."""
     pname = man["name"]
     fams = family_members(stock, buildfam)
     out = []
     seen_sets = set()
+    reskinned = {}                                 # task stylepick: base id -> [(family, weight)] any set re-skins
+    base_spec = None
     for n, s in enumerate(man.get("style_sets", [])):
         where = "%s style_set %d (%s)" % (pname, n + 1, s.get("set"))
         try:
@@ -106,6 +133,9 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
         if set_id in seen_sets:
             raise StyleError("%s: set listed twice" % where)
         seen_sets.add(set_id)
+        if set_id == 0:                            # task stylepick: North American copies, built after the sets
+            base_spec = (n, s, where)
+            continue
         offset, weight = s["offset"], s.get("weight", 1)
         if not isinstance(offset, int) or offset <= 0xFFFF:
             raise StyleError("%s: offset must be an integer above 65535 (ids stay clear of netpack's 16-bit ids)" % where)
@@ -133,6 +163,11 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
                     members.setdefault(bid, []).append((f, w))
         if not members:
             raise StyleError("%s: the set re-skins no family member" % where)
+        for bid, fl in members.items():            # task stylepick: union over the sets, for the base copies
+            have = reskinned.setdefault(bid, [])
+            for fw in fl:
+                if fw not in have:
+                    have.append(fw)
         exemplars, tables, pix_keys, lines = [], {}, [], []
         pix_seen = set()
         for bid in sorted(members):
@@ -168,4 +203,12 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
                     "exemplars": exemplars, "tables": [(k[1], k[2], k[0], p) for k, p in sorted(tables.items())],
                     "pix_group": pix_group, "pixels": pix, "lines": lines,
                     "families": sorted({ln["family"] for ln in lines})})
+    if base_spec:
+        n, s, where = base_spec
+        offset, weight = s["offset"], s.get("weight", 1)
+        if not isinstance(offset, int) or offset <= 0xFFFF:
+            raise StyleError("%s: offset must be an integer above 65535 (ids stay clear of netpack's 16-bit ids)" % where)
+        if not isinstance(weight, int) or weight < 1:
+            raise StyleError("%s: weight must be a positive integer (0 drops the line, SIMGEOM 0x10001250)" % where)
+        out.append(_base_entry(stock, fams, stock_buildings, s, where, 0, offset, weight, reskinned, pname))
     return out
