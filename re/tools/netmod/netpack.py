@@ -1055,7 +1055,8 @@ def merge(stock, packs):
                                                    [(KOREA_CS_GROUP, g["id"], CS_TYPE, g["table"]) for g in growables] +
                                                    [t for st in styles for t in st["tables"]])
     for st in styles:                       # task stylemix: the set's pixels, verbatim, one DAT per set pixel group
-        files[STY.PIX_FILE % st["pix_group"]] = ixf_insert.new_container(st["pixels"])
+        if st["pix_group"] is not None:     # task stylepick: the North American copies ("00000000") add no pixels
+            files[STY.PIX_FILE % st["pix_group"]] = ixf_insert.new_container(st["pixels"])
     if growables or styles:                 # task growable / stylemix: Key lines inserted into BUILDFAM families
         gl = [g for c in comp for g in sorted(c["growables"], key=lambda g: g["id"])]   # package name order, then id
         gl += [ln for c in comp for st in c["style_sets"] for ln in st["lines"]]
@@ -1817,7 +1818,7 @@ def _print_report(report):
         for pic in t["picture"]:
             print("    " + pic.replace("\n", "\n    "))
     for g in report.get("growables", []):                                       # task growable
-        print("  growable %d  base %d  family %d (LandUse %d)  weight %d" % (g["id"], g["base"], g["family"],
+        print("  growable %d  base %d  family %s (LandUse %d)  weight %d" % (g["id"], g["base"], g["family"],
                                                                              g["landuse"], g["weight"]))
     for st in report.get("style_sets", []):                                     # task stylemix
         print("  style set %08x  ids +%d  %d buildings, %d frame tables, %d pixel records, %d family lines in %s"

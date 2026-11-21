@@ -51,6 +51,9 @@ etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
  *    that another mod changed after our install is merged into the served copy (IXF records, SYS.PAK ini lines), using
  *    the stock hashes in mods\netmod\overlay_base.txt; what cannot be merged is logged "### ovmerge" and shown on
  *    screen by sc3perf (OVWARN). SC3NETMOD_OVMERGE=0 turns it off.
+ * 9. STYLEPICK (task stylepick 2026-11-21, sc3netmod_stylepick.c): Options > City Properties no longer re-skins standing
+ *    buildings; the style picked there (and its "Mix" box, sc3resize) decides which style NEW buildings grow, by
+ *    filtering each BUILDFAM family after it is parsed. Saved per city in its own record. SC3NETMOD_STYLEPICK=0 = stock.
  * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
  * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */
@@ -1514,6 +1517,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_avl.c"          /* task avcore: AVL, one-way avenue halves on RBT's hooks (SC3NETMOD_AVL=0) */
 #include "sc3netmod_avp.c"          /* task avpaint: AVP, the avenue look on bands AVL leaves two-way (SC3NETMOD_AVP=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
+#include "sc3netmod_stylepick.c"    /* task stylepick: the building style picks new buildings (SC3NETMOD_STYLEPICK=0) */
 
 /* ============================================================ arming */
 
@@ -1577,6 +1581,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         root_init();
         overlay_init();
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
+        CreateThread(NULL, 0, stylepick_thread, NULL, 0, NULL);   /* STYLEPICK (task stylepick) */
     }
     return TRUE;
 }

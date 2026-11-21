@@ -376,7 +376,7 @@
       "additionalProperties": false,
       "required": ["set", "offset"],
       "properties": {
-        "set": {"type": "string", "pattern": "^[0-9A-Fa-f]{8}$", "description": "The set's folder name under Apps/Res/Sprites/BuildingSets (= its SC3CityScheme.ini [BuildingSets] key): e523f3fb (European names) or 6523f3d5 (Asian names)."},
+        "set": {"type": "string", "pattern": "^[0-9A-Fa-f]{8}$", "description": "The set's folder name under Apps/Res/Sprites/BuildingSets (= its SC3CityScheme.ini [BuildingSets] key): e523f3fb (European names) or 6523f3d5 (Asian names). 00000000 (task stylepick) = North American copies: the stock exemplar of every member another set of the manifest re-skins, so a city whose own building set is European or Asian can still grow North American art (sc3netmod STYLEPICK)."},
         "offset": {"type": "integer", "minimum": 65536, "description": "New occupant id = base id + offset. 400000 (e523f3fb) and 1500000 (6523f3d5) follow the sets' own frame-table numbering and are free."},
         "weight": {"type": "integer", "minimum": 1, "default": 1, "description": "Multiplier on each copied member's stock weight. 1 for every set = each style a third of the time for buildings both sets re-skin."},
         "families": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Only these BUILDFAM families (default: every family)."}

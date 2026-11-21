@@ -771,3 +771,9 @@ resize.mt_nopause=Keine Pause bei Fenstern
 perf.ovwarn_files=Ein anderer Mod hat Dateien geändert, die der Straßenmod ersetzt: %s
 # en: The game does not see that change. Details in sc3netmod.log
 perf.ovwarn_hint=Das Spiel sieht diese Änderung nicht. Details in sc3netmod.log
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Style: new buildings only
+resize.mt_stylepick=Stil nur für neue Gebäude
+# en: Mix all three styles
+resize.sp_mix=Alle drei Stile mischen
