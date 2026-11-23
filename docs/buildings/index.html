@@ -497,6 +497,7 @@ footer a { color: var(--ui-info-text); }
   <li><b>No diagonal houses.</b> The page tells a house set at 45 degrees from its SimCity 4 foundation model and leaves it off. Buildings without a foundation model are not checked.</li>
   <li>Night textures are not used. SimCity 3000 has no night view.</li>
   <li><code>baked</code> brightens the SimCity 4 art to sit with the stock buildings. For SimCity 4's own brightness, set <code>"x_bldrender": {"style": "baked_raw"}</code> in the entry. It looks darker than the stock neighbours.</li>
+  <li>At the closest zoom, <code>baked</code> shows the next zoom's picture at twice the size, as the stock buildings do, so details thinner than about 0.35 m (flagpoles, aerials) can drop out. <code>"x_bldrender": {"style": "baked_sharp"}</code> draws the closest zoom on its own and keeps them (<code>baked_raw_sharp</code> does the same with SimCity 4's own brightness). The building's file grows by about half.</li>
   <li>Parts the page cannot read (other model formats, a view made of pieces that do not fit back into one picture) skip that building with a line in the log.</li>
 </ul>
 <h3 id="sc4props">Lot props: fences, trees and cars</h3>

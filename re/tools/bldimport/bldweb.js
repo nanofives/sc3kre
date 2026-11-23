@@ -249,6 +249,7 @@ function BLDWEB_LIB() {
     contrast: 1.0, grain: 0.0, tone: [0.75, 1.33] });
   STYLES.baked_raw = Object.assign({}, STYLES.baked, { tone: null });
   STYLES.baked_sharp = Object.assign({}, STYLES.baked, { zoom4: 'native' });
+  STYLES.baked_raw_sharp = Object.assign({}, STYLES.baked_raw, { zoom4: 'native' });
   // task sc4trees (bldrender): peel until no sample stands on a transparent texel (was 4 layers: the black patches on
   // converted SC4 trees); every extra peel rasterizes inside the box of the samples still open
   const PEEL_LAYERS = 256;
