@@ -498,7 +498,7 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:var(--ui-type-row);li
         <button id="btnInstall" class="primary" disabled>Install into the game</button>
         <button id="btnRemove" disabled>Remove from the game</button>
       </div>
-      <div class="hint" id="gameHint">Open the models folder, choose the game folder, then Install. Close the game first. The page renders every enabled model (20 pictures each), adds them to the road mod's files in <code>mods\netmod\overlay</code> with backups, and keeps the building ids in <code>sc3build\ids.json</code> next to the models. Landmarks and civic looks go to <code>Apps\PlugIn\bldimport</code>, rewards to <code>Apps\PlugIn\bldimport_rewards</code> (they need the mods loader: <code>sc3mods_patch -Restore</code> moves them out for the stock game). Landmarks and rewards can be 1x1 to 5x5, or a lot that is not square (2x3, 1x4, 4x5, up to 5 cells on each side): such a building needs the mods page row <b>Non-square buildings</b> on in the game, off it draws as one square over bare ground. Remove puts every file back as it was, plugins included.</div>
+      <div class="hint" id="gameHint">Open the models folder, choose the game folder, then Install. Close the game first. The page renders every enabled model (20 pictures each), adds them to the road mod's files in <code>mods\netmod\overlay</code> with backups, and keeps the building ids in <code>sc3build\ids.json</code> next to the models. Landmarks and civic looks go to <code>Apps\PlugIn\bldimport</code>, rewards to <code>Apps\PlugIn\bldimport_rewards</code> (they need the mods loader: <code>sc3mods_patch -Restore</code> moves them out for the stock game). Landmarks, rewards and civic looks can be 1x1 to 5x5, or a lot that is not square (2x3, 1x4, 4x5, up to 5 cells on each side): such a building needs the mods page row <b>Non-square buildings</b> on in the game, off it draws as one square over bare ground. Remove puts every file back as it was, plugins included.</div>
       <details id="zipBox"><summary>No folder access (other browsers, or a game folder the browser refuses)?</summary>
         <p class="hint">The page reads the game folder (the browser asks first, nothing leaves the computer) and downloads a .zip of the files to put into it: unpack it into the game folder and let it replace files. A folder the page cannot write to also gets <code>ids.json</code> as a download: put it in the models folder's <code>sc3build</code> folder so the next install keeps the same building ids.</p>
         <div class="btnrow"><button id="btnZipInstall">Make the install .zip</button><button id="btnZipRemove">Make the removal .zip</button></div>
@@ -588,8 +588,9 @@ const PORT_KINDS = {
 // menu, once per city (re/analysis/PLOPPABLES.md); lots 1x1 to 4x4, the weight is not used. Task lotshape (2026-11-20):
 // landmarks and rewards 1x1 to 5x5, and lots that are not square (w x d, 1 to 5 each: bldimport RECT_KINDS)
 const LANDMARK_KIND = { sizes: [1, 2, 3, 4, 5], what: "the game's landmark menu (placed by the player, one per city; stats of a stock landmark of that lot: Big Ben, Coit Tower, Arc de Triomphe, Palace of Fine Arts, San Francisco City Hall)" };
-const RECT_KINDS = ['landmark', 'reward'], RECT_MAX = 5;
-const NONSQUARE_NOTE = "A landmark or reward on a lot that is not square (2x3, 1x4, ...) needs the mods page row Non-square buildings on in the game; off, it draws as one square over bare ground";
+// task civlot (2026-11-23): civic looks too (their own lot, the stock building's type, coverage and price)
+const RECT_KINDS = ['landmark', 'reward', 'civic'], RECT_MAX = 5;
+const NONSQUARE_NOTE = "A landmark, reward or civic look on a lot that is not square (2x3, 1x4, ...) needs the mods page row Non-square buildings on in the game; off, it draws as one square over bare ground";
 const lotText = l => (Array.isArray(l) ? l[0] + 'x' + l[1] : l + 'x' + l);
 // task civmod (2026-11-19): bldimport.py / bldweb.js CIVIC and REWARD (re/analysis/CIVIC_REWARD.md 5). A civic look is a
 // copy of the stock building one civic button places (same type, coverage, price, lot): each press of that button builds
@@ -1055,7 +1056,7 @@ function zoneOf(c) { return c[0] === 9300 ? 'F' : c[1]; }
 function warnings(rec) {
   const w = [], m = rec.meta, cell = rules.cell_m || 16;
   if (rec.err) w.push('could not load: ' + rec.err);
-  if (!RECT_KINDS.includes(m.kind) && m.kind !== 'ploppable' && !rec.bld && m.lot && m.lot[0] !== m.lot[1]) w.push(`only landmarks and rewards can have a lot that is not square (${m.lot[0]}x${m.lot[1]}): bldimport skips this one`);
+  if (!RECT_KINDS.includes(m.kind) && m.kind !== 'ploppable' && !rec.bld && m.lot && m.lot[0] !== m.lot[1]) w.push(`only landmarks, rewards and civic looks can have a lot that is not square (${m.lot[0]}x${m.lot[1]}): bldimport skips this one`);
   if (m.kind === 'growable') {
     if (m.class == null) w.push('growable without a class');
     else if (!CLS.has(m.class)) w.push('class ' + m.class + ' is not in the lot class table');
@@ -1077,8 +1078,11 @@ function warnings(rec) {
     const b = CIVIC_BY.get(m.base);
     if (!b) w.push('a civic look needs its button (Base): bldimport skips this one');
     else {
-      const n = rec.bld ? rec.bld.lot : (m.lot ? m.lot[0] : b[2]);
-      if (n !== b[2] || (!rec.bld && m.lot && m.lot[0] !== m.lot[1])) w.push(`a ${b[1]} look keeps the stock lot, ${b[2]}x${b[2]}: bldimport skips this one`);
+      // task civlot: any lot 1 to 5 cells on each side; the look keeps the stock building's type, coverage and price
+      const l = rec.bld ? [rec.bld.lot, rec.bld.lot] : (m.lot || [b[2], b[2]]);
+      if (!rec.bld && rectBad(l)) w.push(`civic looks are 1 to ${RECT_MAX} cells on each side (1x1 to 5x5, or a lot that is not square such as 2x3): bldimport skips this one`);
+      else if (l[0] !== b[2] || l[1] !== b[2]) w.push(`lot ${l[0]}x${l[1]}, the stock ${b[1]} is ${b[2]}x${b[2]}: same service, coverage radius and price on the look's own lot`);
+      if (!rec.bld && !rectBad(l) && l[0] > l[1]) w.push(`installed turned a quarter, as ${l[1]}x${l[0]}: a civic look's lot keeps its short side first (a saved one whose look is gone comes back as the stock building of that short side)`);
     }
     if (m.description && BW.cp1252Encode(m.description.trim()) === null) w.push("the description has characters the game's text files cannot hold (Windows-1252): bldimport skips this one");
   }
@@ -1481,7 +1485,7 @@ function buildForm() {
   row('Class', el.class);
   el.lot = document.createElement('select');
   fillLots(false); row('Lot', el.lot);
-  el.lot.title = 'Lot in cells (16 m), width x depth along the model\'s x and z. Landmarks and rewards: 1 to 5 cells on each side; a lot that is not square needs the mods page row Non-square buildings on in the game.';
+  el.lot.title = 'Lot in cells (16 m), width x depth along the model\'s x and z. Landmarks, rewards and civic looks: 1 to 5 cells on each side; a lot that is not square needs the mods page row Non-square buildings on in the game.';
   for (const [k, lab, step] of [['weight', 'Weight', 1], ['height_m', 'Height (m)', 0.1], ['scale', 'Scale', 0.05], ['rotate_deg', 'Rotate (deg)', 90]]) {
     el[k] = Object.assign(document.createElement('input'), { type: 'number', step }); row(lab, el[k]);
   }
@@ -1492,7 +1496,7 @@ function buildForm() {
   el.description = Object.assign(document.createElement('input'), { type: 'text', maxLength: 120, placeholder: 'line under the name in the landmark menu' });
   el.descRow = row('Description', el.description); el.descRow.hidden = true;
   el.description.title = "The line under the landmark's name in the game's landmark menu (stock landmarks show the city they stand in). Empty: the name again.";
-  // civmod: shown for civic looks only (the button, which fixes the lot) and rewards only (population, year)
+  // civmod: shown for civic looks only (the button; its stock lot is the default lot) and rewards only (population, year)
   el.base = document.createElement('select');
   CIVIC_BASES.forEach(b => el.base.add(new Option(`${b[1]} (${b[2]}x${b[2]})`, b[0])));
   el.baseRow = row('Base', el.base); el.baseRow.hidden = true;
@@ -1528,8 +1532,8 @@ function buildForm() {
   el.notes.onchange = edit('notes', (r, t) => { r.meta.notes = t.value; });
   el.description.onchange = edit('description', (r, t) => { r.meta.description = t.value.trim(); });
 }
-// task lotshape: the Lot choices. Squares 1x1 to 4x4 for every kind; landmarks and rewards also 5x5 and every w x d with w
-// and d from 1 to 5 (bldimport RECT_KINDS)
+// task lotshape: the Lot choices. Squares 1x1 to 4x4 for every kind; landmarks, rewards and civic looks (civlot) also 5x5
+// and every w x d with w and d from 1 to 5 (bldimport RECT_KINDS)
 function fillLots(rect) {
   if (el.lot.dataset.rect === String(rect)) return;
   el.lot.dataset.rect = String(rect);

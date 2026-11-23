@@ -34,8 +34,8 @@ Writes the civic look / reward test models (bldimport kinds civic and reward, pl
   obelisk_2x2.obj         reward "Test reward obelisk", population 1000 (unlocks in any city past 1,000 people)
   reward_locked.obj       reward "Test locked reward", population 100,000,000 (stays locked)
   pavilion_3x3.obj        landmark "Test pavilion" (type 18000: the Mover fix)
-  models.json             those four, plus entries bldimport must refuse: a police look 2x2 (the base is 3x3), a civic
-                          look of an unknown base, a reward named with a ';'
+  models.json             those four, a police look on a 2x2 lot (refused until task civlot, the base is 3x3), plus
+                          entries bldimport must refuse: a civic look of an unknown base, a reward named with a ';'
     py -3.12 re/tools/bldimport/make_testmodels.py --civtest <out folder>   (task civtest, 2026-11-19)
 
 Writes one civic look for every one of the 17 civic buttons (civic_<base>.obj: a block on the base's own lot, a colour
@@ -51,7 +51,8 @@ one school look. Every other civic button has none, so it must stay stock.
 Writes non-square landmarks and rewards (re/analysis/LOT_SHAPES.md 8, they need sc3perf LOTRECT in game): a hall on a
 2x3 lot and one on a 3x2 lot (a long block, a tall tower at its +z end, a red -x wall), a 1x4 reward tower row, a 5x5
 reward spire and a 5x4 landmark court, one 2x3 landmark wider than its lot (the overhang note), and entries bldimport must
-refuse: a 2x3 growable, a 2x6 landmark, a police look on a 3x2 lot, a 1x2 seaport.
+refuse: a 2x3 growable, a 2x6 landmark, a 1x2 seaport. Task civlot (2026-11-23): a police look hall on a 3x2 lot
+(installed turned a quarter as 2x3) and a Small Park look on a 2x3 lot (refused before civlot).
 """
 import json
 import math
@@ -508,8 +509,8 @@ def civmod(out):
              population=100000000, height_m=28.5, notes="stays locked"),
         dict(common, file="pavilion_3x3.obj", name="Test pavilion", kind="landmark", lot=[3, 3], height_m=22.4,
              notes="landmark, type 18000: Mover"),
-        dict(common, file="police_2x2.obj", name="Refused: police 2x2", kind="civic", base="police", lot=[2, 2],
-             height_m=12.0, notes="a police look keeps the 3x3 lot: skipped"),
+        dict(common, file="police_2x2.obj", name="Test police look 2x2", kind="civic", base="police", lot=[2, 2],
+             height_m=12.0, notes="task civlot: a police look on a 2x2 lot, stats of stock 0xD2 (refused before)"),
         dict(common, file="civic_unknown.obj", name="Refused: unknown base", kind="civic", base="castle",
              height_m=12.0, notes="no such civic button: skipped"),
         dict(common, file="reward_semicolon.obj", name="Refused; semicolon", kind="reward", lot=[2, 2],
@@ -653,7 +654,7 @@ def hall(folder, name, w, d, tower=True, over=0.0):
 
 
 def lotshape(out):
-    """Task lotshape: non-square landmarks and rewards, 5x5, and entries to refuse."""
+    """Task lotshape: non-square landmarks and rewards, 5x5, and entries to refuse (civlot: two civic looks)."""
     os.makedirs(out, exist_ok=True)
     common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True, "weight": 1}
     hall(out, "hall_2x3", 2, 3)
@@ -664,7 +665,8 @@ def lotshape(out):
     hall(out, "wide_2x3", 2, 3, over=6.0)
     hall(out, "grow_2x3", 2, 3)
     hall(out, "landmark_2x6", 2, 6)
-    police_3x3(out, "police_3x2")
+    hall(out, "police_3x2", 3, 2)
+    hall(out, "park_2x3", 2, 3, tower=False)
     hall(out, "seaport_1x2", 1, 2)
     models = [
         dict(common, file="hall_2x3.obj", name="Test hall 2x3", kind="landmark", lot=[2, 3], height_m=35.0,
@@ -683,8 +685,10 @@ def lotshape(out):
              notes="growables stay square: skipped", **{"class": 3500}),
         dict(common, file="landmark_2x6.obj", name="Refused: landmark 2x6", kind="landmark", lot=[2, 6],
              height_m=35.0, notes="a side longer than 5: skipped"),
-        dict(common, file="police_3x2.obj", name="Refused: police 3x2", kind="civic", base="police", lot=[3, 2],
-             height_m=12.0, notes="a civic look keeps its base's lot: skipped"),
+        dict(common, file="police_3x2.obj", name="Test police look 3x2", kind="civic", base="police", lot=[3, 2],
+             height_m=35.0, notes="task civlot: installed turned a quarter as 2x3 (X <= Z), stats of stock 0xD2"),
+        dict(common, file="park_2x3.obj", name="Test park look 2x3", kind="civic", base="small_park", lot=[2, 3],
+             height_m=12.0, notes="task civlot: a Small Park look on a 2x3 lot (the stock one is 1x1)"),
         dict(common, file="seaport_1x2.obj", name="Refused: seaport 1x2", kind="seaport", lot=[1, 2], weight=1,
              height_m=35.0, notes="ports stay square: skipped")]
     with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:

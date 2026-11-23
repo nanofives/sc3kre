@@ -62,8 +62,8 @@ from 1 to 5 each. prop 0x66 = (w, the base's height, d) = (SizeInCellsX, height,
 of the longer side (the square the lot fits in); the frames are drawn for the w x d lot (bldrender: slots 0 and 2 are
 w x d, 1 and 3 d x w, anchor at the lot's left vertex). The game places, saves, moves and bulldozes such a building as
 it is, but draws it whole only with sc3perf's LOTRECT patch (mods page row "Non-square buildings"); without it the
-sprite is registered as w x w. Growables, ports and civic looks stay square (the zone developer lays out square lots
-only, SIMRCI 0x10027699).
+sprite is registered as w x w. Growables and ports stay square (the zone developer lays out square lots only, SIMRCI
+0x10027699). Civic looks take any lot since task civlot (below).
 
 Civic looks and new rewards (task civmod, 2026-11-19, re/analysis/CIVIC_REWARD.md): two more plugin kinds (exemplar,
 name, line under the name, frame table, pixels as for a landmark). Civic looks go into bldimport.pin / .dat, rewards into
@@ -73,12 +73,18 @@ rewards out of PlugIn for the stock game. sc3resize (CIVVAR / NEWREWARD) makes t
   "kind": "civic"   a second look for a stock civic button. models.json fields:
                       base         the button: police, jail, fire, hospital, school, college, library, museum, small_park,
                                    big_park, zoo, baseball, playground, pond, fountain, bus_stop, train_station (CIVIC)
-                      lot          optional, must be the base's lot (police 3x3, library 2x2, small_park 1x1, ...)
+                      lot          optional, default the base's lot (police 3x3, library 2x2, small_park 1x1, ...).
+                                   Task civlot (2026-11-23): any lot 1x1 to 5x5 or [w, d] (1..5 each), as landmarks;
+                                   the look keeps the base's type, coverage radius and price on it. A [w, d] with
+                                   w > d is stored turned a quarter (lot d x w, model turned 90 degrees): a saved look
+                                   whose key is gone comes back as an X x X exemplar of its type (SIMINIT 0x1000cb3d),
+                                   which must fit inside the lot.
                       description  optional: the line under the name; else the base's own
                     The exemplar is the base's own (same type id, coverage, price, prop 0x65 kept). Each press of the
                     stock button builds the next look: the stock building, then the civic entries of that base in
                     models.json order, then the stock one again. Written to bldimport_civic.ini [Variants] / [Names].
-                    Without the plugin a placed look comes back as the stock building of its type (measured).
+                    Without the plugin a placed look comes back as the stock building of its type (measured) when
+                    it is on the stock lot; on another lot it comes back as an empty lot (civlot).
   "kind": "reward"  a new entry of Rewards and Opportunities. models.json fields:
                       lot          1x1 to 5x5, or [w, d] (task lotshape); stats of the first stock reward of that
                                    lot (REWARD), of the longer side for [w, d]
@@ -245,8 +251,20 @@ def ids_for(folder, models):
     return ids
 
 
-RECT_KINDS = ("landmark", "reward")      # task lotshape: the kinds that may have a w x d lot, and 5x5
+RECT_KINDS = ("landmark", "reward", "civic")   # task lotshape: the kinds that may have a w x d lot, and 5x5 (civic: civlot)
 RECT_MAX = 5
+
+
+def civic_turn(kind, n):
+    """Task civlot: a civic look on a w x d lot with w > d is stored turned a quarter (lot d x w, the model turned 90
+    degrees, sc3slot groups s -> s - 1): a saved look whose key is gone comes back as an X x X exemplar of its type
+    (SIMGEOM 0x100038a8 -> SIMINIT 0x1000cb3d), so X must be the short side or the stock station overlaps the neighbours."""
+    return kind == "civic" and isinstance(n, (tuple, list)) and n[0] > n[1]
+
+
+def turned_model(m):
+    """The entry turned a quarter (civic_turn): rotate_deg + 90 and the render marker _quarter (render_key, render_one)."""
+    return dict(m, rotate_deg=m.get("rotate_deg", 0) + 90, _quarter=1)
 
 
 def lot_of(m, rect=False):
@@ -255,7 +273,7 @@ def lot_of(m, rect=False):
     if not (isinstance(lot, list) and len(lot) == 2 and all(isinstance(x, int) for x in lot)):
         return None, "lot %r is not [n, n]" % (lot,)
     if rect and not all(1 <= x <= RECT_MAX for x in lot):
-        return None, "lot %dx%d: landmarks and rewards are 1 to %d cells on each side" % (lot[0], lot[1], RECT_MAX)
+        return None, "lot %dx%d: landmarks, rewards and civic looks are 1 to %d cells on each side" % (lot[0], lot[1], RECT_MAX)
     if lot[0] != lot[1]:
         if rect:
             return (lot[0], lot[1]), None
@@ -369,8 +387,9 @@ def landmark_table(game):
 
 
 def civic_table(game):
-    """-> {"civic:<base>": {"bases" {size: (instance, file)}, "landuse", "label", ...}} for every CIVIC base (task civmod).
-    One size per base: the base's own square lot (a copy keeps the base's coverage, so it keeps its lot too)."""
+    """-> {"civic:<base>": {"bases" {size: (instance, file)}, "lot", "landuse", "label", ...}} for every CIVIC base (task
+    civmod). Task civlot: every lot 1..RECT_MAX takes the button's own exemplar (its type, coverage and price; prop 0x66
+    rewritten to the look's lot); "lot" = the stock building's square lot, the default."""
     bld = BG.stock_buildings(game)
     out = {}
     for name, inst in CIVIC.items():
@@ -380,7 +399,8 @@ def civic_table(game):
         fp, lu, cs = BG.tkb1_get(p, 0x66), BG.tkb1_get(p, 0x65), BG.tkb1_get(p, 0x67)
         if not fp or fp[0] != fp[2] or not lu or not cs or cs[0] != CS_TYPE:
             raise ImportError_("civic %s: stock exemplar 0x%X is not a square plain building" % (name, inst))
-        out["civic:" + name] = {"families": [], "bases": {fp[0]: (inst, f)}, "landuse": lu[0], "copies": False,
+        out["civic:" + name] = {"families": [], "bases": {s: (inst, f) for s in range(1, RECT_MAX + 1)}, "lot": fp[0],
+                                "landuse": lu[0], "copies": False,
                                 "label": "Civic look of %s" % BG.tkb1_get(p, 0x64).decode("cp1252")}
     return out
 
@@ -568,7 +588,8 @@ def render_key(folder, m, n, game=None):
             _sha_file(side, h)
         h.update(json.dumps([n, bld_art(m), game is not None, bld_style(m)]).encode())
     else:
-        h.update(json.dumps([n, m.get("scale", 1.0), m.get("rotate_deg", 0), opts(m)], sort_keys=True).encode())
+        h.update(json.dumps([n, m.get("scale", 1.0), m.get("rotate_deg", 0), opts(m)] + (["quarter"] if m.get("_quarter")
+                            else []), sort_keys=True).encode())
     return h.hexdigest()
 
 
@@ -601,6 +622,9 @@ def render_one(folder, m, n, force=False, log=print, game=None):
         return _cache_frames(d, fr, key, info, n, m), info
     o = opts(m)
     mesh = R.load_obj(os.path.join(folder, m["file"]))
+    if m.get("_quarter") and mesh.get("slot") is not None:     # task civlot: turned a quarter, slot r shows view r + 1
+        import numpy as np
+        mesh = dict(mesh, slot=np.where(mesh["slot"] >= 0, (mesh["slot"] - 1) % 4, mesh["slot"]))
     mt, info = R.place(mesh, n, cell_m=o["cell_m"], scale=float(m.get("scale", 1.0)),
                        rotate_deg=float(m.get("rotate_deg", 0)))
     info["triangles"] = int(len(mesh["tri"]))
@@ -655,8 +679,10 @@ def plan(folder, game, log=print):
         kind0 = m.get("kind", "growable")
         base = m.get("base")
         if kind0 == "civic" and "lot" not in m and civic and isinstance(base, str) and "civic:" + base in civic:
-            m = dict(m, lot=[next(iter(civic["civic:" + base]["bases"]))] * 2)   # civic: the base's lot by default
+            m = dict(m, lot=[civic["civic:" + base]["lot"]] * 2)   # civic: the base's lot by default
         n, lot_err = lot_of(m, rect=kind0 in RECT_KINDS)
+        if not lot_err and civic_turn(kind0, n):          # task civlot: the short side first (X <= Z)
+            n, m = (n[1], n[0]), turned_model(m)
         if is_bld(f) and os.path.isfile(os.path.join(folder, f)) and not lot_err:
             try:
                 bl = BF.read_bld(os.path.join(folder, f))["lot"]
@@ -678,9 +704,6 @@ def plan(folder, game, log=print):
             why = "kind %r: only growable, airport, seaport, landmark, civic and reward buildings" % (kind,)
         elif kind == "civic" and not (isinstance(base, str) and base in CIVIC):
             why = "civic base %r: one of %s" % (base, ", ".join(sorted(CIVIC)))
-        elif kind == "civic" and civic is not None and not lot_err and n not in civic["civic:" + base]["bases"]:
-            why = "civic lot %dx%d: a %s look keeps the stock lot, %s" % (n, n, base, " ".join(
-                "%dx%d" % (s, s) for s in civic["civic:" + base]["bases"]))
         elif kind == "reward" and not (isinstance(pop, int) and 0 <= pop <= 100000000):
             why = "population %r is not a whole number from 0 to 100000000" % (pop,)
         elif kind == "reward" and not (isinstance(year, int) and 0 <= year <= 9999):
@@ -737,6 +760,8 @@ def plan(folder, game, log=print):
             cls = nid                                                   # its own type id = its id
         out.append({"id": nid, "file": f, "name": name, "lot": n, "class": cls, "weight": w, "model": m,
                     "kind": kind if (port is not None or lm) else "growable"})
+        if m.get("_quarter"):
+            out[-1]["turned"] = True
         if lm:
             out[-1]["desc"] = desc
         if kind == "civic":
@@ -881,8 +906,8 @@ def build_files(folder, game, src, log=print, force_render=False):
             ex = tkb1_set_u32(ex, 0x65, lu)     # landmark 18000, reward its own type; a civic look keeps the base's
         if lm and e["desc"] is not None:
             ex = BG.tkb1_set_key(ex, 0x7C, (TEXT_TYPE, LM_DESC_GROUP, nid))
-        if isinstance(n, (tuple, list)):        # task lotshape: prop 0x66 = (w, the base's height, d)
-            ex = tkb1_set_footprint(ex, n)
+        if isinstance(n, (tuple, list)) or e["kind"] == "civic":   # task lotshape: prop 0x66 = (w, the base's height, d)
+            ex = tkb1_set_footprint(ex, lot_wd(n))                   # (civlot: a civic look on any lot)
         BG.tkb1_props(ex)
         if lm:
             precs, pkeys = (rw_recs, rw_keys) if e["kind"] == "reward" else (lm_recs, lm_keys)
@@ -916,7 +941,8 @@ def build_files(folder, game, src, log=print, force_render=False):
         if lm:
             extra = (", type %d, unlocks at population %d%s" % (nid, e["population"], ", year %d" % e["year"] if e["year"]
                      else "") if e["kind"] == "reward" else ", type %d, look %d of the button" % (
-                     lu, len(civ_lines[base]) + 1) if e["kind"] == "civic" else "")
+                     lu, len(civ_lines[base]) + 1) + (" (turned a quarter: the short side first)" if e.get("turned") else "")
+                     if e["kind"] == "civic" else "")
             rep.append("plop  [%d] %s: \"%s\", %s, %s, stats of stock %d%s, in %s, %s%s" % (
                 nid, e["file"], e["name"], tg["label"], lot_str(n), base, extra, RW_PIN if e["kind"] == "reward" else LM_PIN, describe(info),
                 ", %d magenta px nudged" % nudged if nudged else ""))

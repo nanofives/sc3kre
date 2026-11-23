@@ -1829,12 +1829,12 @@ function SC4WEB_LIB(B) {
 
   // convert(sources, opt) -> { files: Map rel -> Uint8Array (OBJ, MTL, PNG, models.json), models, report }
   //   opt.old: the previous models.json text (keeps the fields the player changed since the converter wrote them)
-  //   opt.all, opt.style ('baked'), opt.fill (true), opt.log, opt.progress(i, n)
+  //   opt.all, opt.style ('baked_sharp' since 2026-11-23, was 'baked'), opt.fill (true), opt.log, opt.progress(i, n)
   //   opt.diagonal: treat buildings set at 45 degrees as any other (sc4conv.py --diagonal; default: off, with a note)
   //   opt.growables: from an SC4 install, also its shops, offices, industry and farms, all off (--growables, task sc4ci)
   //   opt.only: a comma list of exemplar names or designs (sc4conv.py --only)
   async function convert(sources, opt = {}) {
-    const log = opt.log || (() => {}), style = opt.style || 'baked', fill = opt.fill !== false;
+    const log = opt.log || (() => {}), style = opt.style || 'baked_sharp', fill = opt.fill !== false;
     const idx = await buildIndex(sources, log);
     if (idx.install) await fetchTypes(idx, [T_EXEMPLAR, T_COHORT, T_LTEXT, T_LUA]);   // task sc4civ: by slices
     let [bs, lots] = buildings(idx);
@@ -2297,11 +2297,15 @@ function SC4WEB_LIB(B) {
         base = svc[0];
         why = 'SC4 civic building, service ' + base + ' (groups ' + groupsHex(gs).join(', ') + '): SC3 ' + CIVIC_LABEL[base];
       }
-      const bl = CIVIC_LOT[base], ok = n <= bl;
-      let note = why + '. A look of the SC3 ' + CIVIC_LABEL[base] + " button: the stock building's type, coverage and price on its " + bl + 'x' + bl + ' lot.';
-      if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + '.';
+      const bl = CIVIC_LOT[base], sq = n;
+      n = realLot(b, lots) || n;   // task civlot: SC4's own lot when it fits 5x5, else the smallest square
+      const ok = lotWd(n).every(v => LANDMARK_LOTS.includes(v));
+      let note = why + '. A look of the SC3 ' + CIVIC_LABEL[base] + " button: the stock building's type, coverage and price (the stock one is " + bl + 'x' + bl + ').';
+      if (!ok) note += ' Off: its ' + size + ' needs ' + n + 'x' + n + ' and SC3 civic looks are 1x1 to 5x5.';
       if (rwn) note += ' ' + rwn + '; in SC3 it is a look like the others.';
-      return { kind: 'civic', base, lot: bl, ok, why, note, x };
+      note += lotNote(n, sq);
+      if (Array.isArray(n) && n[0] > n[1]) note += ' Installed turned a quarter, as ' + n[1] + 'x' + n[0] + ': a civic look keeps its short side first.';
+      return { kind: 'civic', base, lot: n, ok, why, note, x };
     }
     const sq = n;
     if ((sk === 'reward' || sk === 'landmark') && !why0) n = realLot(b, lots) || n;   // task lotshape: SC4's own lot

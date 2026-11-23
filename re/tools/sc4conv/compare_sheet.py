@@ -374,9 +374,17 @@ CLASS_WORDS = {'51': 'Shops', '55': 'Shops', '57': 'Shops', '61': 'Shops', '67':
                '85': 'Manufacturing', '87': 'High-tech industry', '93': 'Farm'}
 
 
+def turn_of(m):
+    """Task civlot: 1 when bldimport installs the entry turned a quarter (a civic look on w x d with w > d is stored d x w,
+    bldimport.civic_turn): its SC3 frame slot s then shows the model's slot s + 1, so SC4's view of model slot s is in
+    frame (s - 1) % 4."""
+    lot = m.get('lot')
+    return 1 if m.get('kind') == 'civic' and isinstance(lot, list) and len(lot) == 2 and lot[0] > lot[1] else 0
+
+
 def subtitle(m):
     ex = m['x_sc4']['exemplar']
-    n = '%dx%d' % tuple(m['lot'])
+    n = '%dx%d' % (tuple(m['lot'][::-1]) if turn_of(m) else tuple(m['lot']))   # the lot the game holds (civlot)
     if m['kind'] == 'reward':
         return 'Reward building, %s lot in SimCity 3000' % n
     if m['kind'] == 'landmark':
@@ -499,7 +507,8 @@ def compose(title, sub, cols, out, game=None, W=1280, max_scale=1.75, max_h=560,
 
 def rotations(ins, b, m, sc3dir, out, W=1280):
     """One building in its four views: SC4 on the top row, SC3 below, the same side of the building in a column."""
-    pairs = [(m['x_sc4']['views']['slot%d' % s], s) for s in (3, 2, 1, 0)]
+    t = turn_of(m)                      # task civlot: SC4's view of model slot s is SC3 frame (s - t) % 4
+    pairs = [(m['x_sc4']['views']['slot%d' % s], (s - t) % 4) for s in (3, 2, 1, 0)]
     M, G = 30, 16
     cw = (W - 2 * M - 3 * G) // 4
     sc3 = [Image.open(os.path.join(sc3dir, 'z4_r%d.png' % s)).convert('RGBA') for _, s in pairs]
@@ -554,9 +563,11 @@ def main(argv):
             continue
         sc3dir = os.path.join(a.conv, 'sc3build', m['file'][:-4])
         games = [g for g in ing.get(ex) or [] if g.get('score', 0) <= MATCH_MAX]   # a clear match only
-        games.sort(key=lambda g: g['slot'] != 3)                                  # SC4's front view first
-        slot = games[0]['slot'] if games else 3
-        r = V.VIEW_NAMES.index(m['x_sc4']['views']['slot%d' % slot])
+        t = turn_of(m)                                                            # task civlot: turned a quarter
+        front = (3 - t) % 4
+        games.sort(key=lambda g: g['slot'] != front)                              # SC4's front view first
+        slot = games[0]['slot'] if games else front
+        r = V.VIEW_NAMES.index(m['x_sc4']['views']['slot%d' % ((slot + t) % 4)])
         frame = Image.open(os.path.join(sc3dir, 'z4_r%d.png' % slot)).convert('RGBA')
         cols = [('SimCity 4', 'sc4', lambda s, b=b, r=r: sc4_render(ins, b, r, s)[0]),
                 ('SimCity 3000', 'sc3', frame)]

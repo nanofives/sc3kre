@@ -249,3 +249,9 @@ Code: `re/tools/bldimport/bldimport.py`, `bldrender.py`, `bldweb.js` (the page's
   frame by kb - 2 quarter turns) when both sides are 1..5 and the footprint fits it, else the smallest square (now up to
   5x5). The props window and the lot-texture canvas are w x d (`props.plan`, `lottex.composite`). Growables keep the
   smallest square.
+
+## 10. Civic looks (civlot, round 2026-11-23b)
+
+Civic looks take [w, d] too (CIVIC_REWARD.md 8): kind civic is in RECT_KINDS, stats from the button's own exemplar.
+One extra rule for them: X <= Z, because a saved look whose key is gone comes back as a square exemplar of its type with
+side = the saved X (SIMGEOM `0x100038a8` -> SIMINIT `0x1000cb3d`). A w > d civic lot is installed turned a quarter.

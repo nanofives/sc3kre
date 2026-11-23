@@ -1805,7 +1805,8 @@ function BLDWEB_LIB() {
       const fp = tkb1Get(p, 0x66), lu = tkb1Get(p, 0x65), cs = tkb1Get(p, 0x67);
       if (!(fp && fp.length) || fp[0] !== fp[2] || !(lu && lu.length) || !(cs && cs.length) || cs[0] !== CS_TYPE)
         throw new BldError('civic ' + name + ': stock exemplar 0x' + inst.toString(16).toUpperCase() + ' is not a square plain building');
-      out.set('civic:' + name, { families: [], bases: new Map([[fp[0], [inst, f]]]), landuse: lu[0], copies: false,
+      // task civlot: every lot 1..RECT_MAX takes the button's own exemplar; lot = the stock building's square lot
+      out.set('civic:' + name, { families: [], bases: new Map([1, 2, 3, 4, 5].map(s_ => [s_, [inst, f]])), lot: fp[0], landuse: lu[0], copies: false,
         label: 'Civic look of ' + latin1(tkb1Get(p, 0x64)) });
     }
     game._civic = out;
@@ -2232,12 +2233,15 @@ function BLDWEB_LIB() {
     return ids;
   }
   // task lotshape: bldimport.RECT_KINDS / lot_of(m, rect) / lot_wd / lot_base / lot_str. lot = n (square) or [w, d]
-  const RECT_KINDS = ['landmark', 'reward'], RECT_MAX = 5;
+  const RECT_KINDS = ['landmark', 'reward', 'civic'], RECT_MAX = 5;   // civic: task civlot
+  // task civlot: bldimport.civic_turn / turned_model. A civic look on w x d with w > d is stored turned a quarter (lot d x w)
+  const civicTurn = (kind, n) => kind === 'civic' && Array.isArray(n) && n[0] > n[1];
+  const turnedModel = m => Object.assign({}, m, { rotate_deg: ('rotate_deg' in m ? m.rotate_deg : 0) + 90, _quarter: 1 });
   function lotOf(m, rect) {
     const lot = 'lot' in m ? m.lot : [1, 1];
     if (!(Array.isArray(lot) && lot.length === 2 && lot.every(x => Number.isInteger(x) || typeof x === 'boolean'))) return [null, 'lot ' + JSON.stringify(lot) + ' is not [n, n]'];
     const a = +lot[0], b = +lot[1];
-    if (rect && !(1 <= a && a <= RECT_MAX && 1 <= b && b <= RECT_MAX)) return [null, 'lot ' + a + 'x' + b + ': landmarks and rewards are 1 to ' + RECT_MAX + ' cells on each side'];
+    if (rect && !(1 <= a && a <= RECT_MAX && 1 <= b && b <= RECT_MAX)) return [null, 'lot ' + a + 'x' + b + ': landmarks, rewards and civic looks are 1 to ' + RECT_MAX + ' cells on each side'];
     if (a !== b) return rect ? [[a, b], null] : [null, 'lot ' + a + 'x' + b + ': only square lots grow (every stock base is n x n)'];
     if (!rect && !(1 <= a && a <= 4)) return [null, 'lot ' + a + 'x' + b + ': growables are 1x1 to 4x4'];
     return [a, null];
@@ -2268,10 +2272,11 @@ function BLDWEB_LIB() {
       let why = null;
       const base = 'base' in m ? m.base : null;
       if (('kind' in m ? m.kind : 'growable') === 'civic' && !('lot' in m) && civic && typeof base === 'string' && civic.has('civic:' + base)) {
-        const s0 = [...civic.get('civic:' + base).bases.keys()][0];
+        const s0 = civic.get('civic:' + base).lot;
         m = Object.assign({}, m, { lot: [s0, s0] });   // civic: the base's lot by default
       }
       let [n, lotErr] = lotOf(m, RECT_KINDS.includes('kind' in m ? m.kind : 'growable'));
+      if (!lotErr && civicTurn('kind' in m ? m.kind : 'growable', n)) { n = [n[1], n[0]]; m = turnedModel(m); }   // task civlot: X <= Z
       const exists = typeof f === 'string' && !!(await folder.exists(f));
       if (isBld(f) && exists && !lotErr) {
         try { const bl = readBld(await folder.get(f), f).lot; if ('lot' in m && n !== bl) lotErr = 'lot ' + lotStr(n) + ' in models.json, the .bld file is ' + bl + 'x' + bl; n = bl; }
@@ -2285,7 +2290,6 @@ function BLDWEB_LIB() {
       if (!pyTrue('enabled' in m ? m.enabled : true)) why = 'enabled is false';
       else if (kind !== 'growable' && port === null && !lm) why = 'kind ' + JSON.stringify(kind) + ': only growable, airport, seaport, landmark, civic and reward buildings';
       else if (kind === 'civic' && !(typeof base === 'string' && Object.prototype.hasOwnProperty.call(CIVIC, base))) why = 'civic base ' + JSON.stringify(base) + ': one of ' + CIVIC_NAMES.join(', ');
-      else if (kind === 'civic' && civic && !lotErr && !civic.get('civic:' + base).bases.has(n)) why = 'civic lot ' + n + 'x' + n + ': a ' + base + ' look keeps the stock lot, ' + [...civic.get('civic:' + base).bases.keys()].map(s => s + 'x' + s).join(' ');
       else if (kind === 'reward' && !(pyInt(pop) && 0 <= +pop && +pop <= 100000000)) why = 'population ' + JSON.stringify(pop) + ' is not a whole number from 0 to 100000000';
       else if (kind === 'reward' && !(pyInt(year) && 0 <= +year && +year <= 9999)) why = 'year ' + JSON.stringify(year) + ' is not a whole number from 0 to 9999 (0 = any year)';
       else if (kind === 'reward' && /[;=\r\n]/.test(name)) why = 'reward name ' + JSON.stringify(name) + ': the reward row cannot hold ; = or line breaks';
@@ -2314,6 +2318,7 @@ function BLDWEB_LIB() {
       out.push({ id: nid, file: f, name, lot: n, class: cls, weight: w, model: m, kind: (port !== null || lm) ? kind : 'growable' });
       const e0 = out[out.length - 1];
       if (lm) e0.desc = desc;
+      if (m._quarter) e0.turned = true;
       if (kind === 'civic') e0.base = base;
       if (kind === 'reward') { e0.population = +pop; e0.year = +year; }
     }
@@ -2337,6 +2342,7 @@ function BLDWEB_LIB() {
     const o = optsOf(m, opt.envStyle);
     const job = { file: m.file, n, cell_m: o.cell_m, scale: Number('scale' in m ? m.scale : 1.0), rotate_deg: Number('rotate_deg' in m ? m.rotate_deg : 0),
       ground: o.ground === 'none' ? null : o.ground, shadows: o.shadow, style: o.style };
+    if (m._quarter) job.quarter = 1;   // task civlot: turned a quarter (sc3slot groups s -> s - 1)
     const res = opt.renderer ? await opt.renderer(job, folder) : await renderJob(job, folder, opt.progress);
     const info = res.info;
     const hm = m.height_m;
@@ -2349,7 +2355,8 @@ function BLDWEB_LIB() {
   }
   // the worker-side job: OBJ -> 20 frames
   async function renderJob(job, folder, progress) {
-    const mesh = await loadObj(folder, job.file);
+    let mesh = await loadObj(folder, job.file);
+    if (job.quarter && mesh.slot) mesh = Object.assign({}, mesh, { slot: mesh.slot.map(s_ => (s_ >= 0 ? (s_ + 3) % 4 : s_)) });   // bldimport.render_one
     const [mt, info] = place(mesh, job.n, job.cell_m, job.scale, job.rotate_deg);
     info.triangles = mesh.n;
     const frames = renderModel(mt, job.n, { ground: job.ground, shadows: job.shadows, style: job.style, progress });
@@ -2419,7 +2426,7 @@ function BLDWEB_LIB() {
       ex = tkb1SetText(ex, 0x64, nm);
       if (e.kind === 'landmark' || e.kind === 'reward') ex = tkb1SetU32(ex, 0x65, lu);   // a civic look keeps the base's type
       if (lm && e.desc !== null) ex = tkb1SetKey(ex, 0x7C, [TEXT_TYPE, LM_DESC_GROUP, nid]);
-      if (Array.isArray(n)) ex = tkb1SetFootprint(ex, n);   // task lotshape: prop 0x66 = (w, the base's height, d)
+      if (Array.isArray(n) || e.kind === 'civic') ex = tkb1SetFootprint(ex, lotWd(n));   // task lotshape: prop 0x66 = (w, the base's height, d) (civlot: civic, any lot)
       tkb1Props(ex);
       const precs = e.kind === 'reward' ? rwRecs : lmRecs, pkeys = e.kind === 'reward' ? rwKeys : lmKeys;
       if (lm) {
@@ -2450,7 +2457,7 @@ function BLDWEB_LIB() {
       }
       if (lm) {
         const extra = e.kind === 'reward' ? ', type ' + nid + ', unlocks at population ' + e.population + (e.year ? ', year ' + e.year : '')
-          : e.kind === 'civic' ? ', type ' + lu + ', look ' + (civLines.get(base).length + 1) + ' of the button' : '';
+          : e.kind === 'civic' ? ', type ' + lu + ', look ' + (civLines.get(base).length + 1) + ' of the button' + (e.turned ? ' (turned a quarter: the short side first)' : '') : '';
         rep.push('plop  [' + nid + '] ' + e.file + ': "' + e.name + '", ' + tg.label + ', ' + lotStr(n) + ', stats of stock ' + base +
           extra + ', in ' + (e.kind === 'reward' ? RW_PIN : LM_PIN) + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
         if (opt.onFrames) opt.onFrames(e, frames, info);
