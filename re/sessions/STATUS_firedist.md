@@ -1,33 +1,40 @@
-# STATUS firedist (round 2026-11-23c)
+# STATUS firedist (round 2026-11-23c, second pass: build the per-face rule)
 
 ## goal
-Owner: the converted Large Fire Station has a distortion on the parking side (sheet 18). Find the cause, fix or propose.
+1. Per-face rule: faces the slot's SC4 view saw edge-on are drawn from the view that sees them most head-on
+   (owner "build per-face rule"), plus a hand table for the fire station's door wall (owner call (b)).
+2. Side findings: Large Medical Center floating cars, Soccer Field pitch lines.
 
 ## verdict
-Not the civlot turn: turned frames = unturned frames with the slot moved by one (alpha equal, zooms 3 and 4); the
-installed frames are byte for byte the turned render. Cause: SC4's view mesh puts the bay-door wall at the eave line
-(plane z = 15 m), about 3.9 m in front of the doors (apron paint depth measured from views S and E). View E, which the
-sheet's slot is built from, paints the covered apron floor over 9.75 of the plane's 10.9 m, and SC3 draws it on a
-vertical plane. Next slot (view S): leaning eave faces at 3.5-3.9 SC3 px per SC4 texel (every other face of 16 models:
-<= 2.1). No other converted civic look has it. Detail: verify/firedist/RESULTS.md.
+- Rule built in sc4conv (views.edge_on / hand_picks / edge_faces / edge_mask / toned, sc4conv.write_edge) and the page
+  (sc4web.js edgeOn ... edgeMask), byte for byte (parity.mjs: 148 + 91 files, 0 differ). k >= 3.0, the substitute view
+  must see the face (occlusion test against its own mesh), the copy is 1 cm in front, toned by the measured SC4
+  right-wall / frontal ratio (0.5371 / 0.5622 / 0.7133), and its texels are cleared where the slot's own picture has no
+  building (so it never draws outside the outline).
+- Hand table: HAND_FACES keyed by building tgi + model key of the Large Fire Station, slot 0, plane +z = 15 m, view S.
+- Medical Center: the floating cars stand on a 5-storey parking garage prop the converter dropped (S3D vertex format
+  0x00000002). s3d.py / sc4web.js now read 0x00000002 and 0x00140002 (same 20-byte layout, install scan). Fixed.
+- Soccer Field: pitch lines are pale paint the lawn test clears; no rule separates them (measured). Left (owner (a)).
 
 ## built
-Nothing in the converter. Offline mock of a per-face frontal source (work/mock_frontal.py), owner_shots 05.
+re/tools/sc4conv/views.py, sc4conv.py, s3d.py; re/tools/bldimport/sc4web.js; webtest/sc4_install_set.json (+2).
 
 ## proven game-side vs static only
-Renderer frames only (the game draws bldimport's frames, compared byte for byte). No game run.
+Renderer frames, parity, suite 41 of 41, non-SC4 goldens = main. In game: Madison (fire station, 4 rotations) and the forumshots Berlin save (06, 07), windowed, PIDs 15444, 21304, 25060 started and stopped by this session.
 
 ## blocked on
-Nothing. Owner / orchestrator call: build the per-face frontal source (with its seams), or leave it and drop sheet 18.
+Nothing.
 
 ## files owned
-- verify/firedist/RESULTS.md (tracked)
-- re/sessions/STATUS_firedist.md
-- local only: verify/firedist/work/*.py, verify/firedist/owner_shots/*
-- dev\firedist\wt: no changes
+- dev\firedist\wt: re/tools/sc4conv/views.py, re/tools/sc4conv/sc4conv.py, re/tools/sc4conv/s3d.py,
+  re/tools/bldimport/sc4web.js, re/tools/bldimport/webtest/sc4_install_set.json, docs/buildings/index.html,
+  docs/buildings/importer/sc4web.js
+- MAIN, local: verify/bldpack/work/guide_template.html (old copy .pre_firedist), verify/sc4cmp/forum/06, 07, 18 (old
+  copies *_pre_firedist.jpg)
+- verify/firedist/RESULTS.md (tracked); verify/firedist/work, owner_shots (local)
 
 ## game-harness need
-None.
+Done (claimed and released).
 
 ## asks of other sessions
 None.
