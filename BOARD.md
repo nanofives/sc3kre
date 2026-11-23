@@ -15,7 +15,45 @@ and to the tracker: 5,895 exe C0 -> C1, 300 rows added, 7,858 DLL C0 -> C1 by id
 are `<addr>_<name>.c`, old exports in `*_pre_cv`), and 42 wrong session names were fixed by an audit. Detail and trust limits:
 `re/analysis/CV_SYMBOLS.md`. Check there, or `re/tools/vtname.py`, before naming an exe function or a `vt+0x..` slot by hand.
 
-## Current state, 2026-10-23 (read this first)
+## Current state, 2026-11-23 (read this first)
+
+**Latest published release: `sc3mods-2026-11-21`** (GitHub + LAN, target `08c0357`, 3,680 files,
+`verify/mods_release_1121/RESULTS.md`). stage/release = 2026-11-21 (old copy `stage/release_1120_old`). Releases since
+10-27d each have a record in `verify/mods_release_<mmdd>/RESULTS.md` (11-01 to 11-21, 27 of them). Orchestrator
+handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round briefs: `re/sessions/ROUND_2026-11-*.md`.
+
+**What landed in November** (detail in each `verify/<stream>/RESULTS.md` and `re/sessions/STATUS_<stream>.md`):
+
+| area | what |
+|---|---|
+| sim / UI | graphs + tabs, restore UI, placement hints, transit map panel, station warn, mod toggle page, salt water fix, language picker, sirens, churn, abandonment + Sandbox, land value wrap (LVWRAP), valve crash (VALVEREF), pop-ups (popslow: stock pauses too), NOPAUSE switch (off by default) |
+| networks | diagonal crossings, orthfix crossing art, short DB arms, faster highway cars, junction gallery (`docs/gallery`) |
+| buildings | style mix switch, building importer page (`docs/buildings/importer`) + guide, .bld render kit, civic looks + new rewards + civic list window, non-square lots up to 5x5 (LOTRECT), SC4-like style pick (STYLEPICK, "new buildings only" + Mix), civic looks per style (style_mix 1.2.0) |
+| SimCity 4 | buildings from SC4 downloads and from the player's SC4 install: civic, parks, rewards, landmarks (keep SC4 lot), opt-in shops / offices / industry / farms, SC4 props and lot textures (on by default), ground fix, tree black patches fixed (sc4trees). Formats: `re/analysis/SC4_FORMATS.md` |
+| compatibility | community mods (Apache Flyover, Civic Deals, Natural World), GOG / Steam 2.0.949, overlay merge (OVMERGE: player edits of the 34 overlay-shadowed stock files) |
+| tooling | building suite modes (SUITE_CHANGED / normal / SUITE_DEEP), sc3dev workspaces, retail CodeView symbols |
+
+**Owner calls open:**
+
+| # | call | where |
+|---:|---|---|
+| 1 | NOPAUSE: Query window stays stock (pauses) or runs too (lab switch `SC3SIMRUN_NOPAUSE_QUERY=1`, the city stays locked so the clock catches up on close) | `re/sessions/STATUS_nopause.md` |
+| 2 | Converted SC4 houses: `baked` (default) vs `baked_raw` brightness, and lit from the other side in rotations 1 and 3 | `re/sessions/STATUS_sc4conv.md` |
+| 3 | SC4 lot textures on by default (as now) or off | `re/sessions/STATUS_sc4lottex.md` |
+| 4 | `baked_sharp` (native zoom 4, keeps thin details such as flagpoles), optional | `re/sessions/STATUS_sc4ground.md` |
+
+**Open, not started:**
+- stylepick: one GZGraphicD+0x18C7A crash (NULL surface Blt) in 7 New City windows after a Preferences visit, not
+  reproduced since (4 tries, plus 11 windows in the 11-21 smoke test). `[UNCERTAIN]`.
+- Owner hand test: a Marina civic look placed on a shore (`STATUS_civicstyle.md`).
+- SC4: commercial / industrial packs barely tested, 94 animated prop rows (type 0x29A5D1EC) unread, 21 SC4 parks /
+  rewards without their own model, Large High School skipped, owner's real folder pick of the SC4 install untested.
+- Civic list window shows a fixed line, not the importer's description of the look.
+- Simtropolis: reply to the 2026-11-21 player (pop-ups, farm mod, styles) not posted; ask which farm mod and which
+  files it edits (`STATUS_overlaymerge.md`). Drafts in `.happy-share/cmwgg6bdp01jhmz1b3kp9os44/`.
+- The older owner hand-test list in the 2026-10-23 section below still stands where its item was never run.
+
+## (historical) State 2026-10-23
 
 **New 2026-11-06: community mods (Apache Flyover, Civic Deals + Extra Cheats, Classic Natural World).** Author
 permission obtained, owner decided per feature what to keep or tweak: `re/analysis/COMMUNITY_MODS.md`. Done on main (e03ab40): taller terrain panel + Bosque denso, Natural World switch, weather switch (`verify/terrpanel/RESULTS.md`). All built 2026-11-06 (D9/DA es, ExtraCheats, Bosque button, Apache 1024 + patrol + Reunirse + rotor); status table at the end of the plan. Not released yet.
