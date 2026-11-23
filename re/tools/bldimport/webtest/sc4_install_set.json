@@ -1,8 +1,8 @@
 {
  "note": "suitespeed 2026-11-20: the SC4 install set of the suite's normal mode (sc4_install_setup.py --set, sc4_install.mjs --set, pagetest.mjs --sc4only). Chosen from the per-building line coverage of sc4conv.py over the whole install (sc4_set_cover.py, verify/suitespeed/RESULTS.md): these buildings reach every line of re/tools/sc4conv/*.py and re/tools/bldimport/*.py that the 113 civic / park / reward / landmark buildings reach, plus the cases the checks name and one of each service, reward rule and lot shape. SUITE_DEEP=1 converts the whole install. 'expect' = the page's cards and cards on for this set (pagetest.mjs --expect-install).",
  "expect": {
-  "cards": 28,
-  "on": 23
+  "cards": 30,
+  "on": 25
  },
  "buildings": [
   {
@@ -283,6 +283,26 @@
    "lot": [
     5,
     5
+   ]
+  },
+  {
+   "exemplar": "CV32x32_4engineStationHouse_030B",
+   "why": "task firedist: the hand table (views.HAND_FACES, its one wall from view S) and the edge-on rule (k >= 3.0, slot 3); civic fire, 3x2 installed turned",
+   "kind": "civic",
+   "base": "fire",
+   "lot": [
+    3,
+    2
+   ]
+  },
+  {
+   "exemplar": "CV44x44_LargeMedicalCenter_0313",
+   "why": "task firedist: a lot prop of vertex format 0x00000002 (the 5-storey parking garage) and the edge-on rule; civic hospital 4x3",
+   "kind": "civic",
+   "base": "hospital",
+   "lot": [
+    4,
+    3
    ]
   }
  ]
