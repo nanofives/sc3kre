@@ -41,7 +41,7 @@ handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round bri
 | 2 | Converted SC4 houses brightness (`STATUS_sc4conv.md`) | `baked` stays the default |
 | 3 | SC4 houses lit from the other side in rotations 1 and 3 | accepted, already a known limit in the guide (`docs/buildings/index.html` "Light painted in") |
 | 4 | SC4 lot textures by default (`STATUS_sc4lottex.md`) | on, as now |
-| 5 | `baked_sharp` (native zoom 4, keeps flagpoles; `STATUS_sc4ground.md`) | **build it**: stream `bakedsharp`, brief `re/sessions/ROUND_2026-11-23_baked_sharp.md` |
+| 5 | `baked_sharp` (native zoom 4, keeps flagpoles; `STATUS_sc4ground.md`) | **built**, merged 5734bc8 (`verify/bakedsharp/RESULTS.md`). Follow-up call: **default for all SC4 buildings**, done in stream `civlot` |
 
 **Open, not started:**
 - stylepick: one GZGraphicD+0x18C7A crash (NULL surface Blt) in 7 New City windows after a Preferences visit, not
