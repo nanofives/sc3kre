@@ -421,7 +421,8 @@ function SC4WEB_LIB(B) {
     const verts = [];
     for (let g = 0, ng = u32(); g < ng; g++) {
       const flags = u16(), cnt = u16(), fmt = u32();
-      if (fmt !== 0x80004001) throw new Sc4Error('vertex format 0x' + hexU(fmt, 8) + ' not read');
+      // task firedist: 0x00000002 and 0x00140002 are the same 20-byte position + uv layout (s3d.py VERTEX_FORMATS)
+      if (fmt !== 0x80004001 && fmt !== 0x00000002 && fmt !== 0x00140002) throw new Sc4Error('vertex format 0x' + hexU(fmt, 8) + ' not read');
       r.need(p, 20 * cnt);
       const vs = [];
       for (let k = 0; k < cnt; k++) { const q = p + 20 * k; vs.push([r.f32(q), r.f32(q + 4), r.f32(q + 8), r.f32(q + 12), r.f32(q + 16)]); }
@@ -761,7 +762,7 @@ function SC4WEB_LIB(B) {
       const [A, err, d] = fitCamera(P, UV, bm.w, bm.h);
       const dm = toModel1(d, r);
       out.push({ r, name: VIEW_NAMES[r], P_view: P, P: P.map(p => toModel1(p, r)), A, tex_size: [bm.w, bm.h], UV, tris, tex: bm.image, tiles,
-        cam: { fit_err_px: err, forward_view: d, azimuth_model: degrees(Math.atan2(-dm[0], -dm[2])), elevation: degrees(Math.asin(-d[1])),
+        cam: { fit_err_px: err, forward_view: d, forward_model: dm, azimuth_model: degrees(Math.atan2(-dm[0], -dm[2])), elevation: degrees(Math.asin(-d[1])),
           px_per_m: Math.sqrt((A[0][0] * A[0][0] + A[1][0] * A[1][0]) + A[2][0] * A[2][0]) } });
     }
     return out;
@@ -781,6 +782,159 @@ function SC4WEB_LIB(B) {
     } catch (e) { if (!(e instanceof Sc4Error) && !(e instanceof RangeError)) throw e; return ['ok', null]; }
     return ['blank', 'a blank placeholder model (every texel transparent)'];
   }
+  // ================================================================== task firedist: faces seen edge-on (views.edge_on)
+  // views.py EDGE_K .. toned and HAND_FACES, the same steps and float order (the comment there holds the measurements).
+  const EDGE_K = 3.0, EDGE_LIFT = 0.01, EDGE_TONE = [0.5371, 0.5622, 0.7133];
+  const _EC = 0.6123724356957945;
+  const EDGE_C3 = [[-_EC, 0.5, _EC], [-_EC, 0.5, -_EC], [_EC, 0.5, -_EC], [_EC, 0.5, _EC]];
+  const EDGE_OCC_PTS = [[1.0 / 6.0, 1.0 / 6.0], [2.0 / 3.0, 1.0 / 6.0], [1.0 / 6.0, 2.0 / 3.0], [1.0 / 3.0, 1.0 / 3.0], [0.5, 0.25], [0.25, 0.5]];
+  const EDGE_OCC_TOL = 0.5, EDGE_OCC_MAX = 1;
+  // views.HAND_FACES: (building tgi, model key) -> [slot, unit normal, plane offset, view]. SC4's Large Fire Station: its
+  // engine-bay doors stand about 3.9 m behind the z = 15 m plane of SC4's view meshes; view E (slot 0) paints the covered
+  // apron floor there, view S the doors (verify/firedist/RESULTS.md section 6).
+  const HAND_FACES = new Map([
+    ['6534284A-07BDDF1C-030B0000|5AD0E817-BADB57F1-030B0000', [[0, [0.0, 0.0, 1.0], 15.0, 'S']]],
+  ]);
+  const dot3 = (a, b) => (a[0] * b[0] + a[1] * b[1]) + a[2] * b[2];
+  function unitNormal(P, t) {
+    const a = P[t[0]], b = P[t[1]], c = P[t[2]];
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const ln = Math.sqrt(dot3(n, n));
+    return ln === 0.0 ? null : [n[0] / ln, n[1] / ln, n[2] / ln];
+  }
+  function edgeProject(v, p) {
+    const A = v.A, ts = v.tex_size;
+    return [0, 1].map(j => (((p[0] * A[0][j] + p[1] * A[1][j]) + p[2] * A[2][j]) + A[3][j]) / ts[j]);
+  }
+  function edgeScreen(w) {                  // views._screen
+    if (!w._scr) {
+      const f = w.cam.forward_model, [tw, th] = w.tex_size;
+      w._scr = w.P.map(p => { const uv = edgeProject(w, p); return [uv[0] * tw, uv[1] * th, dot3(p, f)]; });
+    }
+    return w._scr;
+  }
+  function occluded(w, p) {                 // views.occluded
+    const S = edgeScreen(w), f = w.cam.forward_model, [tw, th] = w.tex_size, uv = edgeProject(w, p);
+    const x = uv[0] * tw, y = uv[1] * th, dp = dot3(p, f);
+    for (const t of w.tris) {
+      const a = S[t[0]], b = S[t[1]], c = S[t[2]];
+      const den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+      if (den === 0.0) continue;
+      const l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / den;
+      const l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / den;
+      const l3 = (1.0 - l1) - l2;
+      if (l1 < 0.0 || l2 < 0.0 || l3 < 0.0) continue;
+      if ((l1 * a[2] + l2 * b[2]) + l3 * c[2] < dp - EDGE_OCC_TOL) return true;
+    }
+    return false;
+  }
+  function seenBy(w, P, t) {                // views.seen_by
+    const a = P[t[0]], b = P[t[1]], c = P[t[2]];
+    let n = 0;
+    for (const [l1, l2] of EDGE_OCC_PTS) if (occluded(w, [0, 1, 2].map(k => (a[k] + (b[k] - a[k]) * l1) + (c[k] - a[k]) * l2))) n++;
+    return n <= EDGE_OCC_MAX;
+  }
+  function edgeOn(vs, slot, v, P, tris) {
+    const c3 = EDGE_C3[slot], cams = vs.map(w => w.cam.forward_model.map(q => -q)), own = vs.indexOf(v), out = [];
+    tris.forEach((t, i) => {
+      const n = unitNormal(P, t);
+      if (n === null) return;
+      const a3 = dot3(n, c3), ao = dot3(n, cams[own]);
+      if (a3 <= 0.0 || ao <= 0.0 || a3 < EDGE_K * ao) return;
+      let best = null;
+      cams.forEach((c, k) => { const d = dot3(n, c); if (best === null || d > best[1]) best = [k, d]; });
+      if (best[0] !== own && best[1] > ao && seenBy(vs[best[0]], P, t)) out.push([i, best[0]]);
+    });
+    return out;
+  }
+  function handPicks(b, vs, slot, P, tris, picks) {
+    const rules = (HAND_FACES.get(tgiHex(b.tgi) + '|' + tgiHex(b.model)) || []).filter(r => r[0] === slot);
+    if (!rules.length) return picks;
+    const names = vs.map(w => w.name), have = new Set(picks.map(q => q[0])), out = picks.slice();
+    tris.forEach((t, i) => {
+      if (have.has(i)) return;
+      const n = unitNormal(P, t);
+      if (n === null) return;
+      for (const [, rn, rd, rv] of rules) {
+        if (Math.abs(n[0] - rn[0]) <= 0.01 && Math.abs(n[1] - rn[1]) <= 0.01 && Math.abs(n[2] - rn[2]) <= 0.01 &&
+            Math.abs(dot3(n, P[t[0]]) - rd) <= 0.05) { out.push([i, names.indexOf(rv)]); break; }
+      }
+    });
+    out.sort((x, y) => x[0] - y[0]);
+    return out;
+  }
+  function edgeFaces(vs, P, tris, picks, lift = EDGE_LIFT) {
+    const oP = [], oUV = [], ot = [];
+    for (const [i, w] of picks) {
+      const t = tris[i], n = unitNormal(P, t), base = oP.length;
+      for (const j of t) {
+        const q = [P[j][0] + n[0] * lift, Math.max(P[j][1] + n[1] * lift, 0.0), P[j][2] + n[2] * lift];   // not below SC4's ground
+        oP.push(q); oUV.push(edgeProject(vs[w], q));
+      }
+      ot.push([base, base + 1, base + 2]);
+    }
+    return [oP, oUV, ot];
+  }
+  function edgePx(v, p) { const A = v.A; return [0, 1].map(j => ((p[0] * A[0][j] + p[1] * A[1][j]) + p[2] * A[2][j]) + A[3][j]); }
+  function texelAlpha(v, uv) {
+    const [tw, th] = v.tex_size;
+    const x = Math.min(Math.max(Math.floor(uv[0] * tw), 0), tw - 1), y = Math.min(Math.max(Math.floor(uv[1] * th), 0), th - 1);
+    return v.tex[(y * tw + x) * 4 + 3];
+  }
+  function edgeMask(vs, v, w, eP, et, rgba) {   // views.edge_mask, on the RGBA copy (alpha at i * 4 + 3)
+    const ww = vs[w], [tw, th] = ww.tex_size, A = ww.A;
+    const a0 = [0, 1, 2, 3].map(k => A[k][0]), a1 = [0, 1, 2, 3].map(k => A[k][1]);
+    const seen = new Map();
+    for (const t of et) {
+      const q0 = eP[t[0]], q1 = eP[t[1]], q2 = eP[t[2]], n = unitNormal(eP, t);
+      if (n === null) continue;
+      const d = dot3(n, q0), S = [q0, q1, q2].map(q => edgePx(ww, q));
+      const den = (S[1][1] - S[2][1]) * (S[0][0] - S[2][0]) + (S[2][0] - S[1][0]) * (S[0][1] - S[2][1]);
+      const m = [[a0[0], a0[1], a0[2]], [a1[0], a1[1], a1[2]], [n[0], n[1], n[2]]];
+      const det = (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])) +
+        m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+      if (den === 0.0 || det === 0.0) continue;
+      const x0 = Math.max(Math.floor(Math.min(S[0][0], S[1][0], S[2][0])), 0), x1 = Math.min(Math.ceil(Math.max(S[0][0], S[1][0], S[2][0])), tw - 1);
+      const y0 = Math.max(Math.floor(Math.min(S[0][1], S[1][1], S[2][1])), 0), y1 = Math.min(Math.ceil(Math.max(S[0][1], S[1][1], S[2][1])), th - 1);
+      for (let yy = y0; yy <= y1; yy++) {
+        const Y = yy + 0.5;
+        for (let xx = x0; xx <= x1; xx++) {
+          const X = xx + 0.5;
+          let inside = false;
+          for (const [cx, cy] of [[X, Y], [X - 0.5, Y - 0.5], [X + 0.5, Y - 0.5], [X - 0.5, Y + 0.5], [X + 0.5, Y + 0.5]]) {
+            const l1 = ((S[1][1] - S[2][1]) * (cx - S[2][0]) + (S[2][0] - S[1][0]) * (cy - S[2][1])) / den;
+            const l2 = ((S[2][1] - S[0][1]) * (cx - S[2][0]) + (S[0][0] - S[2][0]) * (cy - S[2][1])) / den;
+            const l3 = (1.0 - l1) - l2;
+            if (l1 >= 0.0 && l2 >= 0.0 && l3 >= 0.0) { inside = true; break; }
+          }
+          if (!inside) continue;
+          const r = [X - a0[3], Y - a1[3], d];
+          const px = (r[0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (r[1] * m[2][2] - m[1][2] * r[2])) +
+            m[0][2] * (r[1] * m[2][1] - m[1][1] * r[2]);
+          const py = (m[0][0] * (r[1] * m[2][2] - m[1][2] * r[2]) - r[0] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])) +
+            m[0][2] * (m[1][0] * r[2] - r[1] * m[2][0]);
+          const pz = (m[0][0] * (m[1][1] * r[2] - r[1] * m[2][1]) - m[0][1] * (m[1][0] * r[2] - r[1] * m[2][0])) +
+            r[0] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+          const keep = texelAlpha(v, edgeProject(v, [px / det, py / det, pz / det])) >= 128;
+          const k = yy * tw + xx;
+          seen.set(k, (seen.get(k) || false) || keep);
+        }
+      }
+    }
+    let cleared = 0;
+    for (const [k, keep] of seen) if (!keep) { rgba[k * 4 + 3] = 0; cleared++; }
+    return cleared;
+  }
+  function toned(tex, gain) {
+    const out = new Uint8Array(tex.length);
+    for (let i = 0; i < tex.length; i += 4) {
+      for (let k = 0; k < 3; k++) out[i + k] = Math.min(Math.floor(tex[i + k] * gain[k] + 0.5), 255.0);
+      out[i + 3] = tex[i + 3];
+    }
+    return out;
+  }
+
   function matchView(vs, slot) {             // min(): the first of equal keys
     const a = SC3_SLOT_AZ[slot];
     let best = null, bk = Infinity;
@@ -979,6 +1133,7 @@ function SC4WEB_LIB(B) {
       vbase += P.length;
     };
     let mark = null;
+    const edgeLog = [];                     // task firedist: sc4conv.EDGE_LOG
     for (let slot = 0; slot < 4; slot++) {
       const v = matchView(vs, slot);
       obj.push('g sc3slot' + slot, 'usemtl sc4_' + v.name);
@@ -987,6 +1142,19 @@ function SC4WEB_LIB(B) {
       emit(cP, cUV, v.tris);
       const hf = fill ? hiddenFaces(v, 0.05, 0.0) : null;
       if (hf) { const [hP, hUV] = clampGround(hf[0], hf[1], v.A, v.tex_size); emit(hP, hUV, hf[2]); }
+      // task firedist: sc4conv.write_edge, faces v saw edge-on (+ the hand table) once more from a more head-on view
+      const picks = handPicks(b, vs, slot, cP, v.tris, edgeOn(vs, slot, v, cP, v.tris));
+      for (const k of [...new Set(picks.map(q => q[1]))].sort((x, y) => x - y)) {
+        const w = vs[k], sel = picks.filter(q => q[1] === k);
+        const mname = 'sc4_' + w.name + '_slot' + slot, png = stem + '_' + w.name + '_slot' + slot + '.png';
+        const [eP, eUV, et] = edgeFaces(vs, cP, v.tris, sel);
+        const im = toned(w.tex, EDGE_TONE), cleared = edgeMask(vs, v, k, eP, et, im);
+        pngs.push([png, { w: w.tex_size[0], h: w.tex_size[1], d: im }]);
+        mtl.push('newmtl ' + mname, 'Kd 1 1 1', 'map_Kd ' + png, '');
+        obj.push('usemtl ' + mname);
+        emit(eP, eUV, et);
+        edgeLog.push({ slot, view: v.name, from: w.name, faces: sel.length, cleared });
+      }
     }
     // task sc4ground: sc4conv.ground_mark, one zero-area triangle at y = 0 (GROUND_MARK), so y = 0 lands on the lawn
     obj.push('g ' + GROUND_MARK, 'usemtl ' + GROUND_MARK);
@@ -1032,6 +1200,7 @@ function SC4WEB_LIB(B) {
     }
     if (Math.max(...vs.map(v => v.tiles)) > 1) entry.x_sc4.tiles = Object.fromEntries(vs.map(v => [v.name, v.tiles]));
     if (versions && versions.length) entry.x_sc4.versions = versions;
+    if (edgeLog.length) entry.x_sc4.edge_on = edgeLog;   // task firedist
     files.set(stem + '.obj', textBytes(obj.join('\n') + '\n'));
     files.set(stem + '.mtl', textBytes(mtl.join('\n')));
     const [pinfo, tinfo] = pctx ? writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n) : [null, null];

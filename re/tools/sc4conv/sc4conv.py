@@ -205,9 +205,45 @@ def diag_note(dg):
             % (dg['foundation'], int(round(dg['share_45'] * 100))))
 
 
+def write_edge(b, vs, slot, v, stem, obj, mtl, out, vbase, edge):
+    """Task firedist (views.edge_on): faces view v saw edge-on, once more from the view that sees them most head-on,
+    EDGE_LIFT in front, with that view's texture toned by EDGE_TONE in <stem>_<w>_slot<slot>.png (material
+    sc4_<w>_slot<slot>). Appends to obj / mtl, records in EDGE_LOG; -> the new vbase."""
+    P, tris = edge
+    picks = V.hand_picks(b, vs, slot, P, tris, V.edge_on(vs, slot, v, P, tris))   # + the hand table (HAND_FACES)
+    if not picks:
+        return vbase
+    for k in sorted({w for _, w in picks}):
+        w = vs[k]
+        sel = [pk for pk in picks if pk[1] == k]
+        mname = 'sc4_%s_slot%d' % (w['name'], slot)
+        png = '%s_%s_slot%d.png' % (stem, w['name'], slot)
+        eP, eUV, et = V.edge_faces(vs, slot, v, P, tris, sel)
+        im = V.toned(w['tex'], V.EDGE_TONE)
+        al = im[..., 3].astype(np.int64).tolist()
+        cleared = V.edge_mask(vs, v, k, eP, et, al)
+        im[..., 3] = np.array(al, dtype=np.uint8)
+        Image.fromarray(im).save(os.path.join(out, png))
+        mtl += ['newmtl ' + mname, 'Kd 1 1 1', 'map_Kd ' + png, '']
+        obj.append('usemtl ' + mname)
+        for p in eP:
+            obj.append('v %.5f %.5f %.5f' % tuple(p))
+        for uv in eUV:
+            obj.append('vt %.6f %.6f' % (uv[0], 1.0 - uv[1]))
+        for t in et:
+            obj.append('f ' + ' '.join('%d/%d' % (vbase + i, vbase + i) for i in t))
+        vbase += len(eP)
+        EDGE_LOG.append({'slot': slot, 'view': v['name'], 'from': w['name'], 'faces': len(sel), 'cleared': cleared})
+    return vbase
+
+
+EDGE_LOG = []                             # task firedist: write_edge's switches for the building being written
+
+
 def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=False, versions=None, pctx=None):
     vs = V.load_views(idx, b, ZOOM5)
     stem = stem_of(b['name'])
+    del EDGE_LOG[:]
     obj = ['# %s, converted from SimCity 4 by sc4conv.py (local use only: see the pack licence)' % b['name'],
            'mtllib %s.mtl' % stem]
     mtl = []
@@ -222,6 +258,7 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         obj.append('usemtl sc4_%s' % v['name'])
         P, UV = V.clamp_ground(v['P'], v['UV'], v['A'], v['tex_size'])     # task sc4ground: nothing below SC4's ground
         tris = v['tris']
+        edge = (P, tris)
         if slot == 0:
             mark = (P[0][0], P[0][2])
         for p in P:
@@ -242,6 +279,7 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
             for t in tris:
                 obj.append('f ' + ' '.join('%d/%d' % (vbase + i, vbase + i) for i in t))
             vbase += len(P)
+        vbase = write_edge(b, vs, slot, v, stem, obj, mtl, out, vbase, edge)   # task firedist
     obj += ground_mark(mark, vbase)     # task sc4ground: y = 0 is the lowest point, so SC4's ground lands on the lawn
     mtl += ['newmtl ' + GROUND_MARK, 'Kd 1 1 1', '']
     with open(os.path.join(out, stem + '.obj'), 'w', newline='\n') as fh:
@@ -292,6 +330,8 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         entry['x_sc4']['tiles'] = {v['name']: v['tiles'] for v in vs}
     if versions:                          # task sc4pass2: the same model on ploppable / landmark lots (not converted)
         entry['x_sc4']['versions'] = versions
+    if EDGE_LOG:                          # task firedist: faces drawn from a more head-on view (views.edge_on)
+        entry['x_sc4']['edge_on'] = [dict(e) for e in EDGE_LOG]
     if pinfo is not None:                 # task sc4props: the SC4 lot's props, baked into <stem>_props.obj
         entry['x_sc4']['props'] = pinfo
     if tinfo is not None:                 # task sc4lottex: the SC4 lot's textures, <stem>_lot.obj / _props_lot.obj

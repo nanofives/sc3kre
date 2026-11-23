@@ -9,7 +9,10 @@ HEAD VERT INDX PRIM MATS ANIM PROP REGP, and checks that it lands on the next ta
   '3DMD' u32 (value not used)
   HEAD  u32 len, u16 major (1), u16 minor (5)
   VERT  u32 len, u32 groups; group: u16 flags, u16 count, u32 format, count x vertex
-        format 0x80004001 = 3 f32 position + 2 f32 uv (20 bytes, the only format in the pack)
+        format 0x80004001 = 3 f32 position + 2 f32 uv (20 bytes, the only format in the pack). Task firedist
+        (2026-11-23): 0x00000002 and 0x00140002 have the same 20-byte layout (SimCity 4's install: 1,526 and 286 vertex
+        groups; with 20 bytes per vertex every S3D of the install lands on its INDX tag except the 2 of format
+        0x80004101, which stay unread). The 5-storey parking garage under the Large Medical Center's roof cars is one.
   INDX  u32 len, u32 groups; group: u16 flags, u16 stride (2), u16 count, count x u16
   PRIM  u32 len, u32 groups; group: u16 count; prim: u32 type (0 = triangle list), u32 first, u32 count
   MATS  u32 len, u32 groups; group: u32 flags, u8 alpha func, u8 depth func, u8 src blend, u8 dst blend,
@@ -22,6 +25,8 @@ HEAD VERT INDX PRIM MATS ANIM PROP REGP, and checks that it lands on the next ta
   PROP  u32 len, u32 count (0 in the pack)     REGP  u32 len, u32 count (0 in the pack)
 """
 import struct
+
+VERTEX_FORMATS = (0x80004001, 0x00000002, 0x00140002)   # 3 f32 position + 2 f32 uv, 20 bytes (task firedist: + 2)
 
 
 class S3D:
@@ -54,7 +59,7 @@ class S3D:
         self.verts = []
         for _ in range(u('I')):
             flags, cnt, fmt = u('HHI')
-            if fmt != 0x80004001:
+            if fmt not in VERTEX_FORMATS:
                 raise ValueError('vertex format 0x%08X not read' % fmt)
             vs = [struct.unpack_from('<5f', b, p + 20 * k) for k in range(cnt)]
             p += 20 * cnt

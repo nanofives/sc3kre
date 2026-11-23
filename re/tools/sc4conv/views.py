@@ -429,6 +429,276 @@ def match_view(views, slot):
     return min(views, key=lambda v: abs((v['cam']['azimuth_model'] - a + 180) % 360 - 180))
 
 
+# ----------------------------------------------------------------------------------------------------- task firedist
+# Faces the slot's own SC4 view saw nearly edge-on (round 2026-11-23c, verify/firedist/RESULTS.md). sc4conv's `match`
+# rebuild draws SC3 slot r from the one SC4 view 22.5 degrees from it. A face that view saw at a grazing angle holds few
+# texels and SC3, looking from 45 degrees round and 15 degrees lower, spreads them out: the converted Large Fire Station's
+# leaning eave faces drew 5,173 SC3 zoom-4 pixels from about 1,100 texels (k 5.55). k = (n . c_SC3) / (n . c_view), with
+# n the face normal, c_SC3 the SC3 slot camera and c_view the SC4 view's camera (unit vectors towards the cameras); the
+# texel stretch is k x (5.66 / 7.0)^2 SC3 px per texel. Over the 25,855 front-facing planes of the 423 models of the
+# SimCity 4 install: 6,901 planes in 420 models at k 2.0-2.4 (every building's 67.5-degree wall, theory 2.26), 79 at
+# 2.4-2.8 (near-axis walls a few degrees off), then a thin tail to 25 (angled tower faces, leaning walls). EDGE_K = 3.0
+# keeps the ordinary walls well clear and takes the tail. Such a face gets a second copy EDGE_LIFT metres in front of it,
+# drawn from the view that sees it most head-on (largest n . c), with that view's texels toned by EDGE_TONE: where the substitute texel is transparent the ray reaches the own face behind it, as before.
+EDGE_K = 3.0
+EDGE_LIFT = 0.01
+# The substitute's tone: SC4's light is fixed to its camera, so a wall a view sees as its frontal (left, 22.5-degree) wall
+# is lit brighter than the same wall seen as that view's 67.5-degree (right) wall, which is the tone every other
+# right-hand wall of an SC3 frame has. Measured on 1,612 vertical planes (k 2.0-2.4, at least 200 samples opaque in both
+# views) of 140 models, every third of the install: own view / most head-on view, sum of RGB per plane, median per
+# channel 0.5371 / 0.5622 / 0.7133 (interquartile 0.441-0.726, 0.469-0.739, 0.631-0.843; per slot 0.51-0.56 red).
+# A first try matched the tone to the own view's texels on the face itself: on an edge-on face those are mostly what
+# lies in front of it in that view (the fire station's pale eave cornice), and the gain hit its limit of 2.0.
+EDGE_TONE = (0.5371, 0.5622, 0.7133)
+# The substitute view must see the face: at EDGE_OCC_PTS points of the face, a triangle of that view's own mesh in front
+# of the point (closer to its camera by more than EDGE_OCC_TOL metres, at the same texture pixel) means its picture
+# shows that triangle there, not the face. More than EDGE_OCC_MAX occluded points: the face stays as it was. Without
+# it Columbia Seafirst Center's slot 3 took a pale panel of the tower's top from view W.
+EDGE_OCC_PTS = ((1.0 / 6.0, 1.0 / 6.0), (2.0 / 3.0, 1.0 / 6.0), (1.0 / 6.0, 2.0 / 3.0), (1.0 / 3.0, 1.0 / 3.0),
+                (0.5, 0.25), (0.25, 0.5))
+EDGE_OCC_TOL = 0.5
+EDGE_OCC_MAX = 1
+# SC3 slot cameras (bldrender ELEV 30 degrees, SC3_SLOT_AZ): unit vector towards the camera, (sin az cos 30, sin 30,
+# cos az cos 30), written out so that the page (sc4web.js EDGE_C3) has the same bits
+_EC = 0.6123724356957945          # cos 30 / sqrt 2
+EDGE_C3 = ((-_EC, 0.5, _EC), (-_EC, 0.5, -_EC), (_EC, 0.5, -_EC), (_EC, 0.5, _EC))
+
+
+def _dot3(a, b):
+    return (a[0] * b[0] + a[1] * b[1]) + a[2] * b[2]
+
+
+def _unit_normal(P, t):
+    a, b, c = P[t[0]], P[t[1]], P[t[2]]
+    u = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    v = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+    n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+    ln = math.sqrt(_dot3(n, n))
+    if ln == 0.0:
+        return None
+    return (n[0] / ln, n[1] / ln, n[2] / ln)
+
+
+def _project(v, p):
+    """uv of model point p in view v (its fitted projection / texture size; the sums in a fixed order)."""
+    A, (tw, th) = v['A'], v['tex_size']
+    return [(((p[0] * float(A[0][j]) + p[1] * float(A[1][j])) + p[2] * float(A[2][j])) + float(A[3][j])) / (tw, th)[j]
+            for j in range(2)]
+
+
+def _screen(w):
+    """View w's own mesh in its texture pixels: [(x, y, depth)] per vertex (depth = position . forward, larger is
+    farther from the camera), cached on the view."""
+    if '_scr' not in w:
+        f = [float(q) for q in w['cam']['forward_model']]
+        A, (tw, th) = w['A'], w['tex_size']
+        out = []
+        for p in w['P']:
+            p = [float(p[0]), float(p[1]), float(p[2])]
+            uv = _project(w, p)
+            out.append((uv[0] * tw, uv[1] * th, _dot3(p, f)))
+        w['_scr'] = out
+    return w['_scr']
+
+
+def occluded(w, p):
+    """True when a triangle of view w's own mesh covers model point p's texture pixel in front of p (EDGE_OCC_TOL)."""
+    S = _screen(w)
+    f = [float(q) for q in w['cam']['forward_model']]
+    tw, th = w['tex_size']
+    uv = _project(w, p)
+    x, y, dp = uv[0] * tw, uv[1] * th, _dot3(p, f)
+    for t in w['tris']:
+        a, b, c = S[t[0]], S[t[1]], S[t[2]]
+        den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if den == 0.0:
+            continue
+        l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / den
+        l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / den
+        l3 = (1.0 - l1) - l2
+        if l1 < 0.0 or l2 < 0.0 or l3 < 0.0:
+            continue
+        if (l1 * a[2] + l2 * b[2]) + l3 * c[2] < dp - EDGE_OCC_TOL:
+            return True
+    return False
+
+
+def seen_by(w, P, t):
+    """View w sees face t: at most EDGE_OCC_MAX of its EDGE_OCC_PTS points occluded in w's picture."""
+    a, b, c = P[t[0]], P[t[1]], P[t[2]]
+    n = 0
+    for l1, l2 in EDGE_OCC_PTS:
+        p = [(a[k] + (b[k] - a[k]) * l1) + (c[k] - a[k]) * l2 for k in range(3)]
+        if occluded(w, p):
+            n += 1
+    return n <= EDGE_OCC_MAX
+
+
+def edge_on(vs, slot, v, P, tris):
+    """-> [(triangle index, substitute view index)] for the faces of view v (drawn in SC3 slot `slot`, positions P after
+    clamp_ground) that v saw edge-on: front-facing to the SC3 camera and to v, k >= EDGE_K, and another view sees them
+    more head-on and unhidden (seen_by). The substitute is the view of largest n . c (the first of equal ones, in vs order)."""
+    c3 = EDGE_C3[slot]
+    cams = [tuple(-float(q) for q in w['cam']['forward_model']) for w in vs]
+    own = vs.index(v)
+    out = []
+    for i, t in enumerate(tris):
+        n = _unit_normal(P, t)
+        if n is None:
+            continue
+        a3, ao = _dot3(n, c3), _dot3(n, cams[own])
+        if a3 <= 0.0 or ao <= 0.0 or a3 < EDGE_K * ao:
+            continue
+        best = None
+        for k, c in enumerate(cams):
+            d = _dot3(n, c)
+            if best is None or d > best[1]:
+                best = (k, d)
+        if best[0] != own and best[1] > ao and seen_by(vs[best[0]], P, t):
+            out.append((i, best[0]))
+    return out
+
+
+# Task firedist, owner call 2026-11-23: one wall by hand. SimCity 4's Large Fire Station (building exemplar
+# 6534284A-07BDDF1C-030B0000, model 5AD0E817-BADB57F1-030B0000) has its four engine-bay doors under the roof, about 3.9 m
+# behind the plane z = 15 m that SC4's view meshes put at the eave line (0 to 10.9 m high). The yellow apron paint on that
+# plane stops at 4.25 m in view S and at 9.75-10.25 m in view E, the ground 3.9 and 3.8-3.95 m behind the plane: so view E,
+# which SC3 slot 0 is built from, paints the covered apron floor, the truck and the flags over 9.75 of the plane's 10.9 m
+# and the doors do not show, while view S shows the doors. The plane is at k 2.25 in slot 0, the ordinary 67.5-degree
+# wall of every building (6,901 planes of the install at k 2.0-2.4), so EDGE_K cannot reach it without switching them
+# all, and a picture-agreement test does not single it out either (ordinary walls -0.07 to 0.1, this one 0.23).
+# verify/firedist/RESULTS.md section 6. Each entry: (building tgi, model key) -> [(slot, unit normal, plane offset n . p
+# in metres, view name)]; a face of that slot whose normal is within 0.01 and whose plane offset is within 0.05 m is drawn
+# from that view as edge_on would (EDGE_LIFT in front, EDGE_TONE).
+HAND_FACES = {
+    ((0x6534284A, 0x07BDDF1C, 0x030B0000), (0x5AD0E817, 0xBADB57F1, 0x030B0000)): [(0, (0.0, 0.0, 1.0), 15.0, 'S')],
+}
+
+
+def hand_picks(b, vs, slot, P, tris, picks):
+    """picks (edge_on) plus the faces HAND_FACES names for building b in this slot, by triangle index, each face once
+    (edge_on's pick first)."""
+    rules = HAND_FACES.get((tuple(b['tgi']), tuple(b['model'])), [])
+    rules = [r for r in rules if r[0] == slot]
+    if not rules:
+        return picks
+    names = [w['name'] for w in vs]
+    have = {i for i, _ in picks}
+    out = list(picks)
+    for i, t in enumerate(tris):
+        if i in have:
+            continue
+        n = _unit_normal(P, t)
+        if n is None:
+            continue
+        for _s, rn, rd, rv in rules:
+            if abs(n[0] - rn[0]) <= 0.01 and abs(n[1] - rn[1]) <= 0.01 and abs(n[2] - rn[2]) <= 0.01                     and abs(_dot3(n, P[t[0]]) - rd) <= 0.05:
+                out.append((i, names.index(rv)))
+                break
+    out.sort(key=lambda q: q[0])
+    return out
+
+
+def edge_faces(vs, slot, v, P, tris, picks, lift=EDGE_LIFT):
+    """The substitute copies of picked faces (all of one substitute view w): -> (P, UV, tris), every face its own three
+    vertices moved `lift` metres along the face normal (never below y = 0: a downward-leaning face would otherwise reach
+    under SC4's ground and bldrender, which sets the lowest point on the lawn, would lift the whole model), uv by w's
+    fitted projection at the moved place."""
+    oP, oUV, ot = [], [], []
+    for i, w in picks:
+        t = tris[i]
+        n = _unit_normal(P, t)
+        base = len(oP)
+        for j in t:
+            q = [P[j][0] + n[0] * lift, max(P[j][1] + n[1] * lift, 0.0), P[j][2] + n[2] * lift]   # not below SC4's ground
+            oP.append(q)
+            oUV.append(_project(vs[w], q))
+        ot.append((base, base + 1, base + 2))
+    return oP, oUV, ot
+
+
+def _px(v, p):
+    """Model point p in view v's texture pixels: A [x y z 1] (no division, the sums in a fixed order)."""
+    A = v['A']
+    return [((p[0] * float(A[0][j]) + p[1] * float(A[1][j])) + p[2] * float(A[2][j])) + float(A[3][j]) for j in range(2)]
+
+
+def _texel_alpha(v, uv):
+    """Alpha of view v's texel under uv (nearest, clamped)."""
+    tw, th = v['tex_size']
+    x = min(max(int(math.floor(uv[0] * tw)), 0), tw - 1)
+    y = min(max(int(math.floor(uv[1] * th)), 0), th - 1)
+    return int(v['tex'][y][x][3])
+
+
+def edge_mask(vs, v, w, eP, et, alpha):
+    """The substitute's texels on its faces (eP, et: edge_faces of view index w), alpha (H x W ints, w's alpha, changed
+    in place): a texel whose centre or one of its corners falls in one of the faces' footprints in w's texture (the
+    renderer samples texels that straddle a face's edge too) is kept only when the point (under its centre) of
+    that face under it is opaque in view v's picture (alpha >= 128), else made transparent. So a copy never draws
+    where the slot's own picture has no building (a face partly outside the outline: Columbia Seafirst Center's slot 3
+    painted a slab in the air without this). A texel in several footprints is kept when any of them keeps it."""
+    ww = vs[w]
+    tw, th = ww['tex_size']
+    A = ww['A']
+    a0, a1 = [float(A[k][0]) for k in range(4)], [float(A[k][1]) for k in range(4)]
+    seen = {}
+    for t in et:
+        q0, q1, q2 = eP[t[0]], eP[t[1]], eP[t[2]]
+        n = _unit_normal(eP, t)
+        if n is None:
+            continue
+        d = _dot3(n, q0)
+        S = [_px(ww, q) for q in (q0, q1, q2)]
+        den = (S[1][1] - S[2][1]) * (S[0][0] - S[2][0]) + (S[2][0] - S[1][0]) * (S[0][1] - S[2][1])
+        # 3 x 3 system [a0[0..2]; a1[0..2]; n] p = [X - a0[3], Y - a1[3], d], Cramer's rule
+        m = ((a0[0], a0[1], a0[2]), (a1[0], a1[1], a1[2]), (n[0], n[1], n[2]))
+        det = (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])) \
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+        if den == 0.0 or det == 0.0:
+            continue
+        x0 = max(int(math.floor(min(S[0][0], S[1][0], S[2][0]))), 0)
+        x1 = min(int(math.ceil(max(S[0][0], S[1][0], S[2][0]))), tw - 1)
+        y0 = max(int(math.floor(min(S[0][1], S[1][1], S[2][1]))), 0)
+        y1 = min(int(math.ceil(max(S[0][1], S[1][1], S[2][1]))), th - 1)
+        for yy in range(y0, y1 + 1):
+            Y = yy + 0.5
+            for xx in range(x0, x1 + 1):
+                X = xx + 0.5
+                inside = False
+                for cx, cy in ((X, Y), (X - 0.5, Y - 0.5), (X + 0.5, Y - 0.5), (X - 0.5, Y + 0.5), (X + 0.5, Y + 0.5)):
+                    l1 = ((S[1][1] - S[2][1]) * (cx - S[2][0]) + (S[2][0] - S[1][0]) * (cy - S[2][1])) / den
+                    l2 = ((S[2][1] - S[0][1]) * (cx - S[2][0]) + (S[0][0] - S[2][0]) * (cy - S[2][1])) / den
+                    l3 = (1.0 - l1) - l2
+                    if l1 >= 0.0 and l2 >= 0.0 and l3 >= 0.0:
+                        inside = True
+                        break
+                if not inside:
+                    continue
+                r = (X - a0[3], Y - a1[3], d)
+                px = (r[0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (r[1] * m[2][2] - m[1][2] * r[2])) \
+                    + m[0][2] * (r[1] * m[2][1] - m[1][1] * r[2])
+                py = (m[0][0] * (r[1] * m[2][2] - m[1][2] * r[2]) - r[0] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])) \
+                    + m[0][2] * (m[1][0] * r[2] - r[1] * m[2][0])
+                pz = (m[0][0] * (m[1][1] * r[2] - r[1] * m[2][1]) - m[0][1] * (m[1][0] * r[2] - r[1] * m[2][0])) \
+                    + r[0] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+                keep = _texel_alpha(v, _project(v, [px / det, py / det, pz / det])) >= 128
+                k = yy * tw + xx
+                seen[k] = seen.get(k, False) or keep
+    for k in sorted(seen):
+        if not seen[k]:
+            alpha[k // tw][k % tw] = 0
+    return sum(1 for k in seen if not seen[k])
+
+
+def toned(tex, gain):
+    """tex (H, W, 4 uint8) with RGB x gain, floor(x + 0.5), at most 255; alpha kept."""
+    out = np.array(tex, dtype=np.uint8, copy=True)
+    for k in range(3):
+        out[..., k] = np.minimum(np.floor(tex[..., k].astype(np.float64) * gain[k] + 0.5), 255.0).astype(np.uint8)
+    return out
+
+
 def face_normals(P, tris):
     P = np.asarray(P)
     out = []
