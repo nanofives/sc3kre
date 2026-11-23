@@ -33,14 +33,15 @@ handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round bri
 | compatibility | community mods (Apache Flyover, Civic Deals, Natural World), GOG / Steam 2.0.949, overlay merge (OVMERGE: player edits of the 34 overlay-shadowed stock files) |
 | tooling | building suite modes (SUITE_CHANGED / normal / SUITE_DEEP), sc3dev workspaces, retail CodeView symbols |
 
-**Owner calls open:**
+**Owner calls answered 2026-11-23:**
 
-| # | call | where |
+| # | call | answer |
 |---:|---|---|
-| 1 | NOPAUSE: Query window stays stock (pauses) or runs too (lab switch `SC3SIMRUN_NOPAUSE_QUERY=1`, the city stays locked so the clock catches up on close) | `re/sessions/STATUS_nopause.md` |
-| 2 | Converted SC4 houses: `baked` (default) vs `baked_raw` brightness, and lit from the other side in rotations 1 and 3 | `re/sessions/STATUS_sc4conv.md` |
-| 3 | SC4 lot textures on by default (as now) or off | `re/sessions/STATUS_sc4lottex.md` |
-| 4 | `baked_sharp` (native zoom 4, keeps thin details such as flagpoles), optional | `re/sessions/STATUS_sc4ground.md` |
+| 1 | NOPAUSE: Query window (`STATUS_nopause.md`) | keeps pausing, stock. No change |
+| 2 | Converted SC4 houses brightness (`STATUS_sc4conv.md`) | `baked` stays the default |
+| 3 | SC4 houses lit from the other side in rotations 1 and 3 | accepted, already a known limit in the guide (`docs/buildings/index.html` "Light painted in") |
+| 4 | SC4 lot textures by default (`STATUS_sc4lottex.md`) | on, as now |
+| 5 | `baked_sharp` (native zoom 4, keeps flagpoles; `STATUS_sc4ground.md`) | **build it**: stream `bakedsharp`, brief `re/sessions/ROUND_2026-11-23_baked_sharp.md` |
 
 **Open, not started:**
 - stylepick: one GZGraphicD+0x18C7A crash (NULL surface Blt) in 7 New City windows after a Preferences visit, not
