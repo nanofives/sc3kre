@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""sc4conv.py - task sc4conv (2026-11-18h): SimCity 4 buildings -> OBJ + MTL + PNG + models.json for bldimport.
 
-  py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --out <folder> [--all] [--style baked|baked_raw|baked_sharp] [--no-fill]
+  py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --out <folder> [--all] [--style baked_sharp|baked|baked_raw|baked_raw_sharp] [--no-fill]
   py -3.12 re/tools/sc4conv/sc4conv.py <SC4 plugin folder or .dat> --list
   ... --deps "<BSC Common Dependencies Pack V9e.zip>" [--deps <more>] [--deps-cache DIR] [--no-props]   (task sc4props)
   py -3.12 re/tools/sc4conv/sc4conv.py "<SimCity 4 install folder>" --out <folder>        (task sc4civ)
@@ -26,7 +26,8 @@ What one SC4 building becomes (re/analysis/SC4_FORMATS.md 7, decision renders in
   <stem>.mtl   one material per view, map_Kd = the PNG.
   models.json  one entry per building: name from the LText, class 3100/3300/3500 (light) ... from wealth and
                capacity (class_for), lot from the footprint (lot_for), height_m from the occupant size, weight 1,
-               x_bldrender.style = 'baked' (the light is painted into the SC4 texture) unless --style says otherwise,
+               x_bldrender.style = 'baked_sharp' (the light is painted into the SC4 texture, zoom 4 drawn on its own so
+               details thinner than about 0.35 m stay; owner call 2026-11-23, was 'baked') unless --style says otherwise,
                x_sc4 = where it came from. One colour per design is enabled (the k-th design its k-th colour, for variety) unless --all.
 
 Lot props (task sc4props, 2026-11-19g, props.py / deps.py): the fences, trees, cars of the building's smallest SC4 lot,
@@ -46,7 +47,7 @@ models.json 'file' follows the two switches x_sc4.props.on and x_sc4.textures.on
 Civic buildings, parks, rewards and landmarks (task sc4civ, 2026-11-19l, re/analysis/SC4_FORMATS.md 10): a building
 SC4 files under OccupantGroups 0x1005 (civic), 0x1006 (park), 0x150B (reward) or 0x150A (landmark) is written as the
 matching bldimport plugin kind instead of a growable (service_for): civic and parks as "civic" looks of the SC3 button
-for the same service (base, the base's lot), rewards as "reward" (population from SC4's own Lua reward condition when it
+for the same service (base; task civlot 2026-11-23: on SimCity 4's own lot like rewards and landmarks), rewards as "reward" (population from SC4's own Lua reward condition when it
 counts the whole city, else REWARD_POP; year 0), landmarks as "landmark". Task lotshape (2026-11-20): a reward or
 landmark keeps its SC4 lot (real_lot: the props' lot, w along model x and d along z) when both sides are 1 to 5 and the
 footprint fits it, a non-square one too (bldimport [w, d], drawn whole with sc3perf LOTRECT, mods page row "Non-square
@@ -765,14 +766,19 @@ def service_for(b, rw, lots=None):
             why = 'SC4 civic building, service %s (groups %s): SC3 %s' % (base, ', '.join(groups_hex(gs)),
                                                                           CIVIC_LABEL[base])
         bl = CIVIC_LOT[base]
-        ok = n <= bl
-        note = ('%s. A look of the SC3 %s button: the stock building\'s type, coverage and price on its %dx%d lot.'
+        sq = n
+        n = real_lot(b, lots) or n        # task civlot: SC4's own lot when it fits 5x5, else the smallest square
+        ok = all(v in LANDMARK_LOTS for v in lot_wd(n))
+        note = ('%s. A look of the SC3 %s button: the stock building\'s type, coverage and price (the stock one is %dx%d).'
                 % (why, CIVIC_LABEL[base], bl, bl))
         if not ok:
-            note += ' Off: its %s needs %dx%d.' % (size, n, n)
+            note += ' Off: its %s needs %dx%d and SC3 civic looks are 1x1 to 5x5.' % (size, n, n)
         if rwn:
             note += ' %s; in SC3 it is a look like the others.' % rwn
-        return {'kind': 'civic', 'base': base, 'lot': bl, 'ok': ok, 'why': why, 'note': note, 'x': x}
+        note += lot_note(n, sq)
+        if isinstance(n, tuple) and n[0] > n[1]:
+            note += ' Installed turned a quarter, as %dx%d: a civic look keeps its short side first.' % (n[1], n[0])
+        return {'kind': 'civic', 'base': base, 'lot': n, 'ok': ok, 'why': why, 'note': note, 'x': x}
     sq = n
     if sk in ('reward', 'landmark') and not why0:
         n = real_lot(b, lots) or n        # task lotshape: SC4's own lot when it fits 5x5, else the smallest square
@@ -906,7 +912,9 @@ def main(argv):
     ap.add_argument('src')
     ap.add_argument('--out')
     ap.add_argument('--all', action='store_true', help='enable every colour, not one per design')
-    ap.add_argument('--style', default='baked', help='bldrender style written into x_bldrender (default baked)')
+    ap.add_argument('--style', default='baked_sharp',
+                    help='bldrender style written into x_bldrender (default baked_sharp; baked = zoom 4 doubled from zoom 3, '
+                         'the stock look and a smaller file; baked_raw / baked_raw_sharp = SC4\'s own brightness)')
     ap.add_argument('--only', help='comma list of exemplar names or designs to convert')
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--diagonal', action='store_true',

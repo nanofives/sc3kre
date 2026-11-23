@@ -543,3 +543,56 @@ also called by `sc3_geom_create_occupant_from_key 0x10007e64` (picker, relocate)
 modal loop runs inside that call. When the job returned and the Python side detached at once, the game faulted
 once at a no-module address with the message loop on the stack (1 in 3 presses). A wrapper that keeps the session
 attached 4 s after the job returned ran 19 presses over 5 runs with no fault (now in `civmod_lab.py`). Not a mod bug.
+
+## 8. A civic look on its own lot (civlot, round 2026-11-23b)
+
+Owner: SimCity 4's Small Police Station sits on 2x3, our look took the stock button's 3x3. Question: can a civic look
+have a lot other than its base building's without breaking coverage, price, save / load, Move, bulldoze and the stock
+game opening the save. Static reading first, then measured in `dev\civlot\tree` (`verify/civlot/RESULTS.md`).
+
+### 8.1 Where each part reads the lot
+
+| part | code | reads |
+|---|---|---|
+| the look's lot | SIMGEOM `sc3_building_occupant_load_props` `0x1002286f`: prop 0x66 -> attrib `+0x20` / `+0x24` / `+0x28` | the look's OWN exemplar (bldimport's copy of the button's stock exemplar), so its lot is data |
+| list window | `cd_*` in `sc3resize_civic.c`: attrib vt+0x40 / +0x44 for the log line only, price = budget vt+0x54(type) | nothing lot-bound |
+| placing tool | SIMGEOM `0x1000956b`: tool `+0x116` = X - 1, `+0x117` = Z - 1 | X and Z (LOT_SHAPES 1) |
+| site check, cell claim, bounds, bulldoze, Mover | `0x10006ba6`, `0x1000df90`, `0x1001d305` / `0x1001d3af`, RELOCATE | X and Z (LOT_SHAPES 1, lot2x3 / lotdraw measured) |
+| coverage | SIMSERV `sc3_serv_layer_on_building` `0x1000f006`: occupant vt+0xd0 (GetBoundingRectInCellCoords, X x Z) -> `sc3_serv_stamp_coverage_radial` `0x1000f557`: rect grown by the radius on every side; removal (param_1 == 1) negates the same rect's stamp | X and Z; add and remove use the same rect |
+| price | budget vt+0x54(type id) (`[BuildingPlacementCosts]` by type) | the type only |
+| save | the occupant descriptor filler, 9 copies; LOTRECT makes all 9 write Z (LOT_SHAPES 8.2) | X and Z with LOTRECT, X x X without |
+| load, key present | SIMGEOM load loop in `0x10002cc2` -> layer vt+0x20 `sc3_buildinglayer_create_building_reskey` `0x10003731` | the exemplar: the true X x Z |
+| load, key gone | the same loop -> layer vt+0x18 `sc3_buildinglayer_create_building_xyz` `0x100038a8` (type, saved X) -> attrib cache vt+0x28 = SIMINIT `0x1000cb3d` | see 8.2 |
+
+### 8.2 The one rule: X <= Z
+
+When a saved occupant's key is not in the attrib cache (the plugin was removed), the load loop asks SIMINIT `0x1000cb3d`
+for a stand-in of the saved type and the saved X. That lookup first tries an index (`this+0x34`, built by `0x1000c60c`
+for 25 broad parent types only: 3000, 3100, ..., 8500, 15410..15421, sizes 1..5 by X); a civic type (13130 police,
+...) is not among them, so it scans every cache entry (0x1c bytes: key, type `+0xc`, X `+0x14`, Z `+0x18`) for
+`IsA(saved type, entry type)` with `entry X == saved X` AND `entry Z == saved X`: a SQUARE exemplar of side X.
+
+- A 3x3 look of a 3x3 base comes back as the stock building (civmod measured it), because the stock exemplar is 3x3.
+- A look with X <= Z comes back as nothing (no square exemplar of side X of that type: an empty lot, as a removed
+  landmark) or as a square that fits inside its lot.
+- A look with X > Z would come back as a square larger than its lot along Z: a 3x2 police look as the stock 3x3 station,
+  one row on top of its neighbours. `[static: the overlap itself was not run]`
+
+So the importer stores a civic w x d with w > d turned a quarter: lot (d, w), the model rotated 90 degrees
+(`rotate_deg + 90`) and its per-slot SC4 views remapped (sc3slot group s -> s - 1), which renders exactly the original
+model's slot r + 1 in slot r (checked pixel for pixel, sun style, no lawn). bldimport `civic_turn` / `turned_model`,
+bldweb.js `civicTurn` / `turnedModel`; the render key gets a `quarter` marker. Landmarks and rewards keep [w, d] as
+given (rewards have their own type, so nothing else matches; landmarks: the same question for X > Z was not read).
+
+### 8.3 Built (civlot)
+
+- bldimport / page: kind civic joins RECT_KINDS (any lot 1..5 or [w, d]), stats and type stay the button's own
+  exemplar for every lot (prop 0x66 rewritten), the base's lot stays the default. A civic [w, d] with w > d is turned.
+- Converter (sc4conv.py / sc4web.js `service_for`): civic buildings and parks take SC4's own lot (`real_lot`) when it
+  fits 5x5, else the smallest square, as rewards and landmarks. Full Steam install: 22 of 23 civic / park buildings
+  on, 14 not square, 5 of them turned; the Small Police Station is 3x2 in the model frame, installed 2x3.
+- Measured (Madison): the list shows the SC4 look ("lot 2x3", $500), the tool marks 2x3, placed (197..198, 210..212),
+  type 13130, 6 cells; drawn whole in 4 rotations with LOTRECT; bulldozing it removed one whole coverage circle on the
+  crime map (178 cyan px, 0 new); save footprint 2x3; reload = the same occupant, sprite flag 0x400 on all 6 cells;
+  stock game (-Stock) loads it as a 2x3 occupant drawn as 2x2 + bare ground; plugin removed: empty 2x3 lot, no
+  stand-in station.
