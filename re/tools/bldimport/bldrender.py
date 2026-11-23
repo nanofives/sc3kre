@@ -129,6 +129,7 @@ STYLES["baked"] = dict(STYLES["stock"], light="sun", ambient=1.0, diffuse=0.0, s
                        contrast=1.0, grain=0.0, tone=(0.75, 1.33))
 STYLES["baked_raw"] = dict(STYLES["baked"], tone=None)
 STYLES["baked_sharp"] = dict(STYLES["baked"], zoom4="native")   # SC4 zoom 5 has 7.0 px/m, SC3 zoom 4 5.66
+STYLES["baked_raw_sharp"] = dict(STYLES["baked_raw"], zoom4="native")   # task bakedsharp: SC4 brightness, zoom 4 native
 DEFAULT_STYLE = "stock"
 
 # task sc4conv switches (2026-11-18h). Both are inert for models without transparent texels / sc3slot groups.

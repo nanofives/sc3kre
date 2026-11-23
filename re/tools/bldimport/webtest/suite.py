@@ -181,8 +181,8 @@ def steps_for(a, py, node):
     S = []
     add = lambda *x, **k: S.append(Step(*x, **k))
     PG = ["bld", "page"]
-    add("golden_setup (bldimport.py pack, 9 cases)", "sc3", ["bld"], [py + [h("golden_setup.py"), "--game", game, "--kits", kits, "--out", work]], setup=True)
-    add("golden.mjs (bldweb.js vs pack, every file + frame)", "sc3", ["bld"], [node + [h("golden.mjs"), "--golden", work, "--game", game, "--cases", "testmodels,bld,kenney,styles,ports,landmarks,civic,lotshape", "--frames"]])
+    add("golden_setup (bldimport.py pack, 10 cases)", "sc3", ["bld"], [py + [h("golden_setup.py"), "--game", game, "--kits", kits, "--out", work]], setup=True)
+    add("golden.mjs (bldweb.js vs pack, every file + frame)", "sc3", ["bld"], [node + [h("golden.mjs"), "--golden", work, "--game", game, "--cases", "testmodels,bld,kenney,styles,ports,landmarks,civic,lotshape,sharp", "--frames"]])
     add("install_golden.mjs (install, re-install, restore)", "sc3", ["bld"], [node + [h("install_golden.mjs"), "--golden", work, "--game", game, "--case", "kenney"]])
     add("zip_golden.mjs (.zip route)", "sc3", ["bld"], [node + [h("zip_golden.mjs"), "--golden", work, "--game", game, "--case", "kenney"]])
     for c in ["kenney", "bld", "styles", "ports", "landmarks", "civic", "lotshape"]:

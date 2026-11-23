@@ -67,7 +67,7 @@ def main():
     ap.add_argument("--game", required=True)
     ap.add_argument("--kits", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks,landmarkdesc,civic,lotshape")
+    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks,landmarkdesc,civic,lotshape,sharp")
     ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
     ap.add_argument("--bld1999", help="folder of 1999 Building Architect .bld files for case bld1999 (sc3compat-a)")
     ap.add_argument("--bldside", help="folder of .bld files + the bld_frames.ixf render_bld.ps1 wrote, for case bldside")
@@ -245,6 +245,21 @@ def main():
                  "x_bldrender": {"cell_m": 15}},
                 {"file": "missing.obj", "name": "Not here", "class": 3300, "lot": [1, 1]},
                 {"file": "house_tex.obj.bak", "name": "Bad ext", "class": 3300},
+            ]
+            json.dump({"sc3models": 1, "models": models}, open(os.path.join(d, "models.json"), "w"), indent=1)
+        elif c == "sharp":
+            # task bakedsharp (2026-11-23): the baked styles with zoom 4 drawn natively (baked_sharp, baked_raw_sharp)
+            # next to baked (zoom 3 doubled), on a textured house and on the obelisk's 0.6 m lamp posts
+            subprocess.run([sys.executable, MAKE, d], check=True, capture_output=True)
+            subprocess.run([sys.executable, MAKE, "--landmarks", d], check=True, capture_output=True)
+            models = [
+                {"file": "house_tex.obj", "name": "Baked house", "class": 3300, "lot": [1, 1], "weight": 2, "x_bldrender": {"style": "baked"}},
+                {"file": "block_2x2.obj", "name": "Baked sharp block", "class": 3900, "lot": [2, 2], "weight": 1, "rotate_deg": 90,
+                 "x_bldrender": {"style": "baked_sharp"}},
+                {"file": "obelisk_2x2.obj", "name": "Baked sharp obelisk", "class": 6300, "lot": [2, 2], "weight": 1,
+                 "x_bldrender": {"style": "baked_sharp"}},
+                {"file": "house_plain.obj", "name": "Raw sharp house", "class": 3100, "lot": [1, 1], "weight": 1, "rotate_deg": 45,
+                 "x_bldrender": {"style": "baked_raw_sharp"}},
             ]
             json.dump({"sc3models": 1, "models": models}, open(os.path.join(d, "models.json"), "w"), indent=1)
     for c in cases:
