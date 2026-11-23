@@ -21,11 +21,24 @@ Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips
 **Your own buildings.** Turn 3D models and Building Architect `.bld` files into zoned buildings, with a sample pack
 and a guide: [nanofives.github.io/sc3kre/buildings](https://nanofives.github.io/sc3kre/buildings/).
 
-**Install.** Unzip into the game folder (the one with `Apps` and `Cities`, `SC3U.exe` is inside `Apps`), run
-`powershell -ExecutionPolicy Bypass -File .\sc3mods_patch.ps1` once in that folder, start `Apps\SC3U.exe`. GOG and
-Steam copies both work.
-`sc3mods_patch.ps1 -Restore` goes back to stock. Each release has a `README.txt` with install steps, every option
-and what changed.
+### Install
+
+1. Download the newest `sc3mods-*.zip` from the [Releases](https://github.com/nanofives/sc3kre/releases) page.
+2. Unzip it into the game folder, the one with `Apps` and `Cities` (`SC3U.exe` is inside `Apps`). Over an older
+   release, replace the older files.
+3. Patch the game once, in that folder:
+   - Windows: `powershell -ExecutionPolicy Bypass -File .\sc3mods_patch.ps1`
+   - Linux or macOS (Wine, Lutris, CrossOver): `sh sc3mods_patch.sh` (details below)
+
+   Needed only on the first install, and again if the game itself was updated or reinstalled. GOG and Steam copies
+   both work.
+4. Optional, the community mods: `powershell -ExecutionPolicy Bypass -File .\community\community_patch.ps1`
+5. Start `Apps\SC3U.exe`.
+
+**Back to stock.** `sc3mods_patch.ps1 -Restore` or `sh sc3mods_patch.sh --restore`. If you imported rewards, that
+also moves them out of the game, because the game without the mods cannot open a city that holds one. Running the
+patch again puts them back. Each release has a `README.txt` with every option, off switch and what changed.
+
 **Linux and macOS (Wine, Lutris, CrossOver).** The Windows script needs PowerShell, so the release also has
 `sc3mods_patch.sh`, a plain `sh` script that makes the same edit to `SC3U.exe` and needs only tools every Linux and
 macOS install has (`sh`, `dd`, `od`, `wc`, `cp`, `mv`, `cut`, `tr`, `grep`, and `sha256sum` or `shasum`). Close the game, then run
