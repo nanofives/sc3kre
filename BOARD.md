@@ -47,6 +47,9 @@ handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round bri
 - stylepick: one GZGraphicD+0x18C7A crash (NULL surface Blt) in 7 New City windows after a Preferences visit, not
   reproduced since (4 tries, plus 11 windows in the 11-21 smoke test). `[UNCERTAIN]`.
 - Owner hand test: a Marina civic look placed on a shore (`STATUS_civicstyle.md`).
+- civlot (merged 2026-11-23): SC4 civic looks on their own lot. Not checked: whether a non-square landmark wider than
+  deep has the same overlap risk when its plugin is removed (stock respawn as a square of side X), the Mover on a civic
+  look, the converted fire look placed (`verify/civlot/RESULTS.md`).
 - SC4: commercial / industrial packs barely tested, 94 animated prop rows (type 0x29A5D1EC) unread, 21 SC4 parks /
   rewards without their own model, Large High School skipped, owner's real folder pick of the SC4 install untested.
 - Civic list window shows a fixed line, not the importer's description of the look.
