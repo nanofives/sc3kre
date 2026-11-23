@@ -47,6 +47,9 @@ handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round bri
 - stylepick: one GZGraphicD+0x18C7A crash (NULL surface Blt) in 7 New City windows after a Preferences visit, not
   reproduced since (4 tries, plus 11 windows in the 11-21 smoke test). `[UNCERTAIN]`.
 - Owner hand test: a Marina civic look placed on a shore (`STATUS_civicstyle.md`).
+- firedist (2026-11-23): Large Fire Station smear = SC4 view mesh (bay wall at the eave, faces seen edge-on), not the
+  civlot turn (`verify/firedist/RESULTS.md`). Owner: build the per-face rule (edge-on faces from the head-on view) and
+  investigate Large Medical Center cars at mid-wall + Soccer Field without markings. In progress.
 - New crash, seen once (forumshots 2026-11-23): Sacramento, churn anarchy 5000, speed 4, 105 s after a City Properties
   style pick, `0xC0000005` at STRTSIM.DLL+0x94DB (read of 0, main thread). Stack in `re/sessions/STATUS_forumshots.md`. Not reproduced.
 - civlot (merged 2026-11-23): SC4 civic looks on their own lot. Not checked: whether a non-square landmark wider than
