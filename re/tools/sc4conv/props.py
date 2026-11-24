@@ -218,7 +218,7 @@ def choose_lot(b, lots):
 
 
 # ---------------------------------------------------------------------------------------------- prop models
-def prop_views(src, model, label):
+def prop_views(src, model, label, billboard=True):
     """-> 4 views (r = 0..3) {r, meshes: [(P model frame (list of [x, y, z]), UV, tris, fsh key)], fill: (P, UV,
     tris) or None, fill_key, az (camera azimuth, prop model frame)}. Raises ValueError when a view is missing."""
     out = []
@@ -244,6 +244,10 @@ def prop_views(src, model, label):
             v = {'r': r, 'P_view': np.array(P, dtype=np.float64), 'A': A, 'tex_size': (bm['w'], bm['h']),
                  'cam': {'forward_view': d.tolist()}}
             fill = V.hidden_faces(v)
+            bb = V.thin_billboard(v) if billboard else None   # task sc4art: a thin tall prop is one plane, no fill
+            if bb is not None:
+                meshes = [(bb[0], bb[1], bb[2], fk)]
+                fill = None
         ms = []
         for P, UV, tris, fk in meshes:
             Pm = V.to_model(P, r)

@@ -691,6 +691,115 @@ def edge_mask(vs, v, w, eP, et, alpha):
     return sum(1 for k in seen if not seen[k])
 
 
+# Task sc4art (round 2026-11-24): proxy faces in the air. SC4's view meshes of a landmark are coarse proxies, and SC4 draws
+# them with a z-buffer, so an opaque texel shows only on the face nearest its camera. A face whose every opaque texel lies
+# behind a nearer face of the same view draws nothing in SC4, while SC3's camera, 15 degrees lower and 22.5 degrees round,
+# draws it apart from that face: Hagia Sofia's view N has thin skirt faces round its minarets (19.4 m up, 84 to 96%
+# transparent) whose opaque texels are the minaret, 10 to 21 m nearer SC4's camera, and SC3 drew the minaret a second time
+# on them, in the air (verify/sc4art/RESULTS.md section 2). A rule that cleared every hidden texel opened holes in roofs,
+# because the minarets' proxy triangles also cover roof that SC4 draws on them. So only a mostly transparent face (at
+# least PROXY_CLEAR_MIN of the texels under its centre test clear: a proxy round something thin) loses its hidden texels;
+# a solid face keeps them. Hidden = the face's plane lies more than EDGE_OCC_TOL behind the nearest face whose centre test
+# covers that texel. The cleared faces go into layer materials (proxy_layers); faces that share a texel where one of them
+# is hidden never share a layer, so a layer's texture can drop all of its faces' hidden texels.
+PROXY_CLEAR_MIN = 0.5
+
+
+def _tri_texels(S, t, tw, th):
+    """Texels under triangle t of screen points S [(x, y, depth)]: -> list of (k = y * tw + x, centre inside, footprint
+    (centre or a corner inside), plane depth at the texel centre), or [] for a degenerate triangle. Same arithmetic as
+    occluded / edge_mask."""
+    a, b, c = S[t[0]], S[t[1]], S[t[2]]
+    den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+    if den == 0.0:
+        return []
+    x0 = max(int(math.floor(min(a[0], b[0], c[0]))), 0)
+    x1 = min(int(math.ceil(max(a[0], b[0], c[0]))), tw - 1)
+    y0 = max(int(math.floor(min(a[1], b[1], c[1]))), 0)
+    y1 = min(int(math.ceil(max(a[1], b[1], c[1]))), th - 1)
+    if x1 < x0 or y1 < y0:
+        return []
+    xs = np.arange(x0, x1 + 1, dtype=np.float64)
+    ys = np.arange(y0, y1 + 1, dtype=np.float64)
+    X, Y = np.meshgrid(xs + 0.5, ys + 0.5)
+    k1, k2, k3, k4 = b[1] - c[1], c[0] - b[0], c[1] - a[1], a[0] - c[0]
+
+    def bary(cx, cy):
+        l1 = (k1 * (cx - c[0]) + k2 * (cy - c[1])) / den
+        l2 = (k3 * (cx - c[0]) + k4 * (cy - c[1])) / den
+        l3 = (1.0 - l1) - l2
+        return l1, l2, l3
+
+    l1, l2, l3 = bary(X, Y)
+    cen = (l1 >= 0.0) & (l2 >= 0.0) & (l3 >= 0.0)
+    foot = cen.copy()
+    for ox, oy in ((-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)):
+        m1, m2, m3 = bary(X + ox, Y + oy)
+        foot |= (m1 >= 0.0) & (m2 >= 0.0) & (m3 >= 0.0)
+    dep = (l1 * a[2] + l2 * b[2]) + l3 * c[2]
+    K = (np.arange(y0, y1 + 1)[:, None] * tw + np.arange(x0, x1 + 1)[None, :])
+    sel = foot
+    return K[sel], cen[sel], dep[sel]
+
+
+def proxy_hidden(v, P, UV, tris):
+    """-> (layers [[triangle index, ...] per layer], cleared [[texel k, ...] per layer]) for view v's own mesh as drawn
+    (P after clamp_ground, UV the stored uv: texel x = u * width, y = v * height, depth = P . forward_model)."""
+    tw, th = v['tex_size']
+    f = [float(q) for q in v['cam']['forward_model']]
+    alpha = np.asarray(v['tex'])[..., 3].reshape(-1)
+    S = [(float(UV[k][0]) * tw, float(UV[k][1]) * th, _dot3([float(P[k][0]), float(P[k][1]), float(P[k][2])], f))
+         for k in range(len(P))]
+    zb = np.full(tw * th, np.inf)
+    cache = []
+    for t in tris:
+        tx = _tri_texels(S, t, tw, th)
+        cache.append(tx)
+        if len(tx) == 0 or len(tx[0]) == 0:
+            continue
+        K, cen, dep = tx
+        Kc, dc = K[cen], dep[cen]
+        np.minimum.at(zb, Kc, dc)
+    hid, foot = {}, {}
+    for i, tx in enumerate(cache):
+        if len(tx) == 0 or len(tx[0]) == 0:
+            continue
+        K, cen, dep = tx
+        nc = int(cen.sum())
+        if nc == 0:
+            continue
+        clear = int((alpha[K[cen]] < 128).sum())
+        if clear * 2 < nc:                          # PROXY_CLEAR_MIN 0.5 as integers
+            continue
+        h = (alpha[K] >= 128) & (zb[K] < dep - EDGE_OCC_TOL)
+        if h.any():
+            hid[i] = set(K[h].tolist())
+            foot[i] = K
+    sel = sorted(hid)
+    owner = {}
+    for i in sel:
+        for k in foot[i].tolist():
+            owner.setdefault(k, []).append(i)
+    conf = {i: set() for i in sel}
+    for k, ii in owner.items():
+        if len(ii) > 1 and any(k in hid[i] for i in ii):
+            for a_ in ii:
+                for b_ in ii:
+                    if a_ != b_:
+                        conf[a_].add(b_)
+    layer = {}
+    for i in sel:
+        used = {layer[j] for j in conf[i] if j in layer}
+        L = 0
+        while L in used:
+            L += 1
+        layer[i] = L
+    n = max(layer.values()) + 1 if layer else 0
+    layers = [[i for i in sel if layer[i] == L] for L in range(n)]
+    cleared = [sorted(set().union(*[hid[i] for i in layers[L]])) for L in range(n)]
+    return layers, cleared
+
+
 def toned(tex, gain):
     """tex (H, W, 4 uint8) with RGB x gain, floor(x + 0.5), at most 255; alpha kept."""
     out = np.array(tex, dtype=np.uint8, copy=True)
@@ -709,6 +818,78 @@ def face_normals(P, tris):
     return np.array(out)
 
 
+# Task sc4art (round 2026-11-24): "7 vertices" is not enough to call a view a box. SC4's lamp posts (C1x1x8_$$$lamppost_1DFC,
+# _1DFB) have 7-vertex views made of crossed billboards, and the back walls + floor hidden_faces built from their bounding
+# box took uv by projection outside the lamp's piece of SC4's shared prop atlas (texture 1ABE787D-1E020410), on the stair
+# art next to it: the tall grey slab beside every converted lamp post (verify/sc4art/RESULTS.md section 1). A box view is
+# 7 distinct corners of its own bounding box.
+BOX_TOL = 1e-4
+
+
+def is_box(Pv):
+    """True when the view mesh's vertices are 7 distinct corners of their bounding box (each coordinate within BOX_TOL
+    of the low or the high end on every axis)."""
+    if len(Pv) != 7:
+        return False
+    P = [[float(c) for c in p] for p in Pv]
+    lo = [min(p[k] for p in P) for k in range(3)]
+    hi = [max(p[k] for p in P) for k in range(3)]
+    seen = set()
+    for p in P:
+        key = []
+        for k in range(3):
+            if abs(p[k] - lo[k]) <= BOX_TOL:
+                key.append(0)
+            elif abs(p[k] - hi[k]) <= BOX_TOL:
+                key.append(1)
+            else:
+                return False
+        seen.add(tuple(key))
+    return len(seen) == 7
+
+
+# Task sc4art: a thin, tall prop (lamp posts, flag poles, sign posts) as one plane. Its view is a box (1 x 1 x 9 m for SC4's
+# C1x1x8_$$lamppost_1DFB) with the pole on the box's axis. SC3's camera sees the box's two front walls and, through their
+# clear texels, the back walls and floor, and each of them carries the pole where the SC4 ray through it meets the pole:
+# up to four poles side by side, the thick grey column on the Small Police Station (verify/sc4art/RESULTS.md section 3).
+# A box no wider than THIN_M on both sides and at least THIN_RATIO times as tall as wide is drawn instead as one vertical
+# plane through its axis, square to the SC4 camera's heading, with uv by the same projection: the pole lies in that plane,
+# so SC3 draws it once. The plane reaches above the box by the half-depth x tan(elevation) that SC4's camera sees of the
+# box top behind the axis.
+THIN_M = 1.5
+THIN_RATIO = 3.0
+
+
+def thin_billboard(v):
+    """-> (P (4, 3) in the view's own frame, as the S3D mesh, UV (4, 2), tris) for a thin tall box view (THIN_M,
+    THIN_RATIO), else None."""
+    Pv = v['P_view']
+    if not is_box(Pv):
+        return None
+    P = [[float(c) for c in p] for p in Pv]
+    lo = [min(p[k] for p in P) for k in range(3)]
+    hi = [max(p[k] for p in P) for k in range(3)]
+    sx, sy, sz = hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]
+    if sx > THIN_M or sz > THIN_M or sy < THIN_RATIO * max(sx, sz):
+        return None
+    d = [float(q) for q in v['cam']['forward_view']]
+    hl = math.sqrt(d[0] * d[0] + d[2] * d[2])
+    if hl == 0.0:
+        return None
+    fx, fz = d[0] / hl, d[2] / hl
+    ex, ez = -fz, fx                                   # horizontal, square to the camera's heading
+    cx, cz = (lo[0] + hi[0]) * 0.5, (lo[2] + hi[2]) * 0.5
+    w = (abs(ex) * sx + abs(ez) * sz) * 0.5
+    dd = (abs(fx) * sx + abs(fz) * sz) * 0.5
+    top = hi[1] + dd * (-d[1] / hl)
+    Q = [[cx - ex * w, lo[1], cz - ez * w], [cx + ex * w, lo[1], cz + ez * w],
+         [cx + ex * w, top, cz + ez * w], [cx - ex * w, top, cz - ez * w]]
+    A, (tw, th) = v['A'], v['tex_size']
+    UV = [[(((p[0] * float(A[0][j]) + p[1] * float(A[1][j])) + p[2] * float(A[2][j])) + float(A[3][j])) / (tw, th)[j]
+           for j in range(2)] for p in Q]
+    return Q, UV, [(0, 1, 2), (0, 2, 3)]
+
+
 def hidden_faces(v, floor_y=0.05, ground=None):
     """The box faces the SC4 camera does not see (the two back walls and the floor, lifted floor_y metres so the
     lot ground stays behind it), with uv from the view's fitted projection: uv = A [x y z 1] / texture size, the
@@ -716,7 +897,7 @@ def hidden_faces(v, floor_y=0.05, ground=None):
     Task sc4ground: ground = the SC4 lot's height (0.0 for a building): a box reaching below it has its floor
     floor_y above the ground, not above the box bottom (clamp_ground then raises the back walls' bottom to it)."""
     Pv = v['P_view']
-    if len(Pv) != 7:
+    if not is_box(Pv):
         return None
     lo, hi = Pv.min(0), Pv.max(0)
     d = np.array(v['cam']['forward_view'])

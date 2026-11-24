@@ -689,3 +689,32 @@ Results and pictures: `verify/sc4ground/RESULTS.md`.
   model and bldrender sets it on the lawn. A cut at y = 0 was tried first and dropped: the view meshes do not always
   enclose the model, and the cut took Wong Insurance's forecourt away. [UNCERTAIN] whether SimCity 4 itself hides a
   model's parts under its terrain was not checked against an SC4 screenshot.
+
+## 15. View meshes that are not boxes, thin props, proxy faces (round 2026-11-24, stream sc4art)
+
+Results and pictures: `verify/sc4art/RESULTS.md`. Three converter rules, Python and page alike (`views.is_box`,
+`views.thin_billboard`, `views.proxy_hidden`; `sc4web.js isBox`, `thinBillboard`, `proxyHidden`).
+
+- **"7 vertices" is not a box.** SC4's lamp posts `C1x1x8_$$$lamppost_1DFC` have 7-vertex views made of crossed
+  billboards. `hidden_faces` built back walls and a floor from their bounding box, with uv by projection, and on SC4's
+  shared prop atlas (texture 1ABE787D-1E020410) those landed on the neighbouring atlas piece, stair art: the grey slab
+  beside every Mayor's House lamp post. A box is now 7 distinct corners of its own bounding box (each coordinate within
+  1e-4 m of the low or the high end). Other 7-vertex views get no back walls and floor.
+- **A thin tall prop is one plane.** `C1x1x8_$$lamppost_1DFB` is a real 1 x 1 x 9 m box view with the pole on its axis:
+  SC3's camera saw the pole on both front walls and, through their clear texels, on the back walls, a thick double column.
+  A box view no wider than 1.5 m on both sides and at least 3 times as tall as wide is drawn as one vertical plane through
+  its axis, square to the SC4 camera's heading, reaching half-depth x tan(elevation) above the box (what SC4's camera sees
+  of the box top behind the axis), uv by the view's projection, no back walls and floor.
+- **Proxy faces lose their hidden texels.** SC4 draws a view mesh with a z-buffer, so an opaque texel shows only on the
+  face nearest SC4's camera. Per view: a z-buffer over the texels (face plane depth at texel centres, centre test),
+  then a face counts as hidden at a texel of its footprint (centre or a corner inside) when its plane lies more than
+  0.5 m behind that z-buffer and the texel is opaque. Hagia Sofia's view N has skirt faces round its minarets (19.4 m up,
+  84 to 96% clear) whose every opaque texel is the minaret, 10 to 21 m nearer SC4's camera: SC3 drew the minaret again
+  on them, in the air. Only a face whose centre texels are at least half clear (a proxy round something thin) loses its
+  hidden texels: clearing them on every face opened holes in roofs, because the minarets' proxy triangles also cover roof
+  that SC4 draws on them. The cleared faces go into layer materials `sc4_<view>_own<L>` / `<stem>_<view>_own<L>.png` on
+  the same vertices; two faces that share a texel where one of them is hidden never share a layer. `models.json`
+  `x_sc4.proxy_hidden`: per slot and layer the faces and texels cleared, absent on models with none.
+  Over the install (423 models): 58,591 faces of 365 models have hidden opaque texels; their clear share falls steadily
+  from 0 to 1 (49,107 faces under 10% clear, 609 over 90%), no gap at one half. 2,972 faces of 280 models are at least half
+  clear and lose 429,864 texels.

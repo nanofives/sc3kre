@@ -238,12 +238,14 @@ def write_edge(b, vs, slot, v, stem, obj, mtl, out, vbase, edge):
 
 
 EDGE_LOG = []                             # task firedist: write_edge's switches for the building being written
+PROXY_LOG = []                            # task sc4art: proxy layers (views.proxy_hidden) of the building being written
 
 
 def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=False, versions=None, pctx=None):
     vs = V.load_views(idx, b, ZOOM5)
     stem = stem_of(b['name'])
     del EDGE_LOG[:]
+    del PROXY_LOG[:]
     obj = ['# %s, converted from SimCity 4 by sc4conv.py (local use only: see the pack licence)' % b['name'],
            'mtllib %s.mtl' % stem]
     mtl = []
@@ -261,12 +263,16 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         edge = (P, tris)
         if slot == 0:
             mark = (P[0][0], P[0][2])
+        layers, cleared = V.proxy_hidden(v, P, UV, tris)      # task sc4art: proxy faces lose their hidden texels
+        moved = {i for ly in layers for i in ly}
         for p in P:
             obj.append('v %.5f %.5f %.5f' % tuple(p))
         for uv in UV:
             obj.append('vt %.6f %.6f' % (uv[0], 1.0 - uv[1]))
-        for t in tris:
-            obj.append('f ' + ' '.join('%d/%d' % (vbase + i, vbase + i) for i in t))
+        for ti, t in enumerate(tris):
+            if ti not in moved:
+                obj.append('f ' + ' '.join('%d/%d' % (vbase + i, vbase + i) for i in t))
+        vmain = vbase
         vbase += len(P)
         hf = V.hidden_faces(v, ground=0.0) if fill else None
         if hf is not None:              # back walls + floor of the same view: what shows through cut-outs
@@ -279,6 +285,19 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
             for t in tris:
                 obj.append('f ' + ' '.join('%d/%d' % (vbase + i, vbase + i) for i in t))
             vbase += len(P)
+        for L, ly in enumerate(layers):     # task sc4art: the moved faces, on the same vertices, layer by layer
+            mname = 'sc4_%s_own%d' % (v['name'], L)
+            png = '%s_%s_own%d.png' % (stem, v['name'], L)
+            im = np.array(v['tex'], dtype=np.uint8, copy=True)
+            a = im[..., 3].reshape(-1)
+            a[np.array(cleared[L], dtype=np.int64)] = 0
+            im[..., 3] = a.reshape(im.shape[:2])
+            Image.fromarray(im).save(os.path.join(out, png))
+            mtl += ['newmtl ' + mname, 'Kd 1 1 1', 'map_Kd ' + png, '']
+            obj.append('usemtl ' + mname)
+            for i in ly:
+                obj.append('f ' + ' '.join('%d/%d' % (vmain + j, vmain + j) for j in tris[i]))
+            PROXY_LOG.append({'slot': slot, 'view': v['name'], 'layer': L, 'faces': len(ly), 'cleared': len(cleared[L])})
         vbase = write_edge(b, vs, slot, v, stem, obj, mtl, out, vbase, edge)   # task firedist
     obj += ground_mark(mark, vbase)     # task sc4ground: y = 0 is the lowest point, so SC4's ground lands on the lawn
     mtl += ['newmtl ' + GROUND_MARK, 'Kd 1 1 1', '']
@@ -332,6 +351,8 @@ def write_building(idx, b, out, enabled, style, fill=True, dg=None, keep_diag=Fa
         entry['x_sc4']['versions'] = versions
     if EDGE_LOG:                          # task firedist: faces drawn from a more head-on view (views.edge_on)
         entry['x_sc4']['edge_on'] = [dict(e) for e in EDGE_LOG]
+    if PROXY_LOG:                         # task sc4art: proxy faces whose hidden texels were cleared (views.proxy_hidden)
+        entry['x_sc4']['proxy_hidden'] = [dict(e) for e in PROXY_LOG]
     if pinfo is not None:                 # task sc4props: the SC4 lot's props, baked into <stem>_props.obj
         entry['x_sc4']['props'] = pinfo
     if tinfo is not None:                 # task sc4lottex: the SC4 lot's textures, <stem>_lot.obj / _props_lot.obj

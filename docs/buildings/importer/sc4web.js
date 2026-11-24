@@ -941,9 +941,120 @@ function SC4WEB_LIB(B) {
     for (const v of vs) { const k = Math.abs(pyMod(v.cam.azimuth_model - a + 180, 360) - 180); if (best === null || k < bk) { best = v; bk = k; } }
     return best;
   }
+  // task sc4art: views.is_box / thin_billboard / proxy_hidden, the same steps and float order (comments there)
+  const BOX_TOL = 1e-4, THIN_M = 1.5, THIN_RATIO = 3.0, PROXY_TOL = 0.5;
+  function isBox(Pv) {
+    if (Pv.length !== 7) return false;
+    const P = Pv.map(p => [+p[0], +p[1], +p[2]]);
+    const lo = [0, 1, 2].map(k => Math.min(...P.map(p => p[k]))), hi = [0, 1, 2].map(k => Math.max(...P.map(p => p[k])));
+    const seen = new Set();
+    for (const p of P) {
+      let key = '';
+      for (let k = 0; k < 3; k++) {
+        if (Math.abs(p[k] - lo[k]) <= BOX_TOL) key += '0';
+        else if (Math.abs(p[k] - hi[k]) <= BOX_TOL) key += '1';
+        else return false;
+      }
+      seen.add(key);
+    }
+    return seen.size === 7;
+  }
+  function thinBillboard(v) {               // -> [P view frame, UV, tris] or null
+    const Pv = v.P_view;
+    if (!isBox(Pv)) return null;
+    const P = Pv.map(p => [+p[0], +p[1], +p[2]]);
+    const lo = [0, 1, 2].map(k => Math.min(...P.map(p => p[k]))), hi = [0, 1, 2].map(k => Math.max(...P.map(p => p[k])));
+    const sx = hi[0] - lo[0], sy = hi[1] - lo[1], sz = hi[2] - lo[2];
+    if (sx > THIN_M || sz > THIN_M || sy < THIN_RATIO * Math.max(sx, sz)) return null;
+    const d = v.cam.forward_view.map(q => +q);
+    const hl = Math.sqrt(d[0] * d[0] + d[2] * d[2]);
+    if (hl === 0.0) return null;
+    const fx = d[0] / hl, fz = d[2] / hl, ex = -fz, ez = fx;
+    const cx = (lo[0] + hi[0]) * 0.5, cz = (lo[2] + hi[2]) * 0.5;
+    const w = (Math.abs(ex) * sx + Math.abs(ez) * sz) * 0.5;
+    const dd = (Math.abs(fx) * sx + Math.abs(fz) * sz) * 0.5;
+    const top = hi[1] + dd * (-d[1] / hl);
+    const Q = [[cx - ex * w, lo[1], cz - ez * w], [cx + ex * w, lo[1], cz + ez * w],
+      [cx + ex * w, top, cz + ez * w], [cx - ex * w, top, cz - ez * w]];
+    const A = v.A, ts = v.tex_size;
+    const UV = Q.map(p => [0, 1].map(j => (((p[0] * A[0][j] + p[1] * A[1][j]) + p[2] * A[2][j]) + A[3][j]) / ts[j]));
+    return [Q, UV, [[0, 1, 2], [0, 2, 3]]];
+  }
+  function proxyHidden(v, P, UV, tris) {    // views.proxy_hidden -> [layers, cleared]
+    const [tw, th] = v.tex_size, f = v.cam.forward_model.map(q => +q), tex = v.tex;
+    const S = P.map((p, k) => [UV[k][0] * tw, UV[k][1] * th, dot3([+p[0], +p[1], +p[2]], f)]);
+    const zb = new Float64Array(tw * th).fill(Infinity);
+    const cache = tris.map(t => {
+      const a = S[t[0]], b = S[t[1]], c = S[t[2]];
+      const den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+      if (den === 0.0) return null;
+      const x0 = Math.max(Math.floor(Math.min(a[0], b[0], c[0])), 0), x1 = Math.min(Math.ceil(Math.max(a[0], b[0], c[0])), tw - 1);
+      const y0 = Math.max(Math.floor(Math.min(a[1], b[1], c[1])), 0), y1 = Math.min(Math.ceil(Math.max(a[1], b[1], c[1])), th - 1);
+      if (x1 < x0 || y1 < y0) return null;
+      const k1 = b[1] - c[1], k2 = c[0] - b[0], k3 = c[1] - a[1], k4 = a[0] - c[0];
+      const K = [], C = [], D = [];
+      for (let yy = y0; yy <= y1; yy++) {
+        const Y = yy + 0.5;
+        for (let xx = x0; xx <= x1; xx++) {
+          const X = xx + 0.5;
+          const l1 = (k1 * (X - c[0]) + k2 * (Y - c[1])) / den, l2 = (k3 * (X - c[0]) + k4 * (Y - c[1])) / den, l3 = (1.0 - l1) - l2;
+          const cen = l1 >= 0.0 && l2 >= 0.0 && l3 >= 0.0;
+          let foot = cen;
+          if (!foot) {
+            for (const [ox, oy] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
+              const cx = X + ox, cy = Y + oy;
+              const m1 = (k1 * (cx - c[0]) + k2 * (cy - c[1])) / den, m2 = (k3 * (cx - c[0]) + k4 * (cy - c[1])) / den, m3 = (1.0 - m1) - m2;
+              if (m1 >= 0.0 && m2 >= 0.0 && m3 >= 0.0) { foot = true; break; }
+            }
+          }
+          if (!foot) continue;
+          K.push(yy * tw + xx); C.push(cen); D.push((l1 * a[2] + l2 * b[2]) + l3 * c[2]);
+        }
+      }
+      return [K, C, D];
+    });
+    for (const tx of cache) {
+      if (!tx) continue;
+      const [K, C, D] = tx;
+      for (let j = 0; j < K.length; j++) if (C[j] && D[j] < zb[K[j]]) zb[K[j]] = D[j];
+    }
+    const hid = new Map(), foot = new Map();
+    cache.forEach((tx, i) => {
+      if (!tx || !tx[0].length) return;
+      const [K, C, D] = tx;
+      let nc = 0, clear = 0;
+      for (let j = 0; j < K.length; j++) if (C[j]) { nc++; if (tex[K[j] * 4 + 3] < 128) clear++; }
+      if (nc === 0 || clear * 2 < nc) return;
+      const h = new Set();
+      for (let j = 0; j < K.length; j++) if (tex[K[j] * 4 + 3] >= 128 && zb[K[j]] < D[j] - PROXY_TOL) h.add(K[j]);
+      if (h.size) { hid.set(i, h); foot.set(i, K); }
+    });
+    const sel = [...hid.keys()].sort((x, y) => x - y);
+    const owner = new Map();
+    for (const i of sel) for (const k of foot.get(i)) { if (!owner.has(k)) owner.set(k, []); owner.get(k).push(i); }
+    const conf = new Map(sel.map(i => [i, new Set()]));
+    for (const [k, ii] of owner) {
+      if (ii.length > 1 && ii.some(i => hid.get(i).has(k))) for (const a_ of ii) for (const b_ of ii) if (a_ !== b_) conf.get(a_).add(b_);
+    }
+    const layer = new Map();
+    for (const i of sel) {
+      const used = new Set([...conf.get(i)].filter(j => layer.has(j)).map(j => layer.get(j)));
+      let L = 0;
+      while (used.has(L)) L++;
+      layer.set(i, L);
+    }
+    const n = layer.size ? Math.max(...layer.values()) + 1 : 0;
+    const layers = [], cleared = [];
+    for (let L = 0; L < n; L++) {
+      const ly = sel.filter(i => layer.get(i) === L), u = new Set();
+      for (const i of ly) for (const k of hid.get(i)) u.add(k);
+      layers.push(ly); cleared.push([...u].sort((x, y) => x - y));
+    }
+    return [layers, cleared];
+  }
   function hiddenFaces(v, floorY = 0.05, ground = null) {   // views.hidden_faces
     const Pv = v.P_view;
-    if (Pv.length !== 7) return null;
+    if (!isBox(Pv)) return null;
     // ndarray.min(0) / max(0): on equal values (0.0 / -0.0) numpy keeps the later one
     const lo = [0, 1, 2].map(c => Pv.slice(1).reduce((m, p) => m < p[c] ? m : p[c], Pv[0][c]));
     const hi = [0, 1, 2].map(c => Pv.slice(1).reduce((m, p) => m > p[c] ? m : p[c], Pv[0][c]));
@@ -1134,14 +1245,28 @@ function SC4WEB_LIB(B) {
     };
     let mark = null;
     const edgeLog = [];                     // task firedist: sc4conv.EDGE_LOG
+    const proxyLog = [];                    // task sc4art: sc4conv.PROXY_LOG
     for (let slot = 0; slot < 4; slot++) {
       const v = matchView(vs, slot);
       obj.push('g sc3slot' + slot, 'usemtl sc4_' + v.name);
       const [cP, cUV] = clampGround(v.P, v.UV, v.A, v.tex_size);   // task sc4ground: nothing below SC4's ground
       if (slot === 0) mark = [cP[0][0], cP[0][2]];
-      emit(cP, cUV, v.tris);
+      const [layers, cleared] = proxyHidden(v, cP, cUV, v.tris);   // task sc4art: proxy faces lose their hidden texels
+      const moved = new Set(layers.flat());
+      const vmain = vbase;
+      emit(cP, cUV, v.tris.filter((t, i) => !moved.has(i)));
       const hf = fill ? hiddenFaces(v, 0.05, 0.0) : null;
       if (hf) { const [hP, hUV] = clampGround(hf[0], hf[1], v.A, v.tex_size); emit(hP, hUV, hf[2]); }
+      layers.forEach((ly, L) => {           // task sc4art: the moved faces, on the same vertices, layer by layer
+        const mname = 'sc4_' + v.name + '_own' + L, png = stem + '_' + v.name + '_own' + L + '.png';
+        const im = Uint8Array.from(v.tex);
+        for (const k of cleared[L]) im[k * 4 + 3] = 0;
+        pngs.push([png, { w: v.tex_size[0], h: v.tex_size[1], d: im }]);
+        mtl.push('newmtl ' + mname, 'Kd 1 1 1', 'map_Kd ' + png, '');
+        obj.push('usemtl ' + mname);
+        for (const i of ly) obj.push('f ' + v.tris[i].map(j => (vmain + j) + '/' + (vmain + j)).join(' '));
+        proxyLog.push({ slot, view: v.name, layer: L, faces: ly.length, cleared: cleared[L].length });
+      });
       // task firedist: sc4conv.write_edge, faces v saw edge-on (+ the hand table) once more from a more head-on view
       const picks = handPicks(b, vs, slot, cP, v.tris, edgeOn(vs, slot, v, cP, v.tris));
       for (const k of [...new Set(picks.map(q => q[1]))].sort((x, y) => x - y)) {
@@ -1201,6 +1326,7 @@ function SC4WEB_LIB(B) {
     if (Math.max(...vs.map(v => v.tiles)) > 1) entry.x_sc4.tiles = Object.fromEntries(vs.map(v => [v.name, v.tiles]));
     if (versions && versions.length) entry.x_sc4.versions = versions;
     if (edgeLog.length) entry.x_sc4.edge_on = edgeLog;   // task firedist
+    if (proxyLog.length) entry.x_sc4.proxy_hidden = proxyLog;   // task sc4art
     files.set(stem + '.obj', textBytes(obj.join('\n') + '\n'));
     files.set(stem + '.mtl', textBytes(mtl.join('\n')));
     const [pinfo, tinfo] = pctx ? writeProps(b, vs, stem, obj, mtl, files, pctx, fill, n) : [null, null];
@@ -1359,7 +1485,10 @@ function SC4WEB_LIB(B) {
         const [P, UV, , fk] = meshes[0];
         const bm = readFshFirst(src.read(...fk));
         const [A, , d] = fitCamera(P, UV, bm.w, bm.h);
-        fill = hiddenFaces({ r, P_view: P, A, tex_size: [bm.w, bm.h], cam: { forward_view: d } });
+        const pv = { r, P_view: P, A, tex_size: [bm.w, bm.h], cam: { forward_view: d } };
+        fill = hiddenFaces(pv);
+        const bb = thinBillboard(pv);       // task sc4art: a thin tall prop is one plane, no box and no fill
+        if (bb !== null) { meshes.length = 0; meshes.push([bb[0], bb[1], bb[2], fk]); fill = null; }
       }
       out.push({ r, meshes: meshes.map(([P, UV, tris, fk]) => [P.map(p => toModel1(p, r)), UV, tris, fk]), fill, fill_key: meshes[0][3],
         az: pyMod(22.5 + 90.0 * r + 180.0, 360.0) - 180.0 });
