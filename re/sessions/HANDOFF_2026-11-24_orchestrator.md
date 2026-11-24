@@ -30,3 +30,15 @@ After the reboot: resume children if stopped (memory reference-resume-stopped-ch
 
 dev\nopause and dev\civlot: one locked log each, delete after the reboot. BOARD.md "Current state 2026-11-23" lists the
 open items (STRTSIM crash under churn seen once, civlot unchecked items, firedist done).
+
+## Children at their safe points (both reported before the reboot)
+
+- objprops: props built (BA prop library Apps\Res\BA\PROPS read from the player's install, paved lots for shops /
+  offices / industry, `x_props` switch), Python = page on 80 frames, sample pack 236 props, new overview
+  verify/objprops/work/whole_pack_z3_new.jpg. Left: Berlin skyscraper picture (load last autosave), full suite (new
+  goldens for OBJ growables), *_pre_objprops copies, sync_css --publish, RESULTS.md. Commit note: bldprops.py needs -f;
+  docs/buildings/index.html picked up a baked_sharp line from the shared guide template (darktone's, expected).
+- lotgrowb: sc3simrun LOTGROW built, lockstep VERIFY identical (Sacramento 1,487 / 1,487, Europolis 1024 99,891 /
+  99,891; dense commercial 0x1000c3eb not exercised yet). Test pack 38000-38005 installed in its tree. Left: sc3resize
+  rebuild for the mods page row, non-square growth runs (Sacramento, Berlin, Madison), importer side after objprops
+  merges, suite, RESULTS.md.
