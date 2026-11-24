@@ -279,7 +279,7 @@ def sc4_render(ins, b, r, scale=1.0, ss=3, lot=True):
                 ck = (row['model'], id(row['msrc']))
                 if ck not in ins.pv:
                     try:
-                        ins.pv[ck] = PR.prop_views(row['msrc'], row['model'], row['name'])
+                        ins.pv[ck] = PR.prop_views(row['msrc'], row['model'], row['name'], billboard=False)   # sc4art: SC4's own box
                     except (ValueError, KeyError, IndexError) as e:
                         ins.pv[ck] = str(e)
                 pv = ins.pv[ck]
