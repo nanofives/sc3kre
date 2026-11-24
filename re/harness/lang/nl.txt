@@ -747,6 +747,7 @@ resize.cv_look_stock=Uiterlijk %d van %d: origineel
 resize.mt_civvar=Openbare gebouwen: meer uiterlijken
 # en: New rewards
 resize.mt_newreward=Nieuwe beloningen
+resize.mt_lotgrow=Zones: niet-vierkante gebouwen
 # en: Simulation and buildings
 resize.mt_simbld=Simulatie en gebouwen
 

@@ -153,6 +153,9 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   twice, and the demand valve layer's shutdown is protected.
 - Buildings on lots that are not square (landmarks and rewards such as a 2x3 or 3x4 lot from the building importer)
   draw whole in every view, and saves keep their real size. The stock game always drew them as squares.
+- Zoned buildings on lots that are not square: imported growables on 1x2, 2x3 or 3x4 lots grow by themselves in the
+  zones (mods page row "Non-square zoned buildings"). The stock zone growth laid out square lots only. Square
+  buildings grow exactly as before.
 
 ### Roads, avenues and highways (sc3netmod + road data)
 - Avenues with 2 lanes each way (right-hand traffic, lane markings), on slopes too, also where they pass under a

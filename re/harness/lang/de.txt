@@ -747,6 +747,7 @@ resize.cv_look_stock=Ansicht %d von %d: Original
 resize.mt_civvar=Stadtbauten: mehr Ansichten
 # en: New rewards
 resize.mt_newreward=Neue Belohnungen
+resize.mt_lotgrow=Zonen: nicht quadratische Gebäude
 # en: Simulation and buildings
 resize.mt_simbld=Simulation und Gebäude
 

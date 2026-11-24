@@ -383,3 +383,61 @@ rectangle on the same cells and with LOTRECT draws as view slot r + 2 (derived, 
   with w < d and |w - d| = 1.
 - **No-code alternative (available today):** the model on the smallest square lot that holds it, the rest of the lot
   dressed (objprops stream). Works in every rule and in stock, costs density.
+
+## 12. Growables built: sc3simrun LOTGROW (lotgrowb, round 2026-11-24d)
+
+Code: `re/harness/src/sc3simrun_lotgrow.c` (included by `sc3simrun.c`), table `sc3simrun_lotgrow_tab.h` from
+`re/tools/lotgrow_tab.py`. Results and pictures: `verify/lotgrowb/RESULTS.md`.
+
+### 12.1 What it does
+
+- Home: sc3simrun, the mod that already patches the zone developer (CHURN, SANDBOX, GENTLE, LVWRAP). LOTRECT stays in
+  sc3perf; LOTGROW only reads whether it is in (SIMSPR `0x10019341` is a jmp into sc3perf.dll).
+- The 9 rule-interface slots 0x1c of 11.3.1 (SIMRCI `0x1004cccc`, `0x1004c8f8`, `0x1004c404`, `0x1004c444`, `0x1004c3c4`,
+  `0x1004c128`, `0x1004cd0c`, `0x1004c1a8`, `0x1004c168`) point at C copies of the bodies, written after a byte check:
+  SIMRCI TimeDateStamp `0x38fd559f` and SizeOfImage `0x60000`, each slot's pointer, an FNV-1a hash of each body with its
+  relocated dwords zeroed, and each tunable among the body's relocated operands. All or nothing.
+- Each copy follows its body instruction by instruction: the same `cRZRandom::RandomUint32Uniform` (`0x10039a9a`) calls
+  on `rule+0x18`, the same ZoneLayer calls with the same arguments (`vt+0x68` PlaceBuilding, `vt+0x6c` transport,
+  `vt+0x70` road count along an edge), the same signed / unsigned compares. A member with X == Z takes that path.
+- X != Z (X from attrib `vt+0x40`, Z from `vt+0x44`): the z extent uses Z (bounds, grid mark X rows of Z bytes, corner
+  and strip offsets on z), the anchor is refused unless all X x Z grid cells are free, and the member is refused while
+  LOTRECT is not in, or when X > Z or Z - X != 1. A refused member is "does not fit" (at a corner it takes the n x n path
+  so the RNG calls are the same, then is not placed).
+- Two facts found while copying: `0x10027699` skips the corner step when the corner list is empty (`jbe` at
+  `0x1002790c`); `0x1000dd1a` has no such guard and draws from the empty list (`rand(0)` = 0). `0x1000dd1a` is 1,847
+  bytes (Ghidra's 1,862 runs into the next function at `0x1000e451`).
+- Switch: `simrun.ini [lotgrow] enabled=1`, env `SC3SIMRUN_LOTGROW=0` leaves every slot stock. Mods page row "Non-square
+  zoned buildings" (sc3resize MODTOGGLE, '-' row, default on).
+
+### 12.2 The identity check
+
+The rule RNGs are seeded from `timeGetTime` (`cRZRandom::Seed` `0x10039a7f`), so two runs of one save never grow alike
+and a switch-off vs switch-on comparison of occupant layers across runs cannot be equal. VERIFY mode
+(`SC3SIMRUN_LOTGROW_VERIFY=1`) checks in lockstep instead: each Apply runs the copy for real while a proxy ZoneLayer
+records every call and answer, then the stock body runs on the same rect / class / demand with the seed put back and
+`rule+0x38` pointed at a replay layer that checks each call and returns the recorded answer; the final seed and the
+result are compared. Measured with no non-square member installed: Sacramento 1,487 Apply calls and Europolis 1024
+99,891, all identical (7,019 and 231,849 layer calls checked); with members installed, every difference fell on a call
+where a non-square member was drawn (0 unexplained in Sacramento, Berlin, Madison). All 9 bodies ran (dense commercial
+`0x1000c3eb`: 532 calls in Berlin).
+
+### 12.3 Answers to 11.2's open rows (measured)
+
+- Construction (state 4), standing (1) and abandoned (2): one sprite over the whole X x Z lot, record flag 0x400 on every
+  cell (`lab.py cells`), drawn by the building's own frames.
+- Save: the occupant records hold the true size (217 of them in one Sacramento autosave: 1x2 and 2x3).
+- Package removed (mods on): each X x Z building came back as a 1x1 stock building of its class on its origin cell, the
+  other cell empty zoned land (Sacramento, 1x2 at (218,66) -> id 0x13bc 8900 1x1 at (218,66)). With X < Z the stand-in
+  stays inside the lot, as 11.3.2 derived.
+- Bulldoze with the Demolish tool: both cells cleared, ordinary single-cell sprites without 0x400 left.
+- Cost: 0.12 to 0.13 ms per Apply in Sacramento and Berlin with VERIFY on (copy + stock replay + PlaceBuilding), 1.4 s of
+  sim-thread time over 25 minutes of Berlin.
+
+### 12.4 Data side (bldimport, task lotgrowb)
+
+Growables accept "lot": [w, d] = 1x2, 2x3, 3x4. Stats of the class's d x d base. Family lines only in families no fixed
+rule uses (`FIXED_FAMILIES` 1, 10, 16, 25, 28, 29, 30). Classes 3500 and 3700 get copy families 38100 (of 10) and 38116
+(of 16) holding the family's members plus ours, and the generic rule rows `2,0xa22653c0`, `3,0xa22653c0` (10 -> 38100),
+`2,0x222c9d00`, `3,0x222c9d00` (16 -> 38116) are rewritten in the overlay SYS.PAK. Measured live: class 3700 members drawn
+by the residential corner rule in Madison (the copy family loaded).

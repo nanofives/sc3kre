@@ -747,6 +747,7 @@ resize.cv_look_stock=Aspect %d sur %d : original
 resize.mt_civvar=Bâtiments civiques : plus d'aspects
 # en: New rewards
 resize.mt_newreward=Nouvelles récompenses
+resize.mt_lotgrow=Zones : bâtiments non carrés
 # en: Simulation and buildings
 resize.mt_simbld=Simulation et bâtiments
 

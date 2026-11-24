@@ -616,6 +616,8 @@ resize.mt_keys=P and 1-4 keys
 # sc3resize.c
 resize.mt_landfill=Landfills
 # sc3resize.c
+resize.mt_lotgrow=Non-square zoned buildings
+# sc3resize.c
 resize.mt_lotrect=Non-square buildings
 # sc3resize.c
 resize.mt_mods=Mods

@@ -47,6 +47,7 @@ gold spire, population 1000, so they unlock in any town) and a 3x3 growable plaz
 Writes the civic list window test set: three police looks (police_blue, police_green, police_red), one fire look and
 one school look. Every other civic button has none, so it must stay stock.
     py -3.12 re/tools/bldimport/make_testmodels.py --lotshape <out folder>   (task lotshape, 2026-11-20)
+    py -3.12 re/tools/bldimport/make_testmodels.py --lotgrow <out folder>    (task lotgrowb, 2026-11-24: w x d growables)
 
 Writes non-square landmarks and rewards (re/analysis/LOT_SHAPES.md 8, they need sc3perf LOTRECT in game): a hall on a
 2x3 lot and one on a 3x2 lot (a long block, a tall tower at its +z end, a red -x wall), a 1x4 reward tower row, a 5x5
@@ -681,8 +682,8 @@ def lotshape(out):
              notes="landmark 5x4, stats of a 5x5 landmark"),
         dict(common, file="wide_2x3.obj", name="Test wide hall 2x3", kind="landmark", lot=[2, 3], height_m=35.0,
              notes="12 m wider and deeper than its lot: the overhang note"),
-        dict(common, file="grow_2x3.obj", name="Refused: growable 2x3", kind="growable", lot=[2, 3], height_m=35.0,
-             notes="growables stay square: skipped", **{"class": 3500}),
+        dict(common, file="grow_2x3.obj", name="Refused: growable 3x2", kind="growable", lot=[3, 2], height_m=35.0,
+             notes="a non-square growable lists its short side first (task lotgrowb): skipped", **{"class": 3500}),
         dict(common, file="landmark_2x6.obj", name="Refused: landmark 2x6", kind="landmark", lot=[2, 6],
              height_m=35.0, notes="a side longer than 5: skipped"),
         dict(common, file="police_3x2.obj", name="Test police look 3x2", kind="civic", base="police", lot=[3, 2],
@@ -697,9 +698,51 @@ def lotshape(out):
     return 0
 
 
+def lotgrow(out):
+    """Task lotgrowb (round 2026-11-24d): growables on w x d lots (1x2, 2x3, 3x4, long side along z), the copy families of
+    3500 and 3700 with their rule rows (overlay SYS.PAK), a square growable of the same class beside them, and entries
+    to refuse."""
+    os.makedirs(out, exist_ok=True)
+    common = {"scale": 1.0, "rotate_deg": 0, "style": "any", "enabled": True, "weight": 5}
+    for nm, w, d in (("shop_1x2", 1, 2), ("villa_1x2", 1, 2), ("flats_1x2", 1, 2), ("tower_3x4", 3, 4), ("office_2x3", 2, 3),
+                     ("square_2x2", 2, 2), ("bad_3x2", 3, 2), ("bad_1x3", 1, 3), ("farm_1x2", 1, 2), ("nobase_2x3", 2, 3),
+                     ("dock_1x2", 1, 2)):
+        hall(out, nm, w, d)
+    G = "growable"
+    models = [
+        dict(common, file="shop_1x2.obj", name="Test shop 1x2", kind=G, lot=[1, 2], height_m=10.0,
+             notes="class 5700, family 8 (commercial corners rule), stats of the 2x2 base", **{"class": 5700}),
+        dict(common, file="villa_1x2.obj", name="Test villa 1x2", kind=G, lot=[1, 2], height_m=12.0,
+             notes="class 3500: family 31 + the copy 38100 of family 10 (rows 2,3 of 0xa22653c0)", **{"class": 3500}),
+        dict(common, file="flats_1x2.obj", name="Test flats 1x2", kind=G, lot=[1, 2], height_m=14.0,
+             notes="class 3700: the copy 38116 of family 16 (rows 2,3 of 0x222c9d00)", **{"class": 3700}),
+        dict(common, file="tower_3x4.obj", name="Test tower 3x4", kind=G, lot=[3, 4], height_m=60.0,
+             notes="class 4500: family 14 only (30 is an L-block family), stats of the 4x4 base", **{"class": 4500}),
+        dict(common, file="office_2x3.obj", name="Test office 2x3", kind=G, lot=[2, 3], height_m=30.0,
+             notes="class 6100, family 23", **{"class": 6100}),
+        dict(common, file="square_2x2.obj", name="Test square villa 2x2", kind=G, lot=[2, 2], height_m=12.0,
+             notes="square, class 3500: families 10 and 31 as before; its line is in the copy 38100 too", **{"class": 3500}),
+        dict(common, file="bad_3x2.obj", name="Refused: growable 3x2", kind=G, lot=[3, 2], height_m=12.0,
+             notes="short side first: skipped", **{"class": 3300}),
+        dict(common, file="bad_1x3.obj", name="Refused: growable 1x3", kind=G, lot=[1, 3], height_m=12.0,
+             notes="sides differ by 2: skipped", **{"class": 3300}),
+        dict(common, file="farm_1x2.obj", name="Refused: farm 1x2", kind=G, lot=[1, 2], height_m=8.0,
+             notes="class 9300 grows only from the farm rule's family 25: skipped", **{"class": 9300}),
+        dict(common, file="nobase_2x3.obj", name="Refused: 2x3 without a 3x3 base", kind=G, lot=[2, 3], height_m=8.0,
+             notes="class 3300 has no 3x3 base: skipped", **{"class": 3300}),
+        dict(common, file="dock_1x2.obj", name="Refused: seaport 1x2", kind="seaport", lot=[1, 2], height_m=12.0,
+             notes="ports stay square: skipped")]
+    with open(os.path.join(out, "models.json"), "w", newline="\n") as fh:
+        json.dump({"sc3models": 1, "generator": "make_testmodels.py --lotgrow", "models": models}, fh, indent=2)
+    print("wrote lotgrow test models to", out, len(models), "models")
+    return 0
+
+
 def main(argv):
     if len(argv) == 2 and argv[0] == "--lotshape":
         return lotshape(argv[1])
+    if len(argv) == 2 and argv[0] == "--lotgrow":
+        return lotgrow(argv[1])
     if len(argv) == 2 and argv[0] == "--civdlg":
         return civdlg(argv[1])
     if len(argv) == 2 and argv[0] == "--civtest":

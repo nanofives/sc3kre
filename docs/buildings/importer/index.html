@@ -498,7 +498,7 @@ pre#log{max-height:calc(192 * var(--u));overflow:auto;font:var(--ui-type-row);li
         <button id="btnInstall" class="primary" disabled>Install into the game</button>
         <button id="btnRemove" disabled>Remove from the game</button>
       </div>
-      <div class="hint" id="gameHint">Open the models folder, choose the game folder, then Install. Close the game first. The page renders every enabled model (20 pictures each), adds them to the road mod's files in <code>mods\netmod\overlay</code> with backups, and keeps the building ids in <code>sc3build\ids.json</code> next to the models. Landmarks and civic looks go to <code>Apps\PlugIn\bldimport</code>, rewards to <code>Apps\PlugIn\bldimport_rewards</code> (they need the mods loader: <code>sc3mods_patch -Restore</code> moves them out for the stock game). Landmarks, rewards and civic looks can be 1x1 to 5x5, or a lot that is not square (2x3, 1x4, 4x5, up to 5 cells on each side): such a building needs the mods page row <b>Non-square buildings</b> on in the game, off it draws as one square over bare ground. Remove puts every file back as it was, plugins included.</div>
+      <div class="hint" id="gameHint">Open the models folder, choose the game folder, then Install. Close the game first. The page renders every enabled model (20 pictures each), adds them to the road mod's files in <code>mods\netmod\overlay</code> with backups, and keeps the building ids in <code>sc3build\ids.json</code> next to the models. Landmarks and civic looks go to <code>Apps\PlugIn\bldimport</code>, rewards to <code>Apps\PlugIn\bldimport_rewards</code> (they need the mods loader: <code>sc3mods_patch -Restore</code> moves them out for the stock game). Landmarks, rewards and civic looks can be 1x1 to 5x5, or a lot that is not square (2x3, 1x4, 4x5, up to 5 cells on each side): such a building needs the mods page row <b>Non-square buildings</b> on in the game, off it draws as one square over bare ground. Growables can also be 1x2, 2x3 or 3x4 (short side first, the long side along the model's z): they grow with the mods page rows <b>Non-square buildings</b> and <b>Non-square zoned buildings</b> on. Remove puts every file back as it was, plugins included.</div>
       <details id="zipBox"><summary>No folder access (other browsers, or a game folder the browser refuses)?</summary>
         <p class="hint">The page reads the game folder (the browser asks first, nothing leaves the computer) and downloads a .zip of the files to put into it: unpack it into the game folder and let it replace files. A folder the page cannot write to also gets <code>ids.json</code> as a download: put it in the models folder's <code>sc3build</code> folder so the next install keeps the same building ids.</p>
         <div class="btnrow"><button id="btnZipInstall">Make the install .zip</button><button id="btnZipRemove">Make the removal .zip</button></div>
@@ -590,6 +590,10 @@ const PORT_KINDS = {
 const LANDMARK_KIND = { sizes: [1, 2, 3, 4, 5], what: "the game's landmark menu (placed by the player, one per city; stats of a stock landmark of that lot: Big Ben, Coit Tower, Arc de Triomphe, Palace of Fine Arts, San Francisco City Hall)" };
 // task civlot (2026-11-23): civic looks too (their own lot, the stock building's type, coverage and price)
 const RECT_KINDS = ['landmark', 'reward', 'civic'], RECT_MAX = 5;
+// task lotgrowb: growables on 1x2, 2x3 or 3x4 (bldimport GROW_RECT: short side first, the long side runs along z)
+const GROW_RECT = [[1, 2], [2, 3], [3, 4]];
+const inGrowRect = l => Array.isArray(l) && GROW_RECT.some(g => g[0] === l[0] && g[1] === l[1]);
+const GROW_NOTE = "A growable on a lot that is not square grows only with the mods page rows Non-square buildings and Non-square zoned buildings on; without the mods a saved one comes back as a square stock building of its class on its first cells";
 const NONSQUARE_NOTE = "A landmark, reward or civic look on a lot that is not square (2x3, 1x4, ...) needs the mods page row Non-square buildings on in the game; off, it draws as one square over bare ground";
 const lotText = l => (Array.isArray(l) ? l[0] + 'x' + l[1] : l + 'x' + l);
 // task civmod (2026-11-19): bldimport.py / bldweb.js CIVIC and REWARD (re/analysis/CIVIC_REWARD.md 5). A civic look is a
@@ -1049,6 +1053,16 @@ function suggest(rec) {
   const lotN = sizes.includes(want) ? want : (sizes.find(s => s >= want) ?? Math.max(...sizes));
   set.lot = [lotN, lotN];
   why.push(`${cls[0]} ${cls[4]} offers ${sizes.map(s => s + 'x' + s).join(', ')}; footprint ${m.fx.toFixed(1)} x ${m.fz.toFixed(1)} m = ${(Math.max(m.fx, m.fz) / cell).toFixed(2)} cells: lot ${lotN}x${lotN}`);
+  // task lotgrowb: a long model gets a w x d lot (d = its long side, w = d - 1) when its short side fits w cells and the
+  // class has a d x d base; the long side must run along z, so a model long along x is turned 90 degrees
+  const side = f => Math.max(1, Math.ceil(f / cell - 0.15));
+  const lo = side(Math.min(m.fx, m.fz)), hi = side(Math.max(m.fx, m.fz));
+  if (cls[0] !== 9300 && lotN === hi && lo < hi && inGrowRect([hi - 1, hi])) {
+    set.lot = [hi - 1, hi];
+    why.push(`its short side needs ${lo} cell${lo > 1 ? 's' : ''}: lot ${hi - 1}x${hi} instead of ${hi}x${hi}`);
+    if (m.fx > m.fz) { set.rotate_deg = ((rec.meta.rotate_deg || 0) + 90) % 360; why.push('turned 90 degrees so the long side runs along z'); }
+    why.push(GROW_NOTE);
+  }
   return { set, why: why.join('. ') };
 }
 function zoneOf(c) { return c[0] === 9300 ? 'F' : c[1]; }
@@ -1056,7 +1070,15 @@ function zoneOf(c) { return c[0] === 9300 ? 'F' : c[1]; }
 function warnings(rec) {
   const w = [], m = rec.meta, cell = rules.cell_m || 16;
   if (rec.err) w.push('could not load: ' + rec.err);
-  if (!RECT_KINDS.includes(m.kind) && m.kind !== 'ploppable' && !rec.bld && m.lot && m.lot[0] !== m.lot[1]) w.push(`only landmarks, rewards and civic looks can have a lot that is not square (${m.lot[0]}x${m.lot[1]}): bldimport skips this one`);
+  if (!RECT_KINDS.includes(m.kind) && m.kind !== 'ploppable' && m.kind !== 'growable' && !rec.bld && m.lot && m.lot[0] !== m.lot[1]) w.push(`only landmarks, rewards, civic looks and growables can have a lot that is not square (${m.lot[0]}x${m.lot[1]}): bldimport skips this one`);
+  if (m.kind === 'growable' && !rec.bld && m.lot && m.lot[0] !== m.lot[1]) {   // task lotgrowb
+    if (inGrowRect(m.lot)) {
+      w.push(GROW_NOTE);
+      if (m.class === 9300) w.push('farms grow only from the farm rule, which lays out squares: bldimport skips this one');
+      else if (CLS.has(m.class) && !CLS.get(m.class)[5].includes(m.lot[1])) w.push(`class ${m.class} has no ${m.lot[1]}x${m.lot[1]} base (a ${m.lot[0]}x${m.lot[1]} growable takes its stats): bldimport skips this one`);
+    } else if (inGrowRect([m.lot[1], m.lot[0]])) w.push(`a growable lists its short side first: use ${m.lot[1]}x${m.lot[0]} and turn the model 90 degrees; bldimport skips this one`);
+    else w.push(`growables that are not square are 1x2, 2x3 or 3x4: bldimport skips this one`);
+  }
   if (m.kind === 'growable') {
     if (m.class == null) w.push('growable without a class');
     else if (!CLS.has(m.class)) w.push('class ' + m.class + ' is not in the lot class table');
@@ -1485,7 +1507,7 @@ function buildForm() {
   row('Class', el.class);
   el.lot = document.createElement('select');
   fillLots(false); row('Lot', el.lot);
-  el.lot.title = 'Lot in cells (16 m), width x depth along the model\'s x and z. Landmarks, rewards and civic looks: 1 to 5 cells on each side; a lot that is not square needs the mods page row Non-square buildings on in the game.';
+  el.lot.title = 'Lot in cells (16 m), width x depth along the model\'s x and z. Landmarks, rewards and civic looks: 1 to 5 cells on each side; a lot that is not square needs the mods page row Non-square buildings on in the game. Growables: also 1x2, 2x3 or 3x4 (Non-square zoned buildings on).';
   for (const [k, lab, step] of [['weight', 'Weight', 1], ['height_m', 'Height (m)', 0.1], ['scale', 'Scale', 0.05], ['rotate_deg', 'Rotate (deg)', 90]]) {
     el[k] = Object.assign(document.createElement('input'), { type: 'number', step }); row(lab, el[k]);
   }
@@ -1540,12 +1562,19 @@ function buildForm() {
 }
 // task lotshape: the Lot choices. Squares 1x1 to 4x4 for every kind; landmarks, rewards and civic looks (civlot) also 5x5
 // and every w x d with w and d from 1 to 5 (bldimport RECT_KINDS)
-function fillLots(rect) {
-  if (el.lot.dataset.rect === String(rect)) return;
-  el.lot.dataset.rect = String(rect);
+function fillLots(rect, grow) {
+  const tag = rect + '/' + !!grow;
+  if (el.lot.dataset.rect === tag) return;
+  el.lot.dataset.rect = tag;
   [...el.lot.options].forEach(o => o.remove());
+  [...el.lot.querySelectorAll('optgroup')].forEach(o => o.remove());
   const sq = rect ? [1, 2, 3, 4, 5] : [1, 2, 3, 4];
   sq.forEach(n => el.lot.add(new Option(n + 'x' + n, n + ',' + n)));
+  if (grow && !rect) {           // task lotgrowb: growables 1x2, 2x3, 3x4
+    const gg = document.createElement('optgroup'); gg.label = 'not square (Non-square zoned buildings on)';
+    GROW_RECT.forEach(([a, b]) => gg.appendChild(new Option(a + 'x' + b, a + ',' + b)));
+    el.lot.appendChild(gg);
+  }
   if (!rect) return;
   const g = document.createElement('optgroup'); g.label = 'not square (Non-square buildings on)';
   for (let a = 1; a <= RECT_MAX; a++) for (let b = 1; b <= RECT_MAX; b++) if (a !== b) g.appendChild(new Option(a + 'x' + b, a + ',' + b));
@@ -1592,7 +1621,7 @@ function refreshPanel(skip) {
   set('population', common(recs, r => r.meta.population)); set('year', common(recs, r => r.meta.year));
   setSel(el.kind, common(recs, r => r.meta.kind), v => v);
   setSel(el.class, common(recs, r => r.meta.class), v => v == null ? '' : String(v));
-  fillLots(recs.every(r => RECT_KINDS.includes(r.meta.kind) && !r.bld));
+  fillLots(recs.every(r => RECT_KINDS.includes(r.meta.kind) && !r.bld), recs.every(r => r.meta.kind === 'growable' && !r.bld));
   setSel(el.lot, common(recs, r => r.meta.lot), v => v ? v.join(',') : '1,1');
   const ce = common(recs, r => r.meta.enabled);
   el.enabled.indeterminate = !ce.one; el.enabled.checked = ce.one && ce.v;

@@ -182,10 +182,10 @@ def steps_for(a, py, node):
     add = lambda *x, **k: S.append(Step(*x, **k))
     PG = ["bld", "page"]
     add("golden_setup (bldimport.py pack, 10 cases)", "sc3", ["bld"], [py + [h("golden_setup.py"), "--game", game, "--kits", kits, "--out", work]], setup=True)
-    add("golden.mjs (bldweb.js vs pack, every file + frame)", "sc3", ["bld"], [node + [h("golden.mjs"), "--golden", work, "--game", game, "--cases", "testmodels,bld,kenney,styles,ports,landmarks,civic,lotshape,sharp", "--frames"]])
+    add("golden.mjs (bldweb.js vs pack, every file + frame)", "sc3", ["bld"], [node + [h("golden.mjs"), "--golden", work, "--game", game, "--cases", "testmodels,bld,kenney,styles,ports,landmarks,civic,lotshape,lotgrow,sharp", "--frames"]])
     add("install_golden.mjs (install, re-install, restore)", "sc3", ["bld"], [node + [h("install_golden.mjs"), "--golden", work, "--game", game, "--case", "kenney"]])
     add("zip_golden.mjs (.zip route)", "sc3", ["bld"], [node + [h("zip_golden.mjs"), "--golden", work, "--game", game, "--case", "kenney"]])
-    for c in ["kenney", "bld", "styles", "ports", "landmarks", "civic", "lotshape"]:
+    for c in ["kenney", "bld", "styles", "ports", "landmarks", "civic", "lotshape", "lotgrow"]:
         add("pagetest.mjs %s (the page in headless Chrome)" % c, "sc3page", PG, [node + [h("pagetest.mjs"), "--golden", work, "--game", game, "--case", c]])
     add("pagetest.mjs landmarkdesc (the Description box typed in the page, installed = bldimport.py)", "sc3page", PG,
         [node + [h("pagetest.mjs"), "--golden", work, "--game", game, "--case", "landmarkdesc", "--edit-desc", "obelisk_2x2.obj=Typed in the page, Córdoba"]])
