@@ -827,9 +827,9 @@ function BLDWEB_LIB() {
     const s = mesh.slot;
     if (!s || !s.some(x => x >= 0)) return mesh;
     const keep = []; for (let i = 0; i < mesh.n; i++) if (s[i] < 0 || s[i] === r) keep.push(i);
-    const N = keep.length, tri = new Float64Array(N * 9), uv = new Float64Array(N * 6), hu = new Uint8Array(N), mt = new Int32Array(N), sl = new Int8Array(N), gd = new Uint8Array(N);
-    keep.forEach((i, j) => { tri.set(mesh.tri.subarray(9 * i, 9 * i + 9), 9 * j); uv.set(mesh.uv.subarray(6 * i, 6 * i + 6), 6 * j); hu[j] = mesh.has_uv[i]; mt[j] = mesh.mat[i]; sl[j] = s[i]; gd[j] = mesh.ground ? mesh.ground[i] : 0; });
-    return Object.assign({}, mesh, { n: N, tri, uv, has_uv: hu, mat: mt, slot: sl, ground: gd });
+    const N = keep.length, tri = new Float64Array(N * 9), uv = new Float64Array(N * 6), hu = new Uint8Array(N), mt = new Int32Array(N), sl = new Int8Array(N), gd = new Uint8Array(N), pr = new Uint8Array(N);
+    keep.forEach((i, j) => { tri.set(mesh.tri.subarray(9 * i, 9 * i + 9), 9 * j); uv.set(mesh.uv.subarray(6 * i, 6 * i + 6), 6 * j); hu[j] = mesh.has_uv[i]; mt[j] = mesh.mat[i]; sl[j] = s[i]; gd[j] = mesh.ground ? mesh.ground[i] : 0; pr[j] = mesh.prop ? mesh.prop[i] : 0; });
+    return Object.assign({}, mesh, { n: N, tri, uv, has_uv: hu, mat: mt, slot: sl, ground: gd, prop: pr });
   }
   function place(mesh, n, cellM, scale, rotDeg) {
     if (Array.isArray(n) && n[0] !== n[1]) return placeRect(mesh, n[0], n[1], cellM, scale, rotDeg);   // task lotshape
@@ -1093,6 +1093,8 @@ function BLDWEB_LIB() {
     // task sc4lottex: faces of the OBJ group sc3ground are ground art (bldrender kind 2): lit as the lawn, no shadow
     // caster, a transparent texel is the lawn below
     const gr = mesh.ground && mesh.ground.some(x => x) ? mesh.ground : null;
+    // task objprops: BA props (bldprops, kind 3): their picture as it is, light 1, no shadow cast, no tone or grain
+    const pp = mesh.prop && mesh.prop.some(x => x) ? mesh.prop : null;
     const t0 = new Float64Array(nt * 9);
     t0.set(mesh.tri);
     if (ground) {
@@ -1156,9 +1158,9 @@ function BLDWEB_LIB() {
       // ambient + 0 * nl with nl >= 0 is the value bldrender gets with its map)
       let sm = null;
       if (shadows && !(st.light !== 'axis' && st.diffuse === 0)) {
-        if (!gr) { if (nm > 0) sm = shadowMap(t.subarray(0, nm * 9), nm); }
-        else {                              // ground art casts no shadow: the model faces alone, in order
-          const keep = []; for (let i = 0; i < nm; i++) if (!gr[i]) keep.push(i);
+        if (!gr && !pp) { if (nm > 0) sm = shadowMap(t.subarray(0, nm * 9), nm); }
+        else {                              // ground art and props cast no shadow: the model faces alone, in order
+          const keep = []; for (let i = 0; i < nm; i++) if (!(gr && gr[i]) && !(pp && pp[i])) keep.push(i);
           if (keep.length) { const tm = new Float64Array(keep.length * 9); keep.forEach((i, j) => tm.set(t.subarray(9 * i, 9 * i + 9), 9 * j)); sm = shadowMap(tm, keep.length); }
         }
       }
@@ -1166,8 +1168,8 @@ function BLDWEB_LIB() {
       const sel = new Int32Array(M);
       { let m = 0; for (let q = 0; q < ib.length; q++) if (ib[q] >= 0) sel[m++] = q; }
       const pts = new Float64Array(M * 3), nrm = new Float64Array(M * 3), nrm0 = new Float64Array(M * 3);
-      const light = new Float64Array(M), alb = new Float32Array(M * 3), isG = new Uint8Array(M), isL = new Uint8Array(M);
-      let nModel = 0;
+      const light = new Float64Array(M), alb = new Float32Array(M * 3), isG = new Uint8Array(M), isL = new Uint8Array(M), isP = new Uint8Array(M);
+      let nModel = 0, nP = 0;
       for (let m = 0; m < M; m++) {
         const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2], o = 9 * id;
         for (let c = 0; c < 3; c++) pts[3 * m + c] = (t[o + c] * b0 + t[o + 3 + c] * b1) + t[o + 6 + c] * b2;
@@ -1186,7 +1188,8 @@ function BLDWEB_LIB() {
             if (al.d[texIndex(al, uu, vv)] < 0.5) { isL[m] = 0; isG[m] = 1; }
           }
         }
-        if (!isG[m] && !isL[m]) nModel++;
+        if (!isG[m] && pp && pp[id]) { isP[m] = 1; nP++; }
+        if (!isG[m] && !isL[m] && !isP[m]) nModel++;
         let sh = false;
         if (sm) {
           sh = inShadow(pts[3 * m], pts[3 * m + 1], pts[3 * m + 2], sm, 0.02);
@@ -1201,9 +1204,10 @@ function BLDWEB_LIB() {
           if (sh) nl = nl * (1 - pz(st.shadow_keep, z));
           light[m] = st.ambient + st.diffuse * nl;
         }
+        if (isP[m]) light[m] = 1.0;
       }
       const rim = st.rim;
-      let nG = M - nModel;                  // the lawn and ground art
+      let nG = M - nModel - nP;             // the lawn and ground art
       if (rim && nG && pz(rim.dark, z)) {
         const dark = pz(rim.dark, z);
         for (let m = 0; m < M; m++) {
@@ -1219,12 +1223,13 @@ function BLDWEB_LIB() {
       }
       let nL = 0; for (let m = 0; m < M; m++) nL += isL[m];
       if (nG - nL) {
-        const kuv = GRASS_TEXELS_PER_CELL / groundTex.h;
+        const gtx = mesh.lotTex || groundTex;   // task objprops: a BA ground paint, one tile per cell
+        const kuv = mesh.lotTex ? 1.0 : GRASS_TEXELS_PER_CELL / groundTex.h;
         for (let m = 0; m < M; m++) {
           if (!isG[m]) continue;
           const p0 = rotPts(pts.subarray(3 * m, 3 * m + 3), exr, (4 - r) % 4);
-          const ti = texIndex(groundTex, p0[0] * kuv, p0[1] * kuv);
-          alb[3 * m] = groundTex.d[ti]; alb[3 * m + 1] = groundTex.d[ti + 1]; alb[3 * m + 2] = groundTex.d[ti + 2];
+          const ti = texIndex(gtx, p0[0] * kuv, p0[1] * kuv);
+          alb[3 * m] = gtx.d[ti]; alb[3 * m + 1] = gtx.d[ti + 1]; alb[3 * m + 2] = gtx.d[ti + 2];
         }
       }
       if (nL) {                             // task sc4lottex: ground art, its texture as it is
@@ -1243,6 +1248,17 @@ function BLDWEB_LIB() {
           alb[3 * m] = a0; alb[3 * m + 1] = a1; alb[3 * m + 2] = a2;
         }
       }
+      if (nP) {                             // task objprops: the props' own pixels
+        for (let m = 0; m < M; m++) {
+          if (!isP[m]) continue;
+          const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2], o = 6 * id;
+          const tex = mesh.mats[mesh.mat[id]].tex;
+          const uu = (mesh.uv[o] * b0 + mesh.uv[o + 2] * b1) + mesh.uv[o + 4] * b2;
+          const vv = (mesh.uv[o + 1] * b0 + mesh.uv[o + 3] * b1) + mesh.uv[o + 5] * b2;
+          const ti = texIndex(tex, uu, vv);
+          alb[3 * m] = tex.d[ti]; alb[3 * m + 1] = tex.d[ti + 1]; alb[3 * m + 2] = tex.d[ti + 2];
+        }
+      }
       if (nModel) {
         const one = nModel === 1;
         const sat = pz(st.sat, z), gr = pz(st.grain, z);
@@ -1252,7 +1268,7 @@ function BLDWEB_LIB() {
         const toe = tone && st.tone_toe && st.tone_toe.length ? st.tone_toe.map(v => fr(v)) : null;
         const toeMat = toe ? mesh.mats.map(mm => mm.name.startsWith('sc4p_')) : null;
         for (let m = 0; m < M; m++) {
-          if (isG[m] || isL[m]) continue;
+          if (isG[m] || isL[m] || isP[m]) continue;
           const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
           const mat = mesh.mats[mesh.mat[id]];
           let a0 = fr(mat.kd[0]), a1 = fr(mat.kd[1]), a2 = fr(mat.kd[2]);
@@ -1311,7 +1327,7 @@ function BLDWEB_LIB() {
         const one = nModel === 1, piv = fr(st.pivot), cf = fr(con), lo = fr(1e-4);
         const cl = x => x < 0 ? 0 : x > 1 ? 1 : x;
         for (let m = 0; m < M; m++) {
-          if (isG[m] || isL[m]) continue;
+          if (isG[m] || isL[m] || isP[m]) continue;
           const q = sel[m], r0 = rgb[3 * q], r1 = rgb[3 * q + 1], r2 = rgb[3 * q + 2];
           const y = mm3f(r0, r1, r2, LUMA, one);
           const y2 = cl(fr(piv + fr(fr(y - piv) * cf)));
@@ -1369,6 +1385,255 @@ function BLDWEB_LIB() {
       }
     }
     return out;
+  }
+
+  // ================================================================================================ BA props (bldprops.py)
+  // task objprops (2026-11-24): the game's own Building Architect props and ground paints on the free part of an OBJ
+  // building's lot, read from the player's install. A transcription of bldprops.py, same order of float64 / uint32 ops.
+  const PROP_ROOT = 'Apps/Res/BA/PROPS', GROUND_ROOT = 'Apps/Res/BA/PAINTS/GROUND';
+  const PX_PER_CELL = 256.0, PGRID = 8, PVSCALE = 0.6123724356957945;
+  const PCAT = (() => {
+    const F = ['FLORA', 'FLORA.MET'], V = ['VEHICLES', 'VEHICLES.MET'], P = ['plaza and street', 'plazaandstreet.met'],
+      Y = ['yard objects', 'yard objects.met'], I = ['industrial', 'industrial.met'];
+    const o = {};
+    for (const n of ['sm decid1', 'med decid1', 'sm decid2', 'lg evgn2', 'sm bfpine1', 'sm evgn1', 'lg evgn1', 'sm shrub1', 'sm shrub2', 'lg shrub2', 'floweringbush1']) o[n] = F;
+    for (const n of ['chevy1', 'cort', 'pickup1', 'van1', 'semi3']) o[n] = V;
+    for (const n of ['bench1', 'lamp1', 'lamp2', 'lamp3', 'planter1', 'planter2', 'fountain2', 'waste1', 'news1', 'postbox1', 'table and chairs1']) o[n] = P;
+    for (const n of ['lawnfurn1', 'clothesline1', 'play1', 'garden1', 'pool1', 'picnic1', 'garbage']) o[n] = Y;
+    for (const n of ['barrels1', 'barrels2', 'pileoftires', 'tank1']) o[n] = I;
+    return o;
+  })();
+  const PCARS = ['chevy1', 'cort', 'pickup1'];
+  const PSETS = [
+    ['house', 3100, 3599, null, [[PCARS, 1, true], ['med decid1', 1, false], ['sm decid1', 2, false], ['sm bfpine1', 2, false],
+      ['lg shrub2', 1, false], ['garden1', 1, false], ['pool1', 1, false], ['lawnfurn1', 1, false], ['clothesline1', 1, false],
+      ['floweringbush1', 2, false], ['sm shrub1', 4, false]]],
+    ['apartments', 3600, 4999, null, [[PCARS, 2, true], ['med decid1', 1, false], ['sm decid1', 2, false], ['lg evgn2', 1, false],
+      ['play1', 1, false], ['picnic1', 1, false], ['lamp1', 2, true], ['bench1', 2, false], ['planter1', 2, false], ['sm shrub1', 4, false]]],
+    ['shop', 5000, 5999, 'parking lot1.tga', [[PCARS, 3, true], ['van1', 1, true], ['lamp2', 2, true], ['sm decid1', 1, false],
+      ['bench1', 2, false], ['planter1', 2, false], ['news1', 1, false], ['waste1', 1, false], ['postbox1', 1, false]]],
+    ['office', 6000, 6999, 'skyscraper base1.tga', [['fountain2', 1, false], ['sm decid1', 4, false], ['lg evgn1', 2, false],
+      ['sm evgn1', 3, false], [PCARS, 1, true], ['lamp3', 4, true], ['planter2', 3, false], ['table and chairs1', 2, false],
+      ['bench1', 3, false], ['planter1', 3, false], ['waste1', 1, false]]],
+    ['industry', 8000, 9299, 'concrete lot.tga', [['semi3', 1, true], ['van1', 1, true], ['pickup1', 1, true], ['tank1', 1, false],
+      ['barrels1', 2, false], ['garbage', 1, false], ['barrels2', 2, false], ['pileoftires', 2, false]]],
+  ];
+  function fnv1a(s) { let h = 0x811C9DC5; for (const b of new TextEncoder().encode(s)) h = Math.imul((h ^ b) >>> 0, 0x01000193) >>> 0; return h; }
+  function pmix(a, b) {
+    let x = Math.imul((a ^ b) >>> 0, 0x9E3779B1) >>> 0;
+    x = (x ^ (x >>> 15)) >>> 0;
+    x = Math.imul(x, 0x85EBCA77) >>> 0;
+    return (x ^ (x >>> 13)) >>> 0;
+  }
+  function propSet(m) {                  // bldprops.set_of (the SC3BLD_PROPS run switch is Python only)
+    const xp = m.x_props;
+    if (xp && typeof xp === 'object' && !Array.isArray(xp) && xp.on === false) return null;
+    if (('kind' in m ? m.kind : 'growable') !== 'growable' || 'x_sc4' in m || !String('file' in m ? m.file : '').toLowerCase().endsWith('.obj')) return null;
+    const c = m.class;
+    if (!Number.isInteger(c)) return null;
+    for (const s of PSETS) if (s[1] <= c && c <= s[2]) return s;
+    return null;
+  }
+  function parseMet(text) {
+    const out = [];
+    for (const ln of text.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/)) {
+      const mm = /^\s*(\d+),(\d+),(\d+):(.*)/.exec(ln);
+      if (!mm) continue;
+      const names = [...mm[4].matchAll(/"([^"]+)"/g)].map(x => x[1]);
+      if (names.length !== 4) continue;
+      out.push([parseInt(mm[1], 10), parseInt(mm[2], 10), parseInt(mm[3], 10), names]);
+    }
+    return out;
+  }
+  const pU32 = (d, o) => (d[o] | (d[o + 1] << 8) | (d[o + 2] << 16) | (d[o + 3] << 24)) >>> 0;
+  function decodeBMP(d) {                // -> { w, h, rgb } top row first, or null (bldprops.decode_bmp)
+    if (d.length < 54 || d[0] !== 0x42 || d[1] !== 0x4D) return null;
+    const off = pU32(d, 10), w = pU32(d, 18) | 0, h = pU32(d, 22) | 0, bpp = rdU16(d, 28), comp = pU32(d, 30);
+    if (comp !== 0 || (bpp !== 24 && bpp !== 32) || w <= 0 || h === 0) return null;
+    const ah = Math.abs(h), bp = bpp / 8, stride = (w * bp + 3) & ~3;
+    if (off + stride * ah > d.length) return null;
+    const rgb = new Uint8Array(w * ah * 3);
+    for (let y = 0; y < ah; y++) {
+      const dy = h > 0 ? ah - 1 - y : y, so = off + y * stride;
+      for (let x = 0; x < w; x++) { const s = so + x * bp, o = (dy * w + x) * 3; rgb[o] = d[s + 2]; rgb[o + 1] = d[s + 1]; rgb[o + 2] = d[s]; }
+    }
+    return { w, h: ah, rgb };
+  }
+  function decodeTGA(d) {                // types 2 / 10, 24 / 32 bpp (bldprops.decode_tga)
+    if (d.length < 18) return null;
+    const idl = d[0], cmt = d[1], typ = d[2], w = rdU16(d, 12), h = rdU16(d, 14), bpp = d[16], desc = d[17];
+    if (cmt !== 0 || (typ !== 2 && typ !== 10) || (bpp !== 24 && bpp !== 32) || w === 0 || h === 0) return null;
+    const bp = bpp / 8, n = w * h, px = new Uint8Array(n * bp);
+    let p = 18 + idl;
+    if (typ === 2) { if (p + n * bp > d.length) return null; px.set(d.subarray(p, p + n * bp)); }
+    else {
+      let q = 0;
+      while (q < n) {
+        if (p >= d.length) return null;
+        const c = d[p++], k = (c & 0x7F) + 1;
+        if (q + k > n) return null;
+        if (c & 0x80) { const v = d.subarray(p, p + bp); p += bp; for (let t = 0; t < k; t++) px.set(v, (q + t) * bp); }
+        else { px.set(d.subarray(p, p + k * bp), q * bp); p += k * bp; }
+        q += k;
+      }
+    }
+    const rgb = new Uint8Array(n * 3);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const sy = desc & 0x20 ? y : h - 1 - y, sx = desc & 0x10 ? w - 1 - x : x, s = (sy * w + sx) * bp, o = (y * w + x) * 3;
+      rgb[o] = px[s + 2]; rgb[o + 1] = px[s + 1]; rgb[o + 2] = px[s];
+    }
+    return { w, h, rgb };
+  }
+  // the library over a map rel -> bytes (filled on the page side, read in the worker)
+  function propLib(files) {
+    const get = rel => (Object.prototype.hasOwnProperty.call(files, rel) ? files[rel] : null);
+    const mets = new Map(), imgs = new Map(), missing = new Set();
+    const lib = {
+      missing,
+      image(folder, nm) { const rel = PROP_ROOT + '/' + folder + '/' + nm; if (!imgs.has(rel)) { const d = get(rel); imgs.set(rel, d ? decodeBMP(d) : null); } return imgs.get(rel); },
+      ground(nm) { const rel = GROUND_ROOT + '/' + nm; if (!imgs.has(rel)) { const d = get(rel); imgs.set(rel, d ? decodeTGA(d) : null); } return imgs.get(rel); },
+      orients(name) {
+        const [folder, met] = PCAT[name], rel = PROP_ROOT + '/' + folder + '/' + met;
+        if (!mets.has(rel)) { const d = get(rel); mets.set(rel, d ? parseMet(latin1(d)) : []); }
+        const out = mets.get(rel).filter(o => o[3].every(nm => nm.toLowerCase().startsWith(name + ' ')));
+        for (const o of out) for (const nm of o[3]) if (lib.image(folder, nm) === null) { missing.add(name); return []; }
+        if (!out.length) missing.add(name);
+        return out;
+      },
+    };
+    return lib;
+  }
+  // page side: the bytes the props of set s need (bldprops.Library.key_files), read from the game folder
+  async function propFiles(game, s) {
+    const files = {};
+    const rd = async rel => { if (rel in files) return files[rel]; const b = (await game.exists(rel)) ? await game.read(rel) : null; if (b) files[rel] = b; return b; };
+    for (const [item] of s[4]) for (const name of (Array.isArray(item) ? item : [item])) {
+      const [folder, met] = PCAT[name], mb = await rd(PROP_ROOT + '/' + folder + '/' + met);
+      if (!mb) continue;
+      for (const o of parseMet(latin1(mb))) if (o[3].every(nm => nm.toLowerCase().startsWith(name + ' '))) for (const nm of o[3]) await rd(PROP_ROOT + '/' + folder + '/' + nm);
+    }
+    if (s[3]) await rd(GROUND_ROOT + '/' + s[3]);
+    return files;
+  }
+  function propOccupancy(tri, nt, n) {
+    const E = n * PGRID, occ = new Uint8Array(E * E);
+    for (let k = 0; k < nt; k++) {
+      const o = 9 * k;
+      const u0 = Math.min(tri[o], tri[o + 3], tri[o + 6]) * PGRID, u1 = Math.max(tri[o], tri[o + 3], tri[o + 6]) * PGRID;
+      const v0 = Math.min(tri[o + 1], tri[o + 4], tri[o + 7]) * PGRID, v1 = Math.max(tri[o + 1], tri[o + 4], tri[o + 7]) * PGRID;
+      const i0 = Math.max(Math.floor(u0), 0), i1 = Math.min(Math.max(Math.ceil(u1) - 1, Math.floor(u0)), E - 1);
+      const j0 = Math.max(Math.floor(v0), 0), j1 = Math.min(Math.max(Math.ceil(v1) - 1, Math.floor(v0)), E - 1);
+      if (i0 > i1 || j0 > j1) continue;
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) occ[i * E + j] = 1;
+    }
+    return occ;
+  }
+  function propPlan(tri, nt, n, file, lib, s) {
+    const E = n * PGRID, used = propOccupancy(tri, nt, n), seed = fnv1a(String(file)), out = [];
+    const free = (i, j, a, b) => { for (let x = i; x < i + a; x++) for (let y = j; y < j + b; y++) if (used[x * E + y]) return false; return true; };
+    let inst = 0;
+    for (const [item, count, edge] of s[4]) {
+      for (let c = 0; c < count; c++) {
+        inst++;
+        const names = Array.isArray(item) ? item : [item];
+        const name = names[pmix(seed, inst * 977 + 13) % names.length];
+        const ors = lib.orients(name);
+        if (!ors.length) break;
+        const oorder = ors.map((_, o) => o).sort((p, q) => { const a = pmix(seed, inst * 7919 + p), b = pmix(seed, inst * 7919 + q); return a !== b ? a - b : p - q; });
+        let done = false;
+        for (const o of oorder) {
+          const a = ors[o][0], b = ors[o][1];
+          if (a > E || b > E) continue;
+          const cand = [];
+          for (let i = 0; i <= E - a; i++) for (let j = 0; j <= E - b; j++) {
+            if (edge && !(i === 0 || j === 0 || i + a === E || j + b === E)) continue;
+            cand.push([pmix(pmix(seed, inst * 131 + o), i * 1024 + j), i, j]);
+          }
+          cand.sort((p, q) => p[0] - q[0] || p[1] - q[1] || p[2] - q[2]);
+          for (const [, i, j] of cand) {
+            if (free(i, j, a, b)) {
+              for (let x = i; x < i + a; x++) for (let y = j; y < j + b; y++) used[x * E + y] = 1;
+              out.push([name, PCAT[name][0], ors[o], i, j]); done = true; break;
+            }
+          }
+          if (done) break;
+        }
+        if (!done) break;
+      }
+    }
+    return out;
+  }
+  const prot = (u, v, n, r) => { for (let q = 0; q < r % 4; q++) { const nu = v, nv = n - u; u = nu; v = nv; } return [u, v]; };
+  function propQuads(placed, n, lib) {
+    const tris = [], uvs = [], mids = [], slots = [], mats = [], matOf = new Map();
+    for (const [, folder, [a, b, c, names], i, j] of placed) {
+      const cu = (i + a / 2.0) / PGRID, cv = (j + b / 2.0) / PGRID;
+      for (let r = 0; r < 4; r++) {
+        const nm = names[r], img = lib.image(folder, nm), S = img.h, Wd = img.w;
+        const isKey = q => img.rgb[3 * q] === 255 && img.rgb[3 * q + 1] === 0 && img.rgb[3 * q + 2] === 255;
+        let y0 = -1, yl = -1, x0 = Wd, x1 = -1;
+        for (let y = 0; y < S; y++) for (let x = 0; x < Wd; x++) if (!isKey(y * Wd + x)) { if (y0 < 0) y0 = y; yl = y; if (x < x0) x0 = x; if (x > x1) x1 = x; }
+        if (y0 < 0) continue;
+        if (!matOf.has(nm)) {
+          const c0 = x0 - 1, c1 = x1 + 1, r0 = y0 - 1, r1 = yl + 1, w = c1 - c0 + 1, h = r1 - r0 + 1;
+          const d = new Float32Array(w * h * 3), al = new Float32Array(w * h * 3);
+          for (let y = Math.max(r0, 0); y <= Math.min(r1, S - 1); y++) for (let x = Math.max(c0, 0); x <= Math.min(c1, Wd - 1); x++) {
+            const q = y * Wd + x, o = ((y - r0) * w + (x - c0)) * 3;
+            d[o] = fr(img.rgb[3 * q] / 255); d[o + 1] = fr(img.rgb[3 * q + 1] / 255); d[o + 2] = fr(img.rgb[3 * q + 2] / 255);
+            al[o] = isKey(q) ? 0 : 1;
+          }
+          matOf.set(nm, mats.length);
+          mats.push({ kd: [1.0, 1.0, 1.0], tex: { w, h, d }, alpha: { w, h, d: al }, name: 'sc3p_' + nm.slice(0, -4).replace(/ /g, '_'), tex_file: nm });
+        }
+        const [gu, gv] = prot(cu, cv, n, r);
+        const yc = S / 2.0 + 8.0 * c, yf = yl + 1.0, dv = (yf - yc) / (PX_PER_CELL / 2.0);
+        const fu = gu - dv, fv = gv + dv;
+        const X0 = x0 - 1 + 0.5, X1 = x1 + 1 + 0.5, Y0 = y0 - 1 + 0.5, Y1 = yl + 1 + 0.5;
+        const corner = [[X0, Y0], [X1, Y0], [X1, Y1], [X0, Y1]].map(([X, Y]) => {
+          const du = (X - S / 2.0) / PX_PER_CELL;
+          const hh = (yf - Y) / (PX_PER_CELL * PVSCALE);
+          const [u, v] = prot(fu + du, fv + du, n, (4 - r) % 4);
+          return [u, v, hh];
+        });
+        const ut = [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+        for (const q of [[0, 1, 2], [0, 2, 3]]) { tris.push(q.map(k => corner[k])); uvs.push(q.map(k => ut[k])); mids.push(matOf.get(nm)); slots.push(r); }
+      }
+    }
+    return [tris, uvs, mids, slots, mats];
+  }
+  function addProps(mesh, n, file, props) {   // bldprops.add_props; props = { set, files } from the page side
+    if (!props || Array.isArray(n)) return [mesh, null];
+    const s = PSETS.find(x => x[0] === props.set);
+    const lib = propLib(props.files);
+    const placed = propPlan(mesh.tri, mesh.n, n, file, lib, s);
+    const [tris, uvs, mids, slots, mats] = propQuads(placed, n, lib);
+    const nm = mesh.n, N = nm + tris.length;
+    const out = Object.assign({}, mesh);
+    if (tris.length) {
+      const tri = new Float64Array(N * 9), uv = new Float64Array(N * 6), hu = new Uint8Array(N), mt = new Int32Array(N), sl = new Int8Array(N), gd = new Uint8Array(N);
+      tri.set(mesh.tri.subarray(0, nm * 9)); uv.set(mesh.uv.subarray(0, nm * 6)); hu.set(mesh.has_uv.subarray(0, nm)); mt.set(mesh.mat.subarray(0, nm));
+      if (mesh.slot) sl.set(mesh.slot.subarray(0, nm)); else sl.fill(-1, 0, nm);
+      if (mesh.ground) gd.set(mesh.ground.subarray(0, nm));
+      const base = mesh.mats.length;
+      tris.forEach((t, k) => {
+        for (let jj = 0; jj < 3; jj++) {
+          for (let cc = 0; cc < 3; cc++) tri[(nm + k) * 9 + jj * 3 + cc] = t[jj][cc];
+          uv[(nm + k) * 6 + jj * 2] = uvs[k][jj][0]; uv[(nm + k) * 6 + jj * 2 + 1] = uvs[k][jj][1];
+        }
+        hu[nm + k] = 1; mt[nm + k] = mids[k] + base; sl[nm + k] = slots[k];
+      });
+      Object.assign(out, { n: N, tri, uv, has_uv: hu, mat: mt, slot: sl, ground: gd, mats: mesh.mats.concat(mats) });
+    }
+    const pr = new Uint8Array(N); if (mesh.prop) pr.set(mesh.prop.subarray(0, nm)); pr.fill(1, nm);
+    out.prop = pr;
+    const info = { set: s[0], placed: placed.map(p => [p[0], p[3], p[4], p[2][0], p[2][1]]) };
+    if (s[3]) {
+      const g = lib.ground(s[3]);
+      if (g) { const d = new Float32Array(g.w * g.h * 3); for (let q = 0; q < d.length; q++) d[q] = fr(g.rgb[q] / 255); out.lotTex = { w: g.w, h: g.h, d }; info.ground = s[3]; }
+      else info.ground_missing = s[3];
+    }
+    if (lib.missing.size) info.missing = [...lib.missing].sort();
+    return [out, info];
   }
 
   // ================================================================================================ QFS + sprites
@@ -2360,6 +2625,8 @@ function BLDWEB_LIB() {
     const job = { file: m.file, n, cell_m: o.cell_m, scale: Number('scale' in m ? m.scale : 1.0), rotate_deg: Number('rotate_deg' in m ? m.rotate_deg : 0),
       ground: o.ground === 'none' ? null : o.ground, shadows: o.shadow, style: o.style };
     if (m._quarter) job.quarter = 1;   // task civlot: turned a quarter (sc3slot groups s -> s - 1)
+    const ps = game ? propSet(m) : null;   // task objprops: the game's BA props, read here, placed in the job
+    if (ps && !Array.isArray(n)) job.props = { set: ps[0], files: await propFiles(game, ps) };
     const res = opt.renderer ? await opt.renderer(job, folder) : await renderJob(job, folder, opt.progress);
     const info = res.info;
     const hm = m.height_m;
@@ -2368,14 +2635,19 @@ function BLDWEB_LIB() {
     if (!info.fits && opt.log)
       opt.log('  note: ' + m.file + ' is ' + info.size_m[0].toFixed(1) + ' x ' + info.size_m[2].toFixed(1) + ' m, larger than its ' + lotStr(n) + ' lot: it will overhang the neighbours');
     info.style = o.style;
+    if (info.props && info.props.missing && opt.log) opt.log('  note: ' + m.file + ": props not in this game's Building Architect library: " + info.props.missing.join(', '));
     return { frames: res.frames, info };
   }
   // the worker-side job: OBJ -> 20 frames
   async function renderJob(job, folder, progress) {
     let mesh = await loadObj(folder, job.file);
     if (job.quarter && mesh.slot) mesh = Object.assign({}, mesh, { slot: mesh.slot.map(s_ => (s_ >= 0 ? (s_ + 3) % 4 : s_)) });   // bldimport.render_one
-    const [mt, info] = place(mesh, job.n, job.cell_m, job.scale, job.rotate_deg);
+    let [mt, info] = place(mesh, job.n, job.cell_m, job.scale, job.rotate_deg);
     info.triangles = mesh.n;
+    if (job.props) {                      // task objprops (bldimport.render_one: bldprops.add_props)
+      const [m2, pinfo] = addProps(mt, job.n, job.file, job.props);
+      mt = m2; if (pinfo) info.props = pinfo;
+    }
     const frames = renderModel(mt, job.n, { ground: job.ground, shadows: job.shadows, style: job.style, progress });
     return { frames, info };
   }
@@ -2782,7 +3054,7 @@ function BLDWEB_LIB() {
     BldError, version: '2026-11-18d',
     // pieces (exported for the tests)
     fma, sha256, pyJson, pyJsonStr, cp1252Encode, rint, decodePNG, slotMesh, powf, encodePNG, decodeImage, pilMedianCut, paletteCut, pilResize, qfsCompress, qfsDecompress,
-    loadObj, place, renderModel, joinRel, dirOf, renderFrame, grassNorm, readBld, previewFrames, batFrames, sideMatch, ixfBuildings, bldFrames, recordFromImage, spanToImage,
+    loadObj, place, renderModel, propSet, addProps, decodeBMP, decodeTGA, joinRel, dirOf, renderFrame, grassNorm, readBld, previewFrames, batFrames, sideMatch, ixfBuildings, bldFrames, recordFromImage, spanToImage,
     records, slots, classTable, portTable, ruleFamilies, stockBuildings, styleOf, STYLES, PORTS, PORT_MAX_COPIES,
     landmarkTable, LANDMARK, LM_PIN, LM_DAT, PLUGIN_DIR, newContainer,
     // the tool

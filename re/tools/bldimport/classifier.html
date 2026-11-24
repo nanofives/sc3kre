@@ -1491,6 +1491,11 @@ function buildForm() {
   }
   el.style = Object.assign(document.createElement('input'), { type: 'text' }); row('Style', el.style);
   el.enabled = Object.assign(document.createElement('input'), { type: 'checkbox' }); row('Enabled', el.enabled);
+  // task objprops: the game's own Building Architect props (trees, cars, benches, crates) and ground paint on the free
+  // part of the lot, read from your game folder at install (bldprops.py). Off = models.json x_props {"on": false}
+  el.props = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  el.propsRow = row('Lot props', el.props); el.propsRow.hidden = true;
+  el.props.title = "Trees, cars, benches, lamps or crates from your game's Building Architect props on the free part of the lot, and a paved ground for shops, offices and industry. Read from your game folder when you install; nothing of the game is copied into your models folder.";
   el.notes = document.createElement('textarea'); el.notes.rows = 2; row('Notes', el.notes);
   // plop2: shown for landmarks only; empty = the game shows the name again on that line
   el.description = Object.assign(document.createElement('input'), { type: 'text', maxLength: 120, placeholder: 'line under the name in the landmark menu' });
@@ -1529,6 +1534,7 @@ function buildForm() {
   el.rotate_deg.onchange = edit('rotate_deg', (r, t) => { if (t.value !== '') r.meta.rotate_deg = +t.value; });
   el.style.onchange = edit('style', (r, t) => { r.meta.style = t.value; });
   el.enabled.onchange = edit('enabled', (r, t) => { r.meta.enabled = t.checked; });
+  el.props.onchange = edit('props', (r, t) => { r.raw = r.raw || {}; if (t.checked) delete r.raw.x_props; else r.raw.x_props = { on: false }; });
   el.notes.onchange = edit('notes', (r, t) => { r.meta.notes = t.value; });
   el.description.onchange = edit('description', (r, t) => { r.meta.description = t.value.trim(); });
 }
@@ -1573,7 +1579,7 @@ function refreshPanel(skip) {
   Object.values(el).forEach(e => e.disabled = dis);
   refreshMeasure();
   const sg = $('sugg');
-  if (dis) { sg.hidden = true; el.descRow.hidden = true; el.baseRow.hidden = true; el.popRow.hidden = true; el.yearRow.hidden = true; ['name','style','notes','weight','height_m','scale','rotate_deg','description','population','year'].forEach(k => { el[k].value = ''; }); return; }
+  if (dis) { sg.hidden = true; el.propsRow.hidden = true; el.descRow.hidden = true; el.baseRow.hidden = true; el.popRow.hidden = true; el.yearRow.hidden = true; ['name','style','notes','weight','height_m','scale','rotate_deg','description','population','year'].forEach(k => { el[k].value = ''; }); return; }
   el.descRow.hidden = !recs.every(r => ['landmark', 'civic', 'reward'].includes(r.meta.kind));
   el.baseRow.hidden = !recs.every(r => r.meta.kind === 'civic');
   el.popRow.hidden = el.yearRow.hidden = !recs.every(r => r.meta.kind === 'reward');
@@ -1590,6 +1596,9 @@ function refreshPanel(skip) {
   setSel(el.lot, common(recs, r => r.meta.lot), v => v ? v.join(',') : '1,1');
   const ce = common(recs, r => r.meta.enabled);
   el.enabled.indeterminate = !ce.one; el.enabled.checked = ce.one && ce.v;
+  el.propsRow.hidden = !recs.every(r => r.meta.kind === 'growable' && !r.bld && !(r.raw && r.raw.x_sc4));
+  const cpr = common(recs, r => !(r.raw && r.raw.x_props && r.raw.x_props.on === false));
+  el.props.indeterminate = !cpr.one; el.props.checked = cpr.one && cpr.v;
   // suggestion box
   sg.hidden = false; sg.textContent = '';
   const t = document.createElement('div');

@@ -124,6 +124,7 @@ sys.path.insert(0, os.path.join(TOOLS, "netmod"))
 import batgrow as BG          # noqa: E402  IXF / TKB1 helpers, class table, Game
 import bldrender as R         # noqa: E402
 import bldfile as BF          # noqa: E402  .bld reader + frames (task bldfile)
+import bldprops as BP         # noqa: E402  the game's BA props on the free lot (task objprops)
 
 GROUP = 0xB1D10001                       # frame tables + pixels of this tool (no stock or tool container uses it)
 ID_FIRST, ID_LAST = 38000, 38999         # brief 2026-11-18b; 36xxx tests/slots, 37xxx BAT conversions
@@ -580,6 +581,14 @@ def render_key(folder, m, n, game=None):
         _sha_file(p, h)
     for p in (os.path.join(HERE, "bldrender.py"), os.path.join(HERE, "bldfile.py")):
         _sha_file(p, h)
+    ps = BP.set_of(m) if not is_bld(m["file"]) else None
+    if ps is not None and game is not None:                       # task objprops: the props and paint read
+        _sha_file(os.path.join(HERE, "bldprops.py"), h)
+        lib = BP.Library(game)
+        for rel in lib.key_files(ps):
+            h.update(rel.encode() + b"\0")
+            if game.exists(rel):
+                h.update(game.read(rel))
     if is_bld(m["file"]):
         if game is not None and bld_art(m) != "preview" and game.exists(BG.BAT_REL):
             h.update(game.read(BG.BAT_REL))
@@ -628,6 +637,12 @@ def render_one(folder, m, n, force=False, log=print, game=None):
     mt, info = R.place(mesh, n, cell_m=o["cell_m"], scale=float(m.get("scale", 1.0)),
                        rotate_deg=float(m.get("rotate_deg", 0)))
     info["triangles"] = int(len(mesh["tri"]))
+    mt, pinfo = BP.add_props(mt, n, m, game)                      # task objprops
+    if pinfo is not None:
+        info["props"] = pinfo
+        if pinfo.get("missing"):
+            log("  note: %s: props not in this game's Building Architect library: %s"
+                % (m["file"], ", ".join(pinfo["missing"])))
     hm = m.get("height_m")
     if isinstance(hm, (int, float)) and hm > 0 and abs(info["size_m"][1] - hm) > 0.1 * hm:
         log("  note: %s is %.1f m tall after scale, models.json says height_m %.1f (scale wins)"
