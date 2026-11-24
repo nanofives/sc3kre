@@ -207,3 +207,67 @@ py -3.12 re/tools/bldimport/make_testmodels.py <folder>                    # the
 - Zoom 4 native edge vs stock zoom-3-doubled lots: a 1 px step can show between neighbouring lots at zoom 4 with
   `clean` / `stock_sharp`; `stock` (default) doubles zoom 3 like the stock lots.
 - Per-model render style in `models.json`: needs a bldimport change (section 4.1).
+
+## 8. Lot props for OBJ buildings (task objprops, 2026-11-24)
+
+Owner 2026-11-24 on the sample pack overview: "skyscraper doesn't have anything on its floor?". An OBJ model was drawn on
+a bare patch of lawn. `re/tools/bldimport/bldprops.py` (and its transcription in `bldweb.js`) now adds props and a lot
+ground from the player's own install at render time. Results: `verify/objprops/RESULTS.md`.
+
+### 8.1 Where SC3 keeps small lot objects
+
+| candidate | what it is | used? |
+|---|---|---|
+| stock building frames | the lot dressing (trees, fences, cars) is painted into the one 20-frame bitmap of each lot (section 1) | no: nothing to cut out without the building |
+| `Apps\Res\BA\PROPS` (Building Architect prop library) | 421 files in 8 folders (FLORA, VEHICLES, plaza and street, yard objects, industrial, building decoration, architecture, ROOFTOPS): per prop four BMPs `<name> <view>.bmp` and a line per orientation in the folder's `.met` | **yes** |
+| `Apps\Res\BA\PAINTS\GROUND` | 31 BA ground paints, TGA 128 x 128 (types 2 and 10, 24 bpp; concrete, parking lot, skyscraper base, gravel, grass) | **yes**, one per class set as the lot ground |
+| `Apps\BACustom\Props` | 4 sample props + `Readme Props.txt` ("a few sample props have been provided ... to discover these rules") | no (samples) |
+| `Res\Sprites\00000009_Landscape.DAT`, `FloraSets\`, `00000006_Vehicles.DAT` | terrain trees and traffic sprites the engine draws per cell | not read this round: drawn by their own engine paths at game zoom only, the BA set covers trees and cars |
+
+The BA props are Maxis' own cut-outs made to dress SC3 building lots, lit by the BA renderer, at four times zoom-3
+resolution, with their box size written next to them, and every SC3U install has them (the BA ships with the game).
+Read where the game keeps them at install time, as bldimport reads the game's IXF files. Nothing of them is shipped.
+
+### 8.2 The prop art, measured on the GOG install
+
+- BMPs: 826 files read (a case-insensitive walk counts each once), all 24-bit uncompressed (`BITMAPINFOHEADER`, bpp 24,
+  compression 0), square 32 / 64 / 128 / 256 px. Colour key exactly 255,0,255: 5,727,926 key pixels, 691,530 others,
+  18 of those near magenta (R > 200, G < 60, B > 200).
+- `.met` line: `x,y,z:"<view 0>","<view 1>","<view 2>","<view 3>"`. Consecutive lines of one prop rotate the names by
+  one: the prop's four orientations. Baapp's reader `FUN_00419d88` stores x, y into the prop object at +0x18 / +0x1c
+  (capped at 0x27) and z at +0x20 (capped at 0x13) [CONFIRMED @ Baapp 0x00419d88].
+- Box units: BA grid units, 8 per lot cell (BLD_FORMAT.md 2: grid N = 8 x lot). x runs along SC3 tile u, y along v:
+  semi1 orientation 0 is 9,3,3 and its trailer lies along the u diagonal in view 0.
+- View j = SC3 rotation slot j: the semi's cab is lower left, lower right, upper right, upper left in views 0 to 3, a
+  counter-clockwise turn per view, as slot r + 1 turns the lot counter-clockwise (NET_ART.md 6).
+- Scale: 32 px of screen width per grid unit, so 256 px per cell = 4 x zoom 3. The fence edges of `fence1` / `gate1`
+  span 16 px (columns 16-31 or 31-46 of 64) = half of a 1-unit 32 px diamond, on either side of the image centre.
+- Registration: the box centre is the image's centre column (fence and gate edges, 16 of 16 views). The box's ground
+  centre is 8 px per z unit below the image's centre row, fitted on centred trunks and poles: c = 1 lamp5 8 px; c = 3
+  lamps, cacti, sm evgn1 24-25; c = 5 lg evgn1 41; c = 7 med decid1, lg bfoak1 58; c = 9 lg decid1 74; c = 13 stack1
+  about 104. Props with c = 2 sit 4 to 10 px higher (sm bfpine1, planter2, fence1) and utility1 (c = 8) 9 px.
+  [UNCERTAIN: the BA's own anchor rule was not read in Baapp's draw code.] The tool does not depend on the fit
+  vertically: each billboard stands on the lower edge of its own lowest opaque row (8.3).
+
+### 8.3 How they are drawn
+
+Per placed prop and slot r, one quad: vertical, through the ground point straight below the box centre on screen at the
+height of the BMP's lowest opaque row, spanning the BMP's opaque box plus one transparent texel, 1/256 cell per texel.
+Its screen image is the BMP at the zoom's scale, registered as the BA drew it, and the model's z-buffer hides the parts
+behind walls. bldrender kind 3: the texel colour as it is, light 1, no tone, vibrance, grain or contrast, not a shadow
+caster; transparent texels are peeled like any alpha texture. The ground paint replaces the lawn texture over the lot
+(one tile per cell [UNCERTAIN: the BA's tile size not read; parking stalls of `parking lot1.tga` are about 2.75 m wide at
+this scale]) and keeps the lawn's light and front-edge rim. Models without props render byte for byte as before.
+
+### 8.4 Placement and classes
+
+Occupied = the BA grid cells under the (u, v) box of every model triangle. Each class set lists props with counts in
+order; each copy tries its orientations and the free positions in an order hashed from the model's file name (FNV-1a and
+a 32-bit mix), and takes the first box whose cells are all free and inside the lot; `edge` props (cars, lamps, trucks)
+must touch the lot edge. Set by class: 3100-3599 houses (lawn; car, deciduous trees, pines, shrubs, garden, pool, lawn
+chairs, clothesline), 3600-4999 apartments (lawn; cars, trees, playground, picnic table, lamps, benches, planters),
+5000-5999 shops (`parking lot1.tga`; cars, van, lamps, benches, planters, newsstand, bin, postbox), 6000-6999 offices
+(`skyscraper base1.tga`; fountain, trees, cypresses, car, lamps, planters, cafe tables, benches), 8000-9299 industry
+(`concrete lot.tga`; truck, van, pickup, tank, barrels, garbage, tyres). Switch per entry: `x_props: {"on": false}`
+(default on), the page's "Lot props" box; run switch `SC3BLD_PROPS=0` (Python). Not for .bld files (their BA art has its
+own props), SC4 conversions (their own lot props), landmarks, civic looks, rewards, ports or non-square lots.

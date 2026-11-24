@@ -310,7 +310,7 @@ def slot_mesh(mesh, r):
         return mesh
     keep = (s < 0) | (s == r)
     out = dict(mesh)
-    for k in ("tri", "uv", "has_uv", "mat", "slot", "ground"):
+    for k in ("tri", "uv", "has_uv", "mat", "slot", "ground", "prop"):
         if k in mesh:
             out[k] = mesh[k][keep]
     return out
@@ -598,6 +598,9 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
     # kind 0 model, 1 the lawn, 2 ground art of the model (sc3ground faces, task sc4lottex)
     gf = mesh.get("ground")
     kinds = [np.where(gf, 2, 0).astype(np.int8) if gf is not None else np.zeros(len(mesh["tri"]), dtype=np.int8)]
+    pf = mesh.get("prop")
+    if pf is not None and pf.any():                              # task objprops: BA props (bldprops.py), kind 3
+        kinds[0] = np.where(pf, 3, kinds[0]).astype(np.int8)
     n_ground = int((kinds[0] == 2).sum())
     gmesh = gf if n_ground else None
     if ground:
@@ -679,6 +682,9 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
                 nl = np.where(sh, nl * (1 - _pz(st["shadow_keep"], z)), nl)   # a shadowed sample keeps part of its light
             light = st["ambient"] + st["diffuse"] * nl
         alb = np.empty((len(ids), 3), dtype=np.float32)
+        is_p = kind[ids] == 3                                     # task objprops: lit art of the BA props, as it is
+        if is_p.any():
+            light = np.where(is_p, 1.0, light)
         is_g = kind[ids] == 1
         is_l = kind[ids] == 2                                     # task sc4lottex: ground art, lit as the lawn
         if is_l.any() and alpha_mats:                             # its transparent texels: the lawn below
@@ -708,9 +714,12 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
             light[ig] = lg
         if is_g.any():
             gtex = ground_tex if ground_tex is not None else grass_texture(**_grass_args(st, z))
+            k_uv = GRASS_TEXELS_PER_CELL / gtex.shape[0]
+            if mesh.get("lot_tex") is not None:                   # task objprops: a BA ground paint, one tile per cell
+                gtex = mesh["lot_tex"]
+                k_uv = 1.0
             # ground uv in slot-0 lot coordinates: undo the slot rotation of the sample position
             p0 = _rot_slot(pts[is_g], exr, (4 - r) % 4)
-            k_uv = GRASS_TEXELS_PER_CELL / gtex.shape[0]
             alb[is_g] = _sample_tex(gtex, np.stack([p0[:, 0] * k_uv, p0[:, 1] * k_uv], 1))
         if is_l.any():                                            # task sc4lottex: ground art, its texture as it is
             mids = mesh["mat"][ids[is_l]]
@@ -724,7 +733,16 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
                 if sel.any():
                     a3[sel] = _sample_tex(m["tex"], uvt[sel])
             alb[is_l] = a3
-        mi = ~(is_g | is_l)
+        if is_p.any():
+            pi = np.where(is_p)[0]
+            mp = mesh["mat"][ids[pi]]
+            uvp = (mesh["uv"][ids[pi]] * bw[pi][:, :, None]).sum(1)
+            ap = np.zeros((len(pi), 3), dtype=np.float32)
+            for k in np.unique(mp):
+                sel = mp == k
+                ap[sel] = _sample_tex(mesh["mats"][k]["tex"], uvp[sel])
+            alb[pi] = ap
+        mi = ~(is_g | is_l | is_p)
         if mi.any():
             mids = mesh["mat"][ids[mi]]
             a2 = np.array([m["kd"] for m in mesh["mats"]], dtype=np.float32)[mids]
