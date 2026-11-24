@@ -747,6 +747,7 @@ resize.cv_look_stock=Utseende %d av %d: original
 resize.mt_civvar=Offentliga byggnader: fler utseenden
 # en: New rewards
 resize.mt_newreward=Nya belöningar
+resize.mt_lotgrow=Zoner: icke-kvadratiska byggnader
 # en: Simulation and buildings
 resize.mt_simbld=Simulering och byggnader
 

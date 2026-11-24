@@ -62,8 +62,19 @@ from 1 to 5 each. prop 0x66 = (w, the base's height, d) = (SizeInCellsX, height,
 of the longer side (the square the lot fits in); the frames are drawn for the w x d lot (bldrender: slots 0 and 2 are
 w x d, 1 and 3 d x w, anchor at the lot's left vertex). The game places, saves, moves and bulldozes such a building as
 it is, but draws it whole only with sc3perf's LOTRECT patch (mods page row "Non-square buildings"); without it the
-sprite is registered as w x w. Growables and ports stay square (the zone developer lays out square lots only, SIMRCI
-0x10027699). Civic looks take any lot since task civlot (below).
+sprite is registered as w x w. Ports stay square. Civic looks take any lot since task civlot (below).
+
+Non-square growables (task lotgrowb, 2026-11-24, re/analysis/LOT_SHAPES.md 11): "lot": [w, d] = 1x2, 2x3 or 3x4 (short
+side first: the zone developer never turns a growable, so the long side runs along z; LOTRECT orders the art against
+its neighbours when the sides differ by one). Stats of the class's d x d base, prop 0x66 = (w, h, d), frames for the
+w x d lot as for a landmark. The stock zone developer lays out squares only: they grow with sc3simrun LOTGROW (mods page
+row "Non-square zoned buildings") and LOTRECT on. The family line goes only in families no fixed-layout rule uses
+(FIXED_FAMILIES); classes 3500 and 3700 reach a generic rule only through a family a fixed rule shares (10, 16), so
+those get a copy family (COPY_FAMILIES: 38100, 38116 = the family's members now + ours) and the generic rule's
+[ZoneDeveloperRules] rows point at the copy (overlay SYS.PAK). Run bat_growables.ps1 / netpack before bldimport, as for
+any family line: a later edit of family 10 or 16 does not reach the copy until bldimport runs again. Without the mods a
+saved one comes back as a square stock building of its class on its first w x w cells, the rest empty zoned land
+(measured).
 
 Civic looks and new rewards (task civmod, 2026-11-19, re/analysis/CIVIC_REWARD.md): two more plugin kinds (exemplar,
 name, line under the name, frame table, pixels as for a landmark). Civic looks go into bldimport.pin / .dat, rewards into
@@ -254,6 +265,18 @@ def ids_for(folder, models):
 
 RECT_KINDS = ("landmark", "reward", "civic")   # task lotshape: the kinds that may have a w x d lot, and 5x5 (civic: civlot)
 RECT_MAX = 5
+# task lotgrowb (round 2026-11-24d, re/analysis/LOT_SHAPES.md 11): growables on a w x d lot. sc3simrun LOTGROW makes the
+# generic zone developer rules place them; the zone developer never turns a growable, so the long side runs along z
+# (w < d), and LOTRECT orders the art against its neighbours only when the sides differ by one (8.3).
+GROW_RECT = ((1, 2), (2, 3), (3, 4))
+# families a fixed-layout rule also draws from (row houses 1, large lot 10, L blocks 16 28 29 30, farm 25): a w x d
+# member there would be laid out as a square, so it never goes in them
+FIXED_FAMILIES = (1, 10, 16, 25, 28, 29, 30)
+# 3500 and 3700 reach a generic rule only through a family a fixed rule shares: a copy of that family (stock members +
+# ours) takes its place in the generic rule's [ZoneDeveloperRules] rows (SC3ZoneLayer.ini, overlay SYS.PAK)
+COPY_FAMILIES = {10: (38100, ("2,0xa22653c0", "3,0xa22653c0")), 16: (38116, ("2,0x222c9d00", "3,0x222c9d00"))}
+COPY_IDS = {v[0]: k for k, v in COPY_FAMILIES.items()}
+SYSPAK = "Apps/Sys/SYS.PAK"
 
 
 def civic_turn(kind, n):
@@ -268,8 +291,9 @@ def turned_model(m):
     return dict(m, rotate_deg=m.get("rotate_deg", 0) + 90, _quarter=1)
 
 
-def lot_of(m, rect=False):
-    """-> (lot, error). lot = n for a square lot, (w, d) for a non-square one (rect: kinds RECT_KINDS only)."""
+def lot_of(m, rect=False, grow=False):
+    """-> (lot, error). lot = n for a square lot, (w, d) for a non-square one (rect: kinds RECT_KINDS; grow: a growable,
+    GROW_RECT only, task lotgrowb)."""
     lot = m.get("lot", [1, 1])
     if not (isinstance(lot, list) and len(lot) == 2 and all(isinstance(x, int) for x in lot)):
         return None, "lot %r is not [n, n]" % (lot,)
@@ -278,10 +302,65 @@ def lot_of(m, rect=False):
     if lot[0] != lot[1]:
         if rect:
             return (lot[0], lot[1]), None
+        if grow and tuple(lot) in GROW_RECT:
+            return (lot[0], lot[1]), None
+        if grow and (lot[1], lot[0]) in GROW_RECT:
+            return None, ("lot %dx%d: a non-square growable lists its short side first ([%d, %d]): zone growth places "
+                          "it with the long side along z; turn the model with rotate_deg" % (lot[0], lot[1], lot[1], lot[0]))
+        if grow:
+            return None, "lot %dx%d: non-square growables are 1x2, 2x3 or 3x4 (sides differing by one)" % tuple(lot)
         return None, "lot %dx%d: only square lots grow (every stock base is n x n, batgrow.class_table)" % tuple(lot)
     if not rect and not 1 <= lot[0] <= 4:
         return None, "lot %dx%d: growables are 1x1 to 4x4" % tuple(lot)
     return lot[0], None
+
+
+def grow_families(fams, n):
+    """The families an entry's family line goes in: all of them for a square lot; for a w x d growable the ones only
+    generic rules use, a fixed rule's shared family replaced by its copy (COPY_FAMILIES) (task lotgrowb)."""
+    if not isinstance(n, (tuple, list)):
+        return list(fams)
+    return [COPY_FAMILIES[f][0] if f in COPY_FAMILIES else f for f in fams if f not in FIXED_FAMILIES or f in COPY_FAMILIES]
+
+
+def copy_family_rules(pak, used):
+    """SYS.PAK with each used copy family put in place of its source family in the generic rule's
+    [ZoneDeveloperRules] rows (SC3ZoneLayer.ini), task lotgrowb. used = the source families (COPY_FAMILIES keys)."""
+    import syspak_parse
+    names, _, _, recs = syspak_parse.parse(pak)
+    lines = [list(r["lines"]) for r in recs]
+    i = [k for k, nm in enumerate(names) if nm.lower() == "sc3zonelayer.ini"]
+    if len(i) != 1:
+        raise ImportError_("SYS.PAK has %d SC3ZoneLayer.ini members" % len(i))
+    L = lines[i[0]]
+    for src in sorted(used):
+        inst, rows = COPY_FAMILIES[src]
+        for row in rows:
+            hit, sec = 0, None
+            for k, ln in enumerate(L):
+                s = ln.strip()
+                if s.startswith("["):
+                    sec = s.lower()
+                    continue
+                if sec != "[zonedeveloperrules]" or "=" not in s or s.split("=", 1)[0].strip().lower() != row:
+                    continue
+                key, val = ln.split("=", 1)
+                new, c = re.subn(r"(0x81f53d09\s*,\s*0x01f58d3d\s*,\s*)%d\b" % src, r"\g<1>%d" % inst, val, flags=re.I)
+                if c != 1:
+                    raise ImportError_("SC3ZoneLayer.ini [ZoneDeveloperRules] %s does not list family %d once" % (row, src))
+                L[k] = key + "=" + new
+                hit += 1
+            if hit != 1:
+                raise ImportError_("SC3ZoneLayer.ini [ZoneDeveloperRules] has %d rows %s" % (hit, row))
+    return syspak_parse.build(names, lines)
+
+
+def copy_family_text(text, inst, add):
+    """A copy of a BUILDFAM family record (its members as they are now) with `add` Key lines first, count raised."""
+    mc = re.search(rb"BuildingCount:\s*(\d+)[^\r\n]*\r?\n", text)
+    if not mc:
+        raise ImportError_("BUILDFAM family has no BuildingCount line (copy %d)" % inst)
+    return text[:mc.start()] + b"BuildingCount: %d\r\n" % (int(mc.group(1)) + len(add)) + b"".join(add) + text[mc.end():]
 
 
 def lot_wd(n):
@@ -695,7 +774,7 @@ def plan(folder, game, log=print):
         base = m.get("base")
         if kind0 == "civic" and "lot" not in m and civic and isinstance(base, str) and "civic:" + base in civic:
             m = dict(m, lot=[civic["civic:" + base]["lot"]] * 2)   # civic: the base's lot by default
-        n, lot_err = lot_of(m, rect=kind0 in RECT_KINDS)
+        n, lot_err = lot_of(m, rect=kind0 in RECT_KINDS, grow=kind0 == "growable")
         if not lot_err and civic_turn(kind0, n):          # task civlot: the short side first (X <= Z)
             n, m = (n[1], n[0]), turned_model(m)
         if is_bld(f) and os.path.isfile(os.path.join(folder, f)) and not lot_err:
@@ -746,9 +825,15 @@ def plan(folder, game, log=print):
                 "%dx%d" % (s, s) for s in port["sizes"]))
         elif port is None and not lm and table is not None and cls not in table:
             why = "class %r is not a growable class (%s)" % (cls, ", ".join(map(str, sorted(table))))
-        elif port is None and not lm and table is not None and n not in table[cls]["bases"]:
+        elif port is None and not lm and table is not None and isinstance(n, int) and n not in table[cls]["bases"]:
             why = "class %d has no %dx%d lot (it has %s)" % (cls, n, n, ", ".join(
                 "%dx%d" % (s, s) for s in table[cls]["bases"]))
+        elif port is None and not lm and table is not None and lot_base(n) not in table[cls]["bases"]:
+            why = "class %d has no %dx%d base for a %s lot (a w x d growable takes the stats of the d x d one; it has %s)" % (
+                cls, n[1], n[1], lot_str(n), ", ".join("%dx%d" % (s, s) for s in table[cls]["bases"]))
+        elif port is None and not lm and table is not None and not grow_families(table[cls]["families"], n):
+            why = "class %d grows only from fixed-layout families (%s): a %s lot cannot grow there" % (
+                cls, ",".join(map(str, table[cls]["families"])), lot_str(n))
         else:
             try:
                 name.encode("cp1252")
@@ -902,6 +987,7 @@ def build_files(folder, game, src, log=print, force_render=False):
     civ_lines, civ_names, rw_rows = {}, [], []      # task civmod: base -> [id], (id, name), reward rows
     rw_types, rw_hier = [], []                      # task civmod: the reward types' CitySim.ini-format declarations
     bld = BG.stock_buildings(game)
+    copy_used = set()                               # task lotgrowb: source families whose copy an entry joined
     for e in entries:
         nid, n, lu = e["id"], e["lot"], e["class"]
         tg = table[target_of(e)]
@@ -964,17 +1050,20 @@ def build_files(folder, game, src, log=print, force_render=False):
             continue
         names.append((TEXT_GROUP, nid, TEXT_TYPE, struct.pack("<I", len(nm)) + nm))
         copies = tg.get("copies", False)
-        for f in tg["families"]:
+        efams = grow_families(tg["families"], n)
+        for f in efams:
+            if f in COPY_IDS:
+                copy_used.add(COPY_IDS[f])
             if copies:                       # airpark: weight ignored by the rule, one line per copy (PORTS)
                 lines.setdefault(f, []).extend([b"Key: 1406,545184782,%d,1   %s\r\n" % (nid, nm)] * e["weight"])
             else:
                 lines.setdefault(f, []).append(b"Key: 1406,545184782,%d,%d   %s\r\n" % (nid, e["weight"], nm))
         what = ("%s, %dx%d, %d %s" % (tg["label"], n, n, e["weight"], "copy" if e["weight"] == 1 else "copies")
-                if copies else "%s, %dx%d, weight %d" % (
-                    tg["label"] if e["kind"] in PORTS else "class %d (%s)" % (lu, BG.CLASS_LABEL[lu]), n, n, e["weight"]))
+                if copies else "%s, %s, weight %d" % (
+                    tg["label"] if e["kind"] in PORTS else "class %d (%s)" % (lu, BG.CLASS_LABEL[lu]), lot_str(n), e["weight"]))
         rep.append("grow  [%d] %s: \"%s\", %s, stats of stock %d, families %s, %s%s" % (
             nid, e["file"], e["name"], what, base,
-            ",".join(map(str, tg["families"])), describe(info),
+            ",".join(map(str, efams)), describe(info),
             ", %d magenta px nudged" % nudged if nudged else ""))
     files = {}
     keep = set(e["id"] for e in entries)
@@ -1005,7 +1094,14 @@ def build_files(folder, game, src, log=print, force_render=False):
         bf = cur(OVL + BUILDFAM)
         if bf is None:
             bf = game.read(BUILDFAM)
-        files[OVL + BUILDFAM] = buildfam_lines(bf, lines)
+        bf = buildfam_lines(bf, lines)
+        if copy_used:                               # task lotgrowb: the copy families, then their rule rows
+            fams = BG.family_records(bf)
+            bf = upsert(bf, [(FAM_GROUP, COPY_FAMILIES[f][0], FAM_TYPE, copy_family_text(
+                fams[f], COPY_FAMILIES[f][0], lines.get(COPY_FAMILIES[f][0], []))) for f in sorted(copy_used)])
+            pak = cur(OVL + SYSPAK)
+            files[OVL + SYSPAK] = copy_family_rules(pak if pak is not None else game.read(SYSPAK), copy_used)
+        files[OVL + BUILDFAM] = bf
     rep.append("%d building(s) to install: %s" % (len(keep), ", ".join(map(str, sorted(keep))) or "none"))
     return files, rep
 
@@ -1362,7 +1458,7 @@ def cmd_check(a):
                 if b"\n%d=bldimport%d:" % (nid, nid) not in tyi or len(re.findall(rb"(?m)^%d=" % nid, tyi)) != 2:
                     errs.append("no [AgentTypes] / [AgentTypeHierarchy] rows for type %d in %s" % (nid, TYPES_INI))
         tg = table[target_of(e)]
-        for f in tg["families"]:
+        for f in grow_families(tg["families"], e["lot"]):
             ws = [int(mm.group(1)) for mm in re.finditer(rb"Key:\s*1406,545184782,%d,(\d+)" % nid, fams[f])]
             if ws != ([1] * e["weight"] if tg.get("copies") else [e["weight"]]):
                 errs.append("family %d line(s) %r" % (f, ws))

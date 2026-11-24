@@ -67,7 +67,7 @@ def main():
     ap.add_argument("--game", required=True)
     ap.add_argument("--kits", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks,landmarkdesc,civic,lotshape,sharp")
+    ap.add_argument("--cases", default="testmodels,bld,kenney,styles,ports,landmarks,landmarkdesc,civic,lotshape,lotgrow,sharp")
     ap.add_argument("--sc4", help="SC4 plugin folder for case sc4 (task sc4web)")
     ap.add_argument("--bld1999", help="folder of 1999 Building Architect .bld files for case bld1999 (sc3compat-a)")
     ap.add_argument("--bldside", help="folder of .bld files + the bld_frames.ixf render_bld.ps1 wrote, for case bldside")
@@ -85,6 +85,10 @@ def main():
             # locked, a landmark, three refused entries): the plugins Apps/PlugIn/bldimport (+ bldimport_civic.ini) and
             # Apps/PlugIn/bldimport_rewards (.pin, .dat, bldimport_rewards.ini, bldimport_types.ini)
             subprocess.run([sys.executable, MAKE, "--civmod", d], check=True, capture_output=True)
+        elif c == "lotgrow":
+            # task lotgrowb (2026-11-24): w x d growables, the 3500 / 3700 copy families + their rule rows (overlay
+            # SYS.PAK), a square one beside them, five refused entries (make_testmodels.py --lotgrow)
+            subprocess.run([sys.executable, MAKE, "--lotgrow", d], check=True, capture_output=True)
         elif c == "lotshape":
             # task lotshape (2026-11-20): non-square landmarks and rewards (2x3, 3x2, 1x4, 5x4), a 5x5 reward, an
             # overhanging 2x3, four refused entries (make_testmodels.py --lotshape)

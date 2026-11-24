@@ -747,6 +747,7 @@ resize.cv_look_stock=Aspetto %d di %d: originale
 resize.mt_civvar=Edifici civici: più aspetti
 # en: New rewards
 resize.mt_newreward=Nuove ricompense
+resize.mt_lotgrow=Zone: edifici non quadrati
 # en: Simulation and buildings
 resize.mt_simbld=Simulazione ed edifici
 

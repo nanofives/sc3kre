@@ -2516,15 +2516,33 @@ function BLDWEB_LIB() {
   }
   // task lotshape: bldimport.RECT_KINDS / lot_of(m, rect) / lot_wd / lot_base / lot_str. lot = n (square) or [w, d]
   const RECT_KINDS = ['landmark', 'reward', 'civic'], RECT_MAX = 5;   // civic: task civlot
+  // task lotgrowb: bldimport.GROW_RECT / FIXED_FAMILIES / COPY_FAMILIES / grow_families (growables on a w x d lot)
+  const GROW_RECT = [[1, 2], [2, 3], [3, 4]];
+  const FIXED_FAMILIES = [1, 10, 16, 25, 28, 29, 30];
+  const COPY_FAMILIES = new Map([[10, [38100, ['2,0xa22653c0', '3,0xa22653c0']]], [16, [38116, ['2,0x222c9d00', '3,0x222c9d00']]]]);
+  const COPY_IDS = new Map([...COPY_FAMILIES].map(([k, v]) => [v[0], k]));
+  const SYSPAK = 'Apps/Sys/SYS.PAK';
+  const inGrowRect = (a, b) => GROW_RECT.some(r => r[0] === a && r[1] === b);
+  function growFamilies(fams, n) {
+    if (!Array.isArray(n)) return fams.slice();
+    return fams.filter(f => !FIXED_FAMILIES.includes(f) || COPY_FAMILIES.has(f)).map(f => (COPY_FAMILIES.has(f) ? COPY_FAMILIES.get(f)[0] : f));
+  }
   // task civlot: bldimport.civic_turn / turned_model. A civic look on w x d with w > d is stored turned a quarter (lot d x w)
   const civicTurn = (kind, n) => kind === 'civic' && Array.isArray(n) && n[0] > n[1];
   const turnedModel = m => Object.assign({}, m, { rotate_deg: ('rotate_deg' in m ? m.rotate_deg : 0) + 90, _quarter: 1 });
-  function lotOf(m, rect) {
+  function lotOf(m, rect, grow) {
     const lot = 'lot' in m ? m.lot : [1, 1];
     if (!(Array.isArray(lot) && lot.length === 2 && lot.every(x => Number.isInteger(x) || typeof x === 'boolean'))) return [null, 'lot ' + JSON.stringify(lot) + ' is not [n, n]'];
     const a = +lot[0], b = +lot[1];
     if (rect && !(1 <= a && a <= RECT_MAX && 1 <= b && b <= RECT_MAX)) return [null, 'lot ' + a + 'x' + b + ': landmarks, rewards and civic looks are 1 to ' + RECT_MAX + ' cells on each side'];
-    if (a !== b) return rect ? [[a, b], null] : [null, 'lot ' + a + 'x' + b + ': only square lots grow (every stock base is n x n)'];
+    if (a !== b) {
+      if (rect) return [[a, b], null];
+      if (grow && inGrowRect(a, b)) return [[a, b], null];
+      if (grow && inGrowRect(b, a)) return [null, 'lot ' + a + 'x' + b + ': a non-square growable lists its short side first ([' + b + ', ' + a +
+        ']): zone growth places it with the long side along z; turn the model with rotate_deg'];
+      if (grow) return [null, 'lot ' + a + 'x' + b + ': non-square growables are 1x2, 2x3 or 3x4 (sides differing by one)'];
+      return [null, 'lot ' + a + 'x' + b + ': only square lots grow (every stock base is n x n)'];
+    }
     if (!rect && !(1 <= a && a <= 4)) return [null, 'lot ' + a + 'x' + b + ': growables are 1x1 to 4x4'];
     return [a, null];
   }
@@ -2557,7 +2575,7 @@ function BLDWEB_LIB() {
         const s0 = civic.get('civic:' + base).lot;
         m = Object.assign({}, m, { lot: [s0, s0] });   // civic: the base's lot by default
       }
-      let [n, lotErr] = lotOf(m, RECT_KINDS.includes('kind' in m ? m.kind : 'growable'));
+      let [n, lotErr] = lotOf(m, RECT_KINDS.includes('kind' in m ? m.kind : 'growable'), ('kind' in m ? m.kind : 'growable') === 'growable');
       if (!lotErr && civicTurn('kind' in m ? m.kind : 'growable', n)) { n = [n[1], n[0]]; m = turnedModel(m); }   // task civlot: X <= Z
       const exists = typeof f === 'string' && !!(await folder.exists(f));
       if (isBld(f) && exists && !lotErr) {
@@ -2584,7 +2602,11 @@ function BLDWEB_LIB() {
       else if ((kind === 'landmark' || kind === 'reward') && lotWd(n).some(x => !LANDMARK.sizes.includes(x))) why = kind + ' lot ' + lotStr(n) + ': ' + kind + 's are ' + LANDMARK.sizes.map(s_ => s_ + 'x' + s_).join(', ');
       else if (port !== null && !port.sizes.includes(n)) why = kind + ' lot ' + n + 'x' + n + ': the ' + port.label.toLowerCase() + ' grows ' + port.sizes.map(s_ => s_ + 'x' + s_).join(' and ');
       else if (port === null && !lm && table && !(Number.isInteger(cls) && table.has(cls))) why = 'class ' + JSON.stringify(cls) + ' is not a growable class (' + [...table.keys()].join(', ') + ')';
-      else if (port === null && !lm && table && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
+      else if (port === null && !lm && table && !Array.isArray(n) && !table.get(cls).bases.has(n)) why = 'class ' + cls + ' has no ' + n + 'x' + n + ' lot (it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
+      else if (port === null && !lm && table && !table.get(cls).bases.has(lotBase(n))) why = 'class ' + cls + ' has no ' + n[1] + 'x' + n[1] + ' base for a ' + lotStr(n) +
+        ' lot (a w x d growable takes the stats of the d x d one; it has ' + [...table.get(cls).bases.keys()].map(s => s + 'x' + s).join(', ') + ')';
+      else if (port === null && !lm && table && !growFamilies(table.get(cls).families, n).length) why = 'class ' + cls + ' grows only from fixed-layout families (' +
+        table.get(cls).families.join(',') + '): a ' + lotStr(n) + ' lot cannot grow there';
       else if (cp1252Encode(name) === null) why = 'name ' + JSON.stringify(name) + " has characters the game's text files cannot hold (cp1252)";
       let desc = null;
       if (!why && lm) {
@@ -2660,6 +2682,66 @@ function BLDWEB_LIB() {
     return out;
   }
   const KEY_LINE = /Key:\s*1406,545184782,(\d+),\d+[^\r\n]*\r?\n/g;
+  // task lotgrowb: bldimport.copy_family_text / copy_family_rules (SYS.PAK rebuilt as syspak_parse.build)
+  function copyFamilyText(text, inst, add) {
+    const mc = /BuildingCount:\s*(\d+)[^\r\n]*\r?\n/.exec(text);
+    if (!mc) throw new BldError('BUILDFAM family has no BuildingCount line (copy ' + inst + ')');
+    return text.slice(0, mc.index) + 'BuildingCount: ' + (parseInt(mc[1], 10) + add.length) + '\r\n' + add.join('') + text.slice(mc.index + mc[0].length);
+  }
+  function syspakAll(pak) {
+    let off = 0; const names = [];
+    while (off + 8 <= pak.length) {
+      const nl = rdU32(pak, off + 4);
+      if (nl === 0 || nl > 128) break;
+      const nm = pak.subarray(off + 8, off + 8 + nl);
+      if (!nm.every(c => c >= 32 && c < 127)) break;
+      names.push(latin1(nm)); off += 8 + nl;
+    }
+    let o = off + 4; const recs = [];
+    for (let k = 0; k < names.length; k++) {
+      const lc = rdU32(pak, o); o += 4; const lines = [];
+      for (let q = 0; q < lc; q++) { const ln = rdU32(pak, o); o += 4; lines.push(latin1(pak.subarray(o, o + ln))); o += ln; }
+      recs.push(lines);
+    }
+    if (o !== pak.length) throw new BldError('SYS.PAK record walk did not end at the end of the file');
+    return [names, recs];
+  }
+  function syspakBuild(names, recs) {
+    const blobs = recs.map(lines => { const parts = [packU32s(lines.length)]; for (const ln of lines) { const b = ascii(ln); parts.push(packU32s(b.length), b); } return u8cat(parts); });
+    const tocEnd = names.reduce((s_, nm) => s_ + 8 + nm.length, 0), starts = [];
+    let pos = tocEnd + 4;
+    for (const b of blobs) { starts.push(pos); pos += b.length; }
+    const parts = [];
+    names.forEach((nm, i) => parts.push(packU32s(i === 0 ? names.length : starts[i - 1], nm.length), ascii(nm)));
+    parts.push(packU32s(starts[starts.length - 1]));
+    for (const b of blobs) parts.push(b);
+    return u8cat(parts);
+  }
+  function copyFamilyRules(pak, used) {
+    const [names, recs] = syspakAll(pak);
+    const hits = names.map((nm, k) => [nm, k]).filter(([nm]) => nm.toLowerCase() === 'sc3zonelayer.ini');
+    if (hits.length !== 1) throw new BldError('SYS.PAK has ' + hits.length + ' SC3ZoneLayer.ini members');
+    const L = recs[hits[0][1]];
+    for (const src of used) {
+      const [inst, rows] = COPY_FAMILIES.get(src);
+      for (const row of rows) {
+        let hit = 0, sec = null;
+        for (let k = 0; k < L.length; k++) {
+          const s_ = pyStrip(L[k]);
+          if (s_.startsWith('[')) { sec = s_.toLowerCase(); continue; }
+          if (sec !== '[zonedeveloperrules]' || !s_.includes('=') || pyStrip(s_.slice(0, s_.indexOf('='))).toLowerCase() !== row) continue;
+          const at = L[k].indexOf('='), key = L[k].slice(0, at), val = L[k].slice(at + 1);
+          const re = new RegExp('(0x81f53d09\\s*,\\s*0x01f58d3d\\s*,\\s*)' + src + '\\b', 'gi');
+          const c = (val.match(re) || []).length;
+          if (c !== 1) throw new BldError('SC3ZoneLayer.ini [ZoneDeveloperRules] ' + row + ' does not list family ' + src + ' once');
+          L[k] = key + '=' + val.replace(re, '$1' + inst);
+          hit++;
+        }
+        if (hit !== 1) throw new BldError('SC3ZoneLayer.ini [ZoneDeveloperRules] has ' + hit + ' rows ' + row);
+      }
+    }
+    return syspakBuild(names, recs);
+  }
   function buildfamLines(bf, lines) {
     const fams = familyRecords(bf), neu = [];
     for (const [f, payload] of fams) {
@@ -2697,6 +2779,7 @@ function BLDWEB_LIB() {
     const lmRecs = [], lmKeys = [];
     const rwRecs = [], rwKeys = [], civLines = new Map(), civNames = [], rwRows = [], rwTypes = [], rwHier = [];   // task civmod
     const bld = await stockBuildings(game);
+    const copyUsed = new Set();                     // task lotgrowb: source families whose copy an entry joined
     let k0 = 0;
     for (const e of entries) {
       k0++;
@@ -2754,15 +2837,17 @@ function BLDWEB_LIB() {
       }
       names.push([TEXT_GROUP, nid, TEXT_TYPE, u8cat([packU32s(nm.length), nm])]);
       const copies = !!tg.copies;
-      for (const f of tg.families) {
+      const efams = growFamilies(tg.families, n);
+      for (const f of efams) {
+        if (COPY_IDS.has(f)) copyUsed.add(COPY_IDS.get(f));
         if (!lines.has(f)) lines.set(f, []);
         if (copies) for (let q = 0; q < e.weight; q++) lines.get(f).push('Key: 1406,545184782,' + nid + ',1   ' + latin1(nm) + '\r\n');   // airpark: one line per copy
         else lines.get(f).push('Key: 1406,545184782,' + nid + ',' + e.weight + '   ' + latin1(nm) + '\r\n');
       }
       const what = copies ? tg.label + ', ' + n + 'x' + n + ', ' + e.weight + (e.weight === 1 ? ' copy' : ' copies')
-        : (portOf(e.kind) ? tg.label : 'class ' + lu + ' (' + CLASS_LABEL[lu] + ')') + ', ' + n + 'x' + n + ', weight ' + e.weight;
+        : (portOf(e.kind) ? tg.label : 'class ' + lu + ' (' + CLASS_LABEL[lu] + ')') + ', ' + lotStr(n) + ', weight ' + e.weight;
       rep.push('grow  [' + nid + '] ' + e.file + ': "' + e.name + '", ' + what +
-        ', stats of stock ' + base + ', families ' + tg.families.join(',') + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
+        ', stats of stock ' + base + ', families ' + efams.join(',') + ', ' + describe(info) + (nudged ? ', ' + nudged + ' magenta px nudged' : ''));
       if (opt.onFrames) opt.onFrames(e, frames, info);
     }
     const files = new Map();
@@ -2791,7 +2876,15 @@ function BLDWEB_LIB() {
       for (const lang of langs) { const rel = OVL + 'Apps/Res/Text/' + lang + '/' + NAMES; files.set(rel, names.length ? upsert(await cur(rel), names) : await cur(rel)); }
       let bf = await cur(OVL + BUILDFAM);
       if (bf === null) bf = await game.read(BUILDFAM);
-      files.set(OVL + BUILDFAM, buildfamLines(bf, lines));
+      bf = buildfamLines(bf, lines);
+      if (copyUsed.size) {                          // task lotgrowb: the copy families, then their rule rows
+        const fams = familyRecords(bf), used = [...copyUsed].sort((a, b) => a - b);
+        bf = upsert(bf, used.map(f => [FAM_GROUP, COPY_FAMILIES.get(f)[0], FAM_TYPE,
+          ascii(copyFamilyText(latin1(fams.get(f)), COPY_FAMILIES.get(f)[0], lines.get(COPY_FAMILIES.get(f)[0]) || []))]));
+        const pak = await cur(OVL + SYSPAK);
+        files.set(OVL + SYSPAK, copyFamilyRules(pak !== null ? pak : await game.read(SYSPAK), used));
+      }
+      files.set(OVL + BUILDFAM, bf);
     }
     rep.push(keep.length + ' building(s) to install: ' + (keep.slice().sort((a, b) => a - b).join(', ') || 'none'));
     return [files, rep];

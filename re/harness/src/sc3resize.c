@@ -9205,7 +9205,8 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_nopause"),   "Sin pausa en ventanas",   "No pause in pop-ups" },    NULL, "+SC3SIMRUN_NOPAUSE" },   /* nopause 2026-11-21: sc3simrun NOPAUSE */
     { { SC3KEY("resize.mt_civvar"),    "Cívicos: varios aspectos", "Civic buildings: more looks" }, NULL, "-SC3RESIZE_CIVVAR" },
     { { SC3KEY("resize.mt_civstyle"),  "Cívicos: estilos del juego", "Civic buildings: game styles" }, NULL, "-SC3RESIZE_CIVSTYLE" },   /* civicstyle 2026-11-21 */
-    { { SC3KEY("resize.mt_newreward"), "Premios nuevos",          "New rewards" },            NULL, "-SC3RESIZE_NEWREWARD" } };
+    { { SC3KEY("resize.mt_newreward"), "Premios nuevos",          "New rewards" },            NULL, "-SC3RESIZE_NEWREWARD" },
+    { { SC3KEY("resize.mt_lotgrow"),   "Zonas: edificios no cuadrados", "Non-square zoned buildings" }, NULL, "-SC3SIMRUN_LOTGROW" } };   /* lotgrowb 2026-11-24: sc3simrun LOTGROW */
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
 static int g_mt_on0[MT_N];   /* state shown when the page was built */
 
@@ -9266,8 +9267,10 @@ static void mt_vis_all(void *win, int on) {
 /* left column rows under "Simulacion y edificios": 19 px until nopause 2026-11-21, 17 since its fifth row (5 x 19 would
    end at 365, past the features column's 356, and push the city checkbox onto Volver; 5 x 17 ends at 355); 15 since
    civicstyle 2026-11-21: its sixth row at 17 ends at 362 (city checkbox 425, under Volver), 6 x 15 at 350, inside the
-   features column's 354, so the notes and the city checkbox stay at 358 / 417 */
-#define MT_LEFT_DY 15
+   features column's 354, so the notes and the city checkbox stay at 358 / 417; 14 since lotgrowb 2026-11-24, with the
+   heading gap 20 -> 18: its seventh row at 15 ends at 365 (city checkbox 427, under Volver), 258 + 7 x 14 = 356, so the
+   notes and the city checkbox sit at 360 / 418, the place measured clear of Volver in hwyspeed) */
+#define MT_LEFT_DY 14
 static int mt_build(void *fac, void *win, int es, DWORD col) {
     int n = 0, i, ym = 84, yf = 84;
     n += ho_add_label(fac, win, MT_TITLE, SC3TR(es, "resize.mt_title", "Activar mods y funciones", "Turn mods and features on or off"), 18, 40, 440);
@@ -9280,7 +9283,7 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
         else if (r->env[0] != '+' && r->env[0] != '-') { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += MT_FEAT_DY; }
     }
     ym += 6;   /* the default-off rows (env '+'): left column, under their own heading */
-    n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_simbld", "Simulación y edificios", "Simulation and buildings"), 18, ym, 220); ym += 20;
+    n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_simbld", "Simulación y edificios", "Simulation and buildings"), 18, ym, 220); ym += 18;
     for (i = 0; i < MT_N; i++) {   /* '+' rows (default off), then '-' rows (default on, civmod) */
         const MT_ROW *r = &k_mt_rows[i];
         if (r->dll || r->env[0] != '+') continue;

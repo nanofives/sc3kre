@@ -103,7 +103,7 @@ footer a { color: var(--ui-info-text); }
 <h3>What it does not do</h3>
 <ul>
   <li>New civic buttons. A civic model is a second look for a civic button the game already has (<a href="#civic">Civic buildings</a>), and a new reward joins the stock Rewards list (<a href="#rewards">Rewards</a>).</li>
-  <li>Growing buildings on lots that are not square. A growable, airport or seaport building sits on a 1x1, 2x2, 3x3 or 4x4 lot, as every stock growable does. Landmarks and rewards can have a lot that is not square (<a href="#nonsquare">Lots that are not square</a>).</li>
+  <li>Airport and seaport buildings on lots that are not square: they sit on a 1x1 or 2x2 lot, as the stock ones do. Growables can be 1x2, 2x3 or 3x4 with the mods, and landmarks, rewards and civic looks any size up to 5x5 (<a href="#nonsquare">Lots that are not square</a>).</li>
   <li>Night lights and animation. The stock houses have none either.</li>
   <li>3D formats other than OBJ, the Building Architect's <code>.bld</code> and SimCity 4 buildings. Convert glTF, FBX or anything else to OBJ first (Blender does it).</li>
 </ul>
@@ -221,7 +221,7 @@ footer a { color: var(--ui-info-text); }
     <ul>
       <li><b>Kind</b>: <code>growable</code> for a building of a residential, commercial or industrial zone, <code>airport</code> or <code>seaport</code> for one that grows in those zones (<a href="#ports">Airports and seaports</a>), <code>landmark</code> for one you place from the landmark menu (<a href="#landmarks">Landmarks</a>), <code>civic</code> for a second look of a civic button (<a href="#civic">Civic buildings</a>), <code>reward</code> for a new entry of the Rewards list (<a href="#rewards">Rewards</a>).</li>
       <li><b>Class</b>: residential, commercial or industrial, its density and its wealth (the table above). Airport, seaport and landmark buildings have no class.</li>
-      <li><b>Lot</b>: 1x1 to 4x4. Airport buildings are 1x1 only, seaport buildings 1x1 or 2x2. Landmarks and rewards 1x1 to 5x5, or a lot that is not square such as 2x3, with 1 to 5 cells on each side (<a href="#nonsquare">Lots that are not square</a>).</li>
+      <li><b>Lot</b>: 1x1 to 4x4. Growables also 1x2, 2x3 or 3x4. Airport buildings are 1x1 only, seaport buildings 1x1 or 2x2. Landmarks and rewards 1x1 to 5x5, or a lot that is not square such as 2x3, with 1 to 5 cells on each side (<a href="#nonsquare">Lots that are not square</a>).</li>
       <li><b>Description</b>, for a landmark, civic look or reward: the line under its name in the landmark menu or the Rewards list.</li>
       <li><b>Base</b>, for a civic look only: the civic button it belongs to. It also sets the lot to the stock building's, which you can change.</li>
       <li><b>Population</b> and <b>Year</b>, for a reward only: when it joins the Rewards list.</li>
@@ -311,7 +311,18 @@ footer a { color: var(--ui-info-text); }
 <h3 id="nonsquare">Lots that are not square</h3>
 <p>A landmark, a reward or a civic look can stand on a lot that is not square. Set its <b>Lot</b> to 2x3, 1x4, 5x4 or any other size with 1 to 5 cells on each side: the panel lists them when the selected cards are all landmarks, rewards or civic looks. The first number is the lot along the model's X axis, the second along its Z axis, the axis its front faces.</p>
 <p class="note"><b>Needs the row Non-square buildings on.</b> The game places, moves, saves and bulldozes such a building as it is, but draws it whole only with the mods: the row <b>Non-square buildings</b> on the <b>Turn mods on or off</b> page has to be on. It is on unless you turned it off. With it off the game draws the building as one square over bare ground.</p>
-<p>Growables, airport and seaport buildings stay square. The game lays out the lots of zoned buildings as squares only.</p>
+<h3 id="nonsquaregrow">Growables on lots that are not square</h3>
+<p>A growable can stand on a 1x2, 2x3 or 3x4 lot: a long factory on 2x3 instead of 3x3, a row of shops on 1x2. The panel lists these three when the selected cards are all growables, and suggests one when a model is clearly longer than it is wide.</p>
+<ul>
+  <li><b>Short side first.</b> The first number is the lot along the model's X axis, the second along Z, and Z must be the long side. The game never turns a zoned building, so a lot such as 3x2 is left out. Turn the model 90 degrees with <b>Rotate</b> instead: the suggestion does that for you.</li>
+  <li><b>The sides differ by one cell.</b> 1x3 or 2x4 are left out, because the game would draw a neighbour over one end.</li>
+  <li><b>Stats</b> come from the class's stock building of the long side: a 2x3 shop has the jobs of a 3x3 shop. A class without a building of that size, such as a light residential class without 3x3 houses, cannot have that lot.</li>
+  <li>Farms stay square: the farm layout only places square lots.</li>
+</ul>
+<p class="note"><b>Needs the rows Non-square buildings and Non-square zoned buildings on.</b> The game's zone growth lays out square lots only. With the row <b>Non-square zoned buildings</b> on (it is on unless you turn it off) the mods let the game's own layouts place these lots, and <b>Non-square buildings</b> draws them whole. Square buildings grow exactly as before, with the row on or off.</p>
+<p>Two classes need one more file: light residential high wealth and medium residential low wealth share their building list with layouts that only place squares (estates, row blocks), so the importer gives the generic layout its own copy of that list, with the stock buildings and yours, in the road mod's copy of <code>Apps\Sys\SYS.PAK</code>.</p>
+<p><b>Without the mods</b>, or with your buildings removed, a city saved with them still opens. Each one comes back as a square stock building of its class on its first cells, and the rest of its lot is empty zoned land that grows again.</p>
+<p><b>Our test.</b> A long factory, a chimney factory, a row of shops and a house on 1x2, an office block on 2x3 and villas on 1x2 grew by themselves: 425 in 30 minutes of Sacramento, 241 in 25 minutes of Berlin and 27 in 25 minutes of Madison, drawn whole in the four view rotations, under construction, standing and abandoned. They saved as 1x2 and 2x3, loaded again where they were, and bulldozed cleanly.</p>
 <h3>Where the files go</h3>
 <p>Landmarks go into one plugin, <code>Apps\PlugIn\bldimport\bldimport.pin</code> and <code>bldimport.dat</code>, the way Maxis shipped its own landmark packs. The game loads every plugin in <code>Apps\PlugIn</code> by itself when it starts. They are not written into the road mod's overlay folder.</p>
 <h3>Our test</h3>

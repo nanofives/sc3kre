@@ -79,6 +79,8 @@
  *                                     under that share of the valve range; env SC3SIMRUN_GENTLE=1/0, _GENTLE_SHARE)
  *                                     [hwyspeed] enabled=1 factor_pct=150 threshold=66000 (HWYSPEED block: animated
  *                                     cars on highway and ramp lanes x factor; env SC3SIMRUN_HWYSPEED=1/0, _HWYSPEED_PCT)
+ *                                     [lotgrow] enabled=1 verify=0 (LOTGROW block: generic zone developer rules place
+ *                                     X x Z growables; env SC3SIMRUN_LOTGROW=0 = stock, _VERIFY=1 lockstep check vs stock)
  *                                     [sim] run_under_windows=0 (NOPAUSE block: 1 = Budget, Preferencias and the
  *                                     landmark / Rewards lists do not pause the sim; env SC3SIMRUN_NOPAUSE=1/0)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
@@ -425,6 +427,7 @@ static void lvwrap_ini(const char *path);
 static void abandon_ini(const char *path);
 static void hwyspeed_ini(const char *path);
 static void nopause_ini(const char *path);
+static void lotgrow_ini(const char *path);
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -445,6 +448,7 @@ static void ini_read(void) {
     abandon_ini(path);
     hwyspeed_ini(path);
     nopause_ini(path);
+    lotgrow_ini(path);
 }
 
 /* ============================================================ FREEZE */
@@ -1521,6 +1525,8 @@ __declspec(dllexport) int __cdecl sc3simrun_hwyspeed(int pct) {
     return was;
 }
 
+#include "sc3simrun_lotgrow.c"   /* LOTGROW: non-square zoned buildings (SC3SIMRUN_LOTGROW=0 = stock) */
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -1575,6 +1581,12 @@ static DWORD WINAPI sampler(LPVOID param) {
                            g_gnt_share, g_gnt_share, g_sbx_on ? " (Sandbox is on and wins)" : "");
         else logf("### GENTLE: off (stock negative-demand roll)");
     }
+    if (g_lg_on) {
+        HMODULE rci;
+        while (!(rci = GetModuleHandleA("SIMRCI.DLL"))) Sleep(5);
+        logf("### LOTGROW: on%s, %d of %d rule slots armed (generic zone developer rules read SizeInCellsX and Z)",
+             g_lg_verify ? " + VERIFY (every Apply replayed through the stock body)" : "", lotgrow_arm(rci), LG_NRULES);
+    } else logf("### LOTGROW: off (stock zone developer rules, square lots only)");
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
     g_co_trace = trace;
     if (g_np_on) {

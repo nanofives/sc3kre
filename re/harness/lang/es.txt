@@ -320,6 +320,7 @@ resize.mt_graphs=Gráficas mejoradas
 resize.mt_hwyspeed=Autos rápidos en autopista
 resize.mt_keys=Teclas P y 1-4
 resize.mt_landfill=Vertederos
+resize.mt_lotgrow=Zonas: edificios no cuadrados
 resize.mt_lotrect=Edificios no cuadrados
 resize.mt_mods=Mods
 resize.mt_netmod=Avenidas y autopistas
