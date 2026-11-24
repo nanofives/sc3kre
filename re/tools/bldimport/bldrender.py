@@ -125,9 +125,13 @@ STYLES["stock_sharp"] = dict(STYLES["stock"], zoom4="native")     # stock colour
 # `tone` = (gamma, gain) on the albedo luminance, hue kept: fitted on the 18 JMyers designs (72 zoom-3 frames:
 # structure luminance p10 / p50 / p90 0.098 / 0.203 / 0.449 raw against the stock 0.201 / 0.400 / 0.688; with the
 # tone 0.75 / 1.33 the prediction is 0.23 / 0.40 / 0.73, measured in verify/sc4conv/RESULTS.md). `baked_raw` = none.
+# `tone_toe` (task darktone, 2026-11-24) = (knee, s_lo, s_hi, g_lo, g_hi): on SC4 prop materials only, a dark neutral
+# texel keeps its own luminance: the tone fades in by smoothstep up to luminance `knee`, the guard holds only below
+# saturation s_lo .. s_hi and below a green lead (G - max(R, B)) of g_lo .. g_hi, so leaves keep the tone. The black
+# police-car panels read as white blobs under the tone. Building views: unchanged (verify/darktone/RESULTS.md).
 STYLES["baked"] = dict(STYLES["stock"], light="sun", ambient=1.0, diffuse=0.0, shadow_keep=0.0, sat=1.0,
-                       contrast=1.0, grain=0.0, tone=(0.75, 1.33))
-STYLES["baked_raw"] = dict(STYLES["baked"], tone=None)
+                       contrast=1.0, grain=0.0, tone=(0.75, 1.33), tone_toe=(1.0, 0.08, 0.20, 0.0, 0.02))
+STYLES["baked_raw"] = dict(STYLES["baked"], tone=None, tone_toe=None)
 STYLES["baked_sharp"] = dict(STYLES["baked"], zoom4="native")   # SC4 zoom 5 has 7.0 px/m, SC3 zoom 4 5.66
 STYLES["baked_raw_sharp"] = dict(STYLES["baked_raw"], zoom4="native")   # task bakedsharp: SC4 brightness, zoom 4 native
 DEFAULT_STYLE = "stock"
@@ -174,6 +178,25 @@ def style_of(style=None):
     if name not in STYLES:
         raise RenderError("render style %r: choose one of %s" % (name, ", ".join(sorted(STYLES))))
     return name, STYLES[name]
+
+
+def _tone_toe(toe, a, y, y2):
+    """task darktone: the baked tone brought back toward the texel's own luminance on dark, neutral texels.
+    toe = (knee, s_lo, s_hi[, g_lo, g_hi]). a: albedo (N, 3), y: its luminance, y2: the toned luminance, all float32.
+    Protection = (1 - smoothstep(y / knee)) * the saturation ramp (1 at s <= s_lo, 0 at s >= s_hi) * the green ramp
+    (1 at G - max(R, B) <= g_lo, 0 at >= g_hi); the result is y2 + protection * (y - y2). The JS port (bldweb.js) does the same float32 ops in the same order."""
+    f = np.float32
+    knee, s_lo, s_hi = f(toe[0]), f(toe[1]), f(toe[2])
+    t = np.clip(y / knee, f(0), f(1))
+    w = (t * t) * (f(3) - f(2) * t)
+    mx, mn = a.max(1)[:, None], a.min(1)[:, None]
+    s = (mx - mn) / np.maximum(mx, f(1e-6))
+    nr = np.clip((s_hi - s) / (s_hi - s_lo), f(0), f(1))
+    if len(toe) > 3:
+        g_lo, g_hi = f(toe[3]), f(toe[4])
+        g = a[:, 1:2] - np.maximum(a[:, 0:1], a[:, 2:3])
+        nr = nr * np.clip((g_hi - g) / (g_hi - g_lo), f(0), f(1))
+    return y2 + ((f(1) - w) * nr) * (y - y2)
 
 
 class RenderError(Exception):
@@ -717,6 +740,14 @@ def render_frame(mesh, n, z, r, ss=4, ground="grass", shadows=True, calib=None, 
                 gam, gain = st["tone"]
                 y = (a2 @ np.array([0.299, 0.587, 0.114], dtype=np.float32))[:, None]
                 y2 = np.clip(gain * np.power(np.maximum(y, 0), gam), 0, 1)
+                if st.get("tone_toe"):
+                    # task darktone: props only (sc4p_* materials, SC4 lot props): their dark neutral texels (the
+                    # police cars' black panels, lamp poles) keep their own value; saturated ones (trees) and the
+                    # building views keep the tone fitted on them (verify/darktone/RESULTS.md)
+                    pm = np.array([mm["name"].startswith("sc4p_") for mm in mesh["mats"]], dtype=bool)[mids]
+                    if pm.any():
+                        y2 = y2.copy()
+                        y2[pm] = _tone_toe(st["tone_toe"], a2[pm], y[pm], y2[pm])
                 a2 = np.clip(a2 * (y2 / np.maximum(y, 1e-4)), 0, 1)
             if _pz(st["sat"], z) != 1.0:
                 # vibrance: stock walls and roofs are more saturated, but a colour that is already saturated is

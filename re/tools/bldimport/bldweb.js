@@ -246,8 +246,9 @@ function BLDWEB_LIB() {
   STYLES.stock_sharp = Object.assign({}, STYLES.stock, { zoom4: 'native' });
   // task sc4web: bldrender's task sc4conv styles for art with its light painted in (SC4 BAT renders)
   STYLES.baked = Object.assign({}, STYLES.stock, { light: 'sun', ambient: 1.0, diffuse: 0.0, shadow_keep: 0.0, sat: 1.0,
-    contrast: 1.0, grain: 0.0, tone: [0.75, 1.33] });
-  STYLES.baked_raw = Object.assign({}, STYLES.baked, { tone: null });
+    contrast: 1.0, grain: 0.0, tone: [0.75, 1.33], tone_toe: [1.0, 0.08, 0.20, 0.0, 0.02] });
+  // tone_toe (task darktone): on SC4 prop materials (sc4p_*) a dark neutral texel keeps its own luminance
+  STYLES.baked_raw = Object.assign({}, STYLES.baked, { tone: null, tone_toe: null });
   STYLES.baked_sharp = Object.assign({}, STYLES.baked, { zoom4: 'native' });
   STYLES.baked_raw_sharp = Object.assign({}, STYLES.baked_raw, { zoom4: 'native' });
   // task sc4trees (bldrender): peel until no sample stands on a transparent texel (was 4 layers: the black patches on
@@ -1247,6 +1248,9 @@ function BLDWEB_LIB() {
         const sat = pz(st.sat, z), gr = pz(st.grain, z);
         const satK = fr(sat - 1.0), grK = fr(gr);
         const tone = st.tone && st.tone.length ? [fr(st.tone[0]), fr(st.tone[1])] : null, lo4 = fr(1e-4);
+        // task darktone (bldrender _tone_toe): [knee, s_lo, s_hi, g_lo, g_hi], prop materials only, same float32 order
+        const toe = tone && st.tone_toe && st.tone_toe.length ? st.tone_toe.map(v => fr(v)) : null;
+        const toeMat = toe ? mesh.mats.map(mm => mm.name.startsWith('sc4p_')) : null;
         for (let m = 0; m < M; m++) {
           if (isG[m] || isL[m]) continue;
           const q = sel[m], id = ib[q], b0 = bb[3 * q], b1 = bb[3 * q + 1], b2 = bb[3 * q + 2];
@@ -1262,6 +1266,19 @@ function BLDWEB_LIB() {
           if (tone) {                       // task sc4web (bldrender task sc4conv): luminance tone of pre-lit art, float32
             const y = mm3f(a0, a1, a2, LUMA, one);
             let y2 = fr(tone[1] * powf(y > 0 ? y : 0, tone[0])); y2 = y2 < 0 ? 0 : y2 > 1 ? 1 : y2;
+            if (toe && toeMat[mesh.mat[id]]) {
+              let t = fr(y / toe[0]); t = t < 0 ? 0 : t > 1 ? 1 : t;
+              const w = fr(fr(t * t) * fr(3 - fr(2 * t)));
+              const mx = Math.max(a0, a1, a2), mn = Math.min(a0, a1, a2);
+              const s = fr(fr(mx - mn) / Math.max(mx, fr(1e-6)));
+              let nr = fr(fr(toe[2] - s) / fr(toe[2] - toe[1])); nr = nr < 0 ? 0 : nr > 1 ? 1 : nr;
+              if (toe.length > 3) {
+                const g = fr(a1 - Math.max(a0, a2));
+                let ng = fr(fr(toe[4] - g) / fr(toe[4] - toe[3])); ng = ng < 0 ? 0 : ng > 1 ? 1 : ng;
+                nr = fr(nr * ng);
+              }
+              y2 = fr(y2 + fr(fr(fr(1 - w) * nr) * fr(y - y2)));
+            }
             const ratio = fr(y2 / Math.max(y, lo4));
             const cl = x => x < 0 ? 0 : x > 1 ? 1 : x;
             a0 = cl(fr(a0 * ratio)); a1 = cl(fr(a1 * ratio)); a2 = cl(fr(a2 * ratio));
