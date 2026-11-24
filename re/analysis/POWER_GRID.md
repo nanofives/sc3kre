@@ -24,7 +24,7 @@ Per power source, `sc3_power_distribute_region` `0x10004e57`:
 
 1. **Seed** `0x10004e93` — `sc3_bitraster_set_tile_bit(region, width, x, y)`:
    `idx = (width*y)/32 + x/32`, `bit = 1 << (x & 0x1f)`.
-2. **Grow** `0x10004ec4` — `sc3_bitraster_grow_capped(region, mask, width, 0x258, &y_lo, &y_hi)`.
+2. **Grow** (call at `0x10004e99`, cap pushed at `0x10004e85`; the doc said `0x10004ec4` until 2026-11-23) — `sc3_bitraster_grow_capped(region, mask, width, 0x258, &y_lo, &y_hi)`.
    Loops up to **600** iterations, stopping early when neither pass adds a bit:
    - horizontal `0x1000bce2`: `((next<<0x1e | self)<<1 | self>>1 | self) & mask ^ self` `@0x1000bd22`
    - vertical `0x1000be48`: `(self | rowAbove | rowBelow) & mask ^ self` (stride `width/0x20` dwords)
@@ -39,7 +39,7 @@ Per power source, `sc3_power_distribute_region` `0x10004e57`:
 ### ⭐ The iOS cap of 600 is CONFIRMED on the PC side
 
 `SIM_LAYERS_XREF.md` recorded `Bit1_SelectionGrow` with a cap of 600 from the iOS build as an
-`[iOS-HINT]`. The literal **`0x258` = 600** appears at **`0x10004ee2`** in SIMUTIL. That is a
+`[iOS-HINT]`. The literal **`0x258` = 600** is pushed at **`0x10004e85`** in SIMUTIL (`68 58 02 00 00`; this line said `0x10004ee2` until 2026-11-23). That is a
 genuine cross-RE confirmation.
 
 **Read together with U-011 this gives the calibrated rule for the oracle:** iOS **algorithms and
@@ -90,3 +90,21 @@ The budget spent against demand is derived from the summed plant output and **re
   from `0x10004c1f` or via the primary vtable `PTR_FUN_10020608`.
 - **Layer `vtable+0x3c` (slot 15)** — takes `(x, y, &flag)` and is the per-tile "mark powered"
   emitter; the target function has not been read.
+
+## The cap on maps wider than 256 (round pw1024, 2026-11-23) `[CONFIRMED]`
+
+One iteration of `sc3_bitraster_grow_capped` is a horizontal pass (1 cell left/right) then a vertical pass (1 row
+up/down), so k iterations reach at most k cells from the seed along each axis. Two callers only (E8 scan of SIMUTIL
+`.text`):
+
+| layer | caller | cap | push | call |
+|---|---|---:|---|---|
+| power | `sc3_power_distribute_region` `0x10004e57`, seed = each plant's cell (tick `0x10004c1f`) | 600 | `0x10004e85` | `0x10004e99` |
+| water | `FUN_1000e8c4` (water layer tick), seed = each source with capacity (`+0x1a` != 0) | 500 | `0x1000eab9` | `0x1000eac9` |
+
+The water fill grows inside the pipe mask (`this+0x70`), and the later supply walk (`FUN_1000f163` / `FUN_1000f345`)
+is masked by that capped region, so watered cells never pass it. On a 1024 map a straight line therefore carries
+power 600 cells from its plant and water 500 cells from its tower or pump (measured in game, `verify/pw1024/RESULTS.md`:
+region x 0..602 and x 2..502). Each plant past that point seeds its own 600-cell region, which is the player's
+"new powered zone but no connection". Fix: sc3bigcity GRIDCAP (cap * width / 128 above 256 cells: 4800 / 4000 at 1024). Europolis 1024 needs 1930 water
+iterations, so width / 256 (the stock margin) was too tight.

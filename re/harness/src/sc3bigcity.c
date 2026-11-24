@@ -1471,10 +1471,112 @@ static void patch_ecocursor(HMODULE eco) {
     logf("--- ECOCURSOR: pollution cursor carries full coordinates on grids wider than 256 (SIMECO at 0x%08lX)", (DWORD)eco);
 }
 
+/* ================================================================ GRIDCAP: power and water reach on big maps
+ * Player report 2026-11-23 (round pw1024): on a 1024 map a power line and a pipe from the edge stop carrying power /
+ * water about mid map, and a second plant past that point powers its own patch but never joins the first.
+ * Both coverage layers grow a 1-bit region from each source with SIMUTIL sc3_bitraster_grow_capped 0x1000bbfc
+ * (region, mask, width, cap, &row_lo, &row_hi). One iteration is a horizontal pass (0x1000bce2: 1 cell left/right)
+ * then a vertical pass (0x1000be48: 1 row up/down), so after k iterations the region reaches at most k cells from
+ * the source along x and along y. The loop stops when nothing grows or after `cap` iterations:
+ *   power  sc3_power_distribute_region 0x10004e57: push 0x258 (600) at 0x10004e85, call at 0x10004e99
+ *   water  FUN_1000e8c4 (water layer tick):         push 0x1f4 (500) at 0x1000eab9, call at 0x1000eac9
+ * [CONFIRMED @ SIMUTIL 0x10004e85, 0x1000eab9; these are the only two callers of 0x1000bbfc]
+ * A straight line from a plant therefore ends 600 cells away and a pipe 500 cells from its pump: past the middle
+ * of a 1024 map, unreachable on the shipped sizes (<= 256). Fix: both calls go through grow_scaled(), which passes
+ * the shipped cap times width/128 when the map is wider than 256 (512: 2400/2000, 1024: 4800/4000), and the shipped
+ * cap otherwise, so stock sizes run exactly as before. width/256 alone keeps the stock margin and was not enough:
+ * Europolis 1024 (a 4x4 clone of Europolis) needs 1930 water iterations. The loop still ends as soon as nothing
+ * grows, so the extra iterations are only spent where the network really continues (Europolis 1024: about 0.1 ms
+ * per iteration, 90-150 ms per fill, verify/pw1024/RESULTS.md).
+ * SC3BIGCITY_GRIDCAP=0 leaves the code alone, =2 installs the wrapper with the shipped caps (logging only). */
+static int g_gridcap = 1;
+typedef int (__cdecl *GROW_CAPPED)(DWORD region, DWORD mask, int width, int cap, int *lo, int *hi);
+static GROW_CAPPED g_grow_orig;
+static volatile LONG g_gc_calls[2], g_gc_hits[2], g_gc_over[2];
+static double g_gc_ms[2];
+
+/* bounding box and bit count of the grown region, rows lo..hi-1 (for the log only) */
+static void gc_extent(const DWORD *r, int w, int lo, int hi, int *x0, int *x1, long *bits) {
+    int y, d, words = w >> 5;
+    *x0 = w; *x1 = -1; *bits = 0;
+    if (lo < 0) lo = 0;
+    if (hi > w) hi = w;
+    for (y = lo; y < hi; y++) for (d = 0; d < words; d++) {
+        DWORD v = r[y * words + d];
+        int b;
+        if (!v) continue;
+        for (b = 0; b < 32; b++) if (v & (1u << b)) {
+            int x = d * 32 + b;
+            if (x < *x0) *x0 = x;
+            if (x > *x1) *x1 = x;
+            (*bits)++;
+        }
+    }
+}
+
+static int grow_scaled(int site, DWORD region, DWORD mask, int width, int cap, int *lo, int *hi) {
+    static const char *nm[2] = { "power", "water" };
+    int use = cap, n, s_lo = *lo, x0, x1;
+    long bits, calls, k;
+    LARGE_INTEGER t0, t1;
+    double ms;
+    if (g_gridcap == 1 && width > 256) use = (int)((__int64)cap * width / 128);
+    QueryPerformanceCounter(&t0);
+    n = g_grow_orig(region, mask, width, use, lo, hi);
+    QueryPerformanceCounter(&t1);
+    ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)g_freq.QuadPart;
+    g_gc_ms[site] += ms;
+    calls = InterlockedIncrement(&g_gc_calls[site]);
+    if (n >= use) {
+        k = InterlockedIncrement(&g_gc_hits[site]);
+        if (k <= 8 || (k & 511) == 0) {
+            gc_extent((const DWORD *)region, width, 0, width, &x0, &x1, &bits);
+            logf("GRIDCAP %s: cap reached (%d iterations, width %d, seed row %d), %.2f ms: region x %d..%d rows %d..%d, "
+                 "%ld cells [hit %ld of %ld calls]", nm[site], n, width, s_lo, ms, x0, x1, *lo, *hi - 1, bits, k, calls);
+        }
+    } else if (n > cap) {
+        k = InterlockedIncrement(&g_gc_over[site]);
+        if (k <= 8 || (k & 511) == 0) {
+            gc_extent((const DWORD *)region, width, 0, width, &x0, &x1, &bits);
+            logf("GRIDCAP %s: %d iterations (shipped cap %d, now %d), %.2f ms: region x %d..%d rows %d..%d, %ld cells "
+                 "[past the shipped cap %ld of %ld calls]", nm[site], n, cap, use, ms, x0, x1, *lo, *hi - 1, bits, k, calls);
+        }
+    }
+    if ((calls & 63) == 0)
+        logf("GRIDCAP %s: %ld calls, %.1f ms in the fill, %ld at the cap, %ld past the shipped cap",
+             nm[site], calls, g_gc_ms[site], g_gc_hits[site], g_gc_over[site]);
+    return n;
+}
+static int __cdecl grow_power(DWORD r, DWORD m, int w, int cap, int *lo, int *hi) { return grow_scaled(0, r, m, w, cap, lo, hi); }
+static int __cdecl grow_water(DWORD r, DWORD m, int w, int cap, int *lo, int *hi) { return grow_scaled(1, r, m, w, cap, lo, hi); }
+
+static void patch_gridcap(HMODULE util) {
+    static const struct { DWORD push, call; BYTE imm[5]; BYTE rel[5]; void *to; } s[2] = {
+        { 0x4e85, 0x4e99, {0x68, 0x58, 0x02, 0x00, 0x00}, {0xe8, 0x5e, 0x6d, 0x00, 0x00}, (void *)grow_power },
+        { 0xeab9, 0xeac9, {0x68, 0xf4, 0x01, 0x00, 0x00}, {0xe8, 0x2e, 0xd1, 0xff, 0xff}, (void *)grow_water },
+    };
+    BYTE *b = (BYTE *)util, c[5];
+    int i;
+    if (!g_gridcap) { logf("--- GRIDCAP: disabled (SC3BIGCITY_GRIDCAP=0)"); return; }
+    for (i = 0; i < 2; i++)
+        if (memcmp(b + s[i].push, s[i].imm, 5) || memcmp(b + s[i].call, s[i].rel, 5)) {
+            logf("--- GRIDCAP: SIMUTIL+0x%lX/+0x%lX differ from shipped - not patched", s[i].push, s[i].call);
+            return;
+        }
+    g_grow_orig = (GROW_CAPPED)(void *)(b + 0xbbfc);
+    for (i = 0; i < 2; i++) {
+        c[0] = 0xE8;
+        *(LONG *)(c + 1) = (LONG)((DWORD)s[i].to - (DWORD)(b + s[i].call + 5));
+        if (!write_code(b + s[i].call, c, 5)) { logf("--- GRIDCAP: write failed at +0x%lX", s[i].call); return; }
+    }
+    logf("--- GRIDCAP: power/water fill caps (600/500) scale with width/128 above 256 cells%s (SIMUTIL at 0x%08lX)",
+         g_gridcap == 2 ? " - LOG ONLY, shipped caps kept (SC3BIGCITY_GRIDCAP=2)" : "", (DWORD)util);
+}
+
 /* ================================================================ boot */
 
 static DWORD WINAPI watcher(LPVOID param) {
-    HMODULE gz = NULL, dirtm = NULL, initm = NULL, uim = NULL, sprm = NULL, rzm = NULL, rcim = NULL, dstrm = NULL, ecom = NULL;
+    HMODULE gz = NULL, dirtm = NULL, initm = NULL, uim = NULL, sprm = NULL, rzm = NULL, rcim = NULL, dstrm = NULL, ecom = NULL, utilm = NULL;
     int dirt = 0, dims = 0, ui = 0, anchors = 0, ms = 0;
     (void)param;
     {   char v[16];
@@ -1482,11 +1584,13 @@ static DWORD WINAPI watcher(LPVOID param) {
         if (GetEnvironmentVariableA("SC3BIGCITY_TRAVERSE", v, sizeof(v))) g_traverse = atoi(v);
         if (GetEnvironmentVariableA("SC3BIGCITY_DSTR256", v, sizeof(v))) g_dstr256 = atoi(v);
         if (GetEnvironmentVariableA("SC3BIGCITY_SPRJOURNAL", v, sizeof(v))) g_sprjournal = atoi(v);
-        if (GetEnvironmentVariableA("SC3BIGCITY_ECOCURSOR", v, sizeof(v))) g_ecocursor = atoi(v); }
+        if (GetEnvironmentVariableA("SC3BIGCITY_ECOCURSOR", v, sizeof(v))) g_ecocursor = atoi(v);
+        if (GetEnvironmentVariableA("SC3BIGCITY_GRIDCAP", v, sizeof(v))) g_gridcap = atoi(v); }
 
     /* Patch each module the moment it maps. Windowed mode must land before GZGraphicD's Init
        (~250 ms); SIMDIRT's buffer singleton is created lazily at first terrain use, much later. */
-    while (ms < 300000 && !(gz && dirtm && uim && sprm && (initm || !g_fix_vertical))) {
+    while (ms < 300000 && !(gz && dirtm && uim && sprm && utilm && (initm || !g_fix_vertical))) {
+        if (!utilm && (utilm = GetModuleHandleA("SIMUTIL.DLL")) != NULL) patch_gridcap(utilm);
         if (!rzm && (rzm = GetModuleHandleA("GZResourceD.dll")) != NULL) patch_qfs24(rzm);
         if (!rcim && (rcim = GetModuleHandleA("SIMRCI.DLL")) != NULL) patch_traverse(rcim);
         if (!dstrm && (dstrm = GetModuleHandleA("SIMDSTR.DLL")) != NULL) patch_dstr256(dstrm);
