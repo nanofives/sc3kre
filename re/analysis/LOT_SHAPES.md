@@ -27,7 +27,7 @@ VAs (image base 0x10000000). "X" and "Z" are the exemplar's prop 0x66 values 1 a
   bulldoze (until the city is loaded again).
 - **The save writes X x X.** SIMGEOM `0x1001cd38` passes SizeInCellsX twice to SetSizeInCells, so a 2x3 is saved with a
   2x2 footprint field. The game rebuilds the 2x3 from the exemplar on load (measured), so only offline readers see 2x2.
-- **Growables: no.** The zone developer (SIMRCI `0x10027699`) reads only SizeInCellsX and lays out n x n blocks.
+- **Growables: not in stock.** The zone developer (SIMRCI `0x10027699`) reads only SizeInCellsX and lays out n x n blocks. Section 11 (lotgrow): all 16 rule bodies do, the rest of the zone path is already rectangular, so it is a rule-body patch.
 - **So:** a data-only 2x3 landmark or reward works but always shows a cut end. Correct drawing needs a SIMSPR code patch
   (section 5). X must be the short side (X < Z); X > Z must never be written.
 
@@ -138,7 +138,7 @@ this for three rewards (Theme Park, Military Base, Generic University: four 2x2 
 `FUN_1000a2a9`, CIVIC_REWARD.md 1). Needs a multi-piece placement in a mod; each piece then bulldozes, moves and counts
 on its own, and the one-per-city landmark rule applies per piece key.
 
-### 5.4 Growables
+### 5.4 Growables (superseded by section 11)
 
 Not without rewriting the developer: `0x10027699` sizes and fills lots from SizeInCellsX only, so a 2x3 growable would
 be laid out as 2x2 while its occupant claims 2x3. Static only, not run.
@@ -255,3 +255,131 @@ Code: `re/tools/bldimport/bldimport.py`, `bldrender.py`, `bldweb.js` (the page's
 Civic looks take [w, d] too (CIVIC_REWARD.md 8): kind civic is in RECT_KINDS, stats from the button's own exemplar.
 One extra rule for them: X <= Z, because a saved look whose key is gone comes back as a square exemplar of its type with
 side = the saved X (SIMGEOM `0x100038a8` -> SIMINIT `0x1000cb3d`). A w > d civic lot is installed turned a quarter.
+
+## 11. Growables: can zone growth place a w x d lot? (lotgrow, round 2026-11-24c)
+
+Static reading only (SIMRCI, SIMINIT, SIMGEOM exports; rule vtables read from `original/modules/SIMRCI.DLL`). Nothing
+built, nothing run. Replaces section 5.4, which named one developer body: there are 16 rule bodies, and 11.2 lists which
+of them assume a square. DLL addresses are Ghidra VAs.
+
+**Verdict: feasible with code, in one layer.** The zone layer already works in rectangles: the buildable block it hands
+to a rule is W x D with W and D grown independently, PlaceBuilding claims and clears X x Z, abandonment and
+re-occupation re-place the same attrib at its origin, and the per-tile evaluator finds a building by its origin cell. The
+square lives only in the **rule Apply bodies**, which read SizeInCellsX (attrib vt+0x40) and use it for both axes. No
+rule body calls SizeInCellsZ (vt+0x44). Drawing is LOTRECT (section 8), the save field is LOTRECT's filler patch.
+
+### 11.1 The developer path, end to end
+
+| step | what | where |
+|---|---|---|
+| 1 | Zone tick: W*H/30 tiles per sim day, each to its zone's developer (res / com / ind evaluator) | SIMRCI `0x1003372a` (ZONE_REDEVELOPMENT 1) |
+| 2 | Evaluator: building at the tile? `SurfaceOccupantManager vt+0x7c`, then occupant vt+0xbc (origin x, z). **A tile that is not the origin returns 0**, so a building of any shape is evaluated once per pass, at its origin | res `0x10028f12` (com `0x1000fd53`, ind `0x10017fc0`) [CONFIRMED @ 0x10028f12] |
+| 3 | Empty tile or a redevelopment roll: class pickers, then develop | `0x100295dc` / `0x1002971a` / `0x100298af`, develop `0x10029666` |
+| 4 | Develop: ZoneLayer vt+0x74 FindBuildableRect(rect, x, z, dist, minLV, oldClass, 0), then up to `min(4, n)` rules at random without replacement, rule vt+0x1c Apply(rect, newClass, demand - filled, max) until one returns true | `0x10029666`, `0x10029962` [CONFIRMED] |
+| 5 | FindBuildableRect: rect = the seed cell, then one column on -x or +x (`0x10033525`) and one row on -z or +z (`0x10033611`) in turn, each only while every cell of the new column or row passes the tile test. **W and D grow independently: the block is a rectangle** | `0x100332e4` [CONFIRMED] |
+| 6 | Tile test: zone type == the seed's, a second layer byte (`this+600` vt+0x48) == the seed's, powered (`+0x260`), land value >= minLV (`+0x264`), IsNearTransport. An occupied cell passes when its occupant is a building without flag 0x200 that is abandoned, or of type == oldClass, or has attrib flag 0x100 (filler) | `0x10033368` [CONFIRMED] |
+| 7 | Rule Apply: class -> the first family record with that LandUse, crop the block to the rule's max side, then place members on a local occupancy grid (10 x 10 bytes, stride 10) | 16 bodies, table below |
+| 8 | PlaceBuilding(attrib, cell, state, rotation in degrees, check): footprint = **X (vt+0x40) by Z (vt+0x44)**. Check: zone type equal over x0..x0+X, z0..z0+Z clamped to the map. Every footprint cell must pass `+0x244 vt+0x6c`; a building occupant in it is removed (vt+0x48) unless flag 0x800, any other occupant refuses. Then the occupant is created from the key, positioned (vt+0xf0), rotated (vt+0x108, degrees * 0xffff / 360), given its state (vt+0x50) and inserted | ZoneLayer `0x10032dfc` (slot +0x68), key form `0x1003306d` (+0x64) [CONFIRMED] |
+| 9 | Abandon, re-occupy, construction done: the same key re-placed at the origin with the occupant's own rotation (vt+0xb0) and the new state | `0x10029a38` (ind copy `0x100191fe`) [CONFIRMED] |
+
+Merging lots is steps 5 and 6: the rect grows over same-class, abandoned and filler neighbours, and step 8 removes every
+old building a new footprint touches. Redevelopment and merging need nothing shape-specific beyond step 7.
+
+Rule CLSID -> Apply body (factory in `sc3_rci_director_ctor` `0x10036382`, slot 0x1c of the ctor's second vtable, read
+from the PE), families from `SC3ZoneLayer.ini [ZoneDeveloperRules]`, LandUse from `BUILDFAM.IXF`:
+
+| rule | Apply (vtable +0x1c) | layout | families (LandUse) |
+|---|---|---|---|
+| 0xa22653c0 | `0x10026b01` (`0x1004ccb0`) | block fill | 11 (3100), 4 (3300), 31 (3500, dev 1), 10 (3500, dev 2/3) |
+| 0x822c9d13 | `0x10020762` (`0x1004c8dc`) | block fill | 13 (4700), 14 (4500), 15 (4300) |
+| 0x422b55f2 | `0x10014794` (`0x1004c3e8`) | block fill | 5 (8100), 20 (8700) |
+| 0x822c9d24 | `0x100152a2` (`0x1004c428`) | block fill | 6 (8300), 19 (8900) |
+| 0xc22c9d34 | `0x10013c66` (`0x1004c3a8`) | block fill | 18 (8500), 21 (9100) |
+| 0x822c9d62 | `0x1000c3eb` (`0x1004c10c`) | block fill | 22 (6700), 24 (6300) |
+| 0x222c9d00 | `0x10027699` (`0x1004ccf0`) | corners + strip + fill | 12 (3900), 16 (3700), 17 (4100) |
+| 0x622c9d42 | `0x1000dd1a` (`0x1004c18c`) | corners + strip + fill | 8 (5700), 23 (6100) |
+| 0x422c9d52 | `0x1000cf87` (`0x1004c14c`) | com block | 7 (5100), 9 (5500) |
+| 0x61f44687 | `0x1002a1af` (`0x1004cd6c`) | fixed: row houses | 1 (3900) |
+| 0xe22f4a83 | `0x10011721` (`0x1004c328`) | fixed: large lot | 10 (3500) |
+| 0x630ea608 | `0x10012661` (`0x1004c368`) | fixed: L of three copies (`0x10012715`, `0x10012ab3`, `0x1001305a`) | 16 (3700), 28 (3900), 29 (4300), 30 (4500) |
+| 0xa2c1eda3 | `0x100015ab` (`0x1004b17c`) | fixed: farm | 25 (9300) |
+| 0x2207d9ee, 0x81ffc3ce, 0xc2d3fd7e, 0xe2d3fd92 | `0x100032d1`, `0x1002b04c`, `0x1002d27f`, `0x1002c12a` | airport, seaport (dev 14, 15) | 2, 3, 26, 27 |
+
+The six "block fill" bodies are one algorithm. The five 785-byte ones are the same code with their own tunables (their
+decompilations hash equal once DAT names are blanked). `0x10026b01` (763 bytes) is the same without the per-cell
+IsNearTransport test. Block tunables (SC3Tune `[ZoneDeveloperRules]`, read for 0x222c9d00 by `0x1002713c`): min side
+(both axes), max side (both axes, capped at 10), demand threshold %, pick %.
+
+### 11.2 Every place a square is assumed
+
+| site | what | square? |
+|---|---|---|
+| block fill x6 (11.1) | one vt+0x40 = n. Fits if `(n-1) + dx < W` and `(n-1) + dz < D`, grid fill n rows of n bytes, only the anchor cell is tested free (`0x10020762`, `0x10026b01`) | **yes** (n on both axes) |
+| corners + strip + fill (`0x10027699`, `0x1000dd1a`) | a corner lot at each block corner whose two edges are fully road-adjacent (ZoneLayer vt+0x70 count == edge length), offset by n on both axes, a 1-row strip of filler beside it, then the block fill | **yes** |
+| com block `0x1000cf87` | `n <= W && n <= D`, then `(n-1)+dx < W`, `(n-1)+dz < D` | **yes** |
+| row houses `0x1002a1af` | block even and >= 6 per side, capped at 8; 2-cell steps along the edges, 1-cell steps inside; never reads a size | **yes, hard-coded** |
+| large lot `0x10011721` | block 4..6 per side; one n x n centre building at a random inner cell; 1x1 corner and edge pieces sorted by attrib flags (`0x10011078`); an empty side reuses the opposite side's piece turned 180 degrees (`0x100114be` sets the flag, `0x100133ac` passes 0xb4) | **yes** |
+| L layouts `0x10012715`, `0x10012ab3`, `0x1001305a` | 2n (3n, 1n) deep blocks of three copies of one n x n member plus fillers | **yes** |
+| farm `0x100015ab` | n x n farmhouse, then 1x1 field pieces at rotation 0 or 90 degrees (`rand(100) > 50`, constant 0x5a) | **yes** |
+| family list split `0x100274bb` | corner list = flag 0x100 clear and X >= 3 | X only (tuning) |
+| evaluator divisor (`0x10028f12`) | no-service, negative-demand, construction and density rolls scaled by x = vt+0x40 (ZONE_REDEVELOPMENT 5.5) | X only (tuning) |
+| PlaceBuilding `0x10032dfc`, re-place `0x10029a38` | X and Z | no |
+| FindBuildableRect `0x100332e4` | W and D | no |
+| occupant grid, bounds, bulldoze, Mover (section 1) | X and Z | no |
+| sprite insert and draw (section 1) | X only | yes, fixed by LOTRECT (section 8) |
+| save filler (9 copies) | X twice | yes, fixed by LOTRECT (8.2) |
+| load, key present (SIMGEOM `0x10002cc2`) | size from the exemplar | no |
+| load, key gone: stand-in | SIMINIT `0x1000c60c` indexes the attrib cache by (type, (X, Z)) for 25 parent types (3000 .. 15421) with only the keys (1,1) .. (5,5) created, so a non-square entry is never indexed. `0x1000cb3d` asks for (saved type, (saved X, saved X)) | **yes**: a missing w x d growable comes back as a random stock w x w of its type |
+| BAT replacement list (SIMINIT `0x100053be`, SIMUI `0x1001bb56`) | filtered by X | yes (keep non-square ids out of `[ReplaceableBuildings]`) |
+| loading placeholder (SIMSPR record `+0xa` indexes `this+0x48c`) | drawn while a sprite is not prepared at a zoom, sized by X | yes, briefly, as for LOTRECT landmarks today |
+| construction (state 4) and abandoned (state 2) art | which sprite a growable shows in these states was not read | `[UNCERTAIN]`: needs the building occupant's sprite choice per state, or one look at a w x d growable under construction |
+
+Rotation: every block, corner and com placement passes rotation 0 (`..., 4, 0, 1` at each PlaceBuilding call). The
+exceptions are the large-lot 180-degree fallback and the farm fields' 0 / 90 degrees above. The footprint getters
+ignore rotation (section 1), so a 2x3 and a 3x2 are two exemplars, not one building turned. A 180-degree turn keeps a
+rectangle on the same cells and with LOTRECT draws as view slot r + 2 (derived, not run).
+
+### 11.3 What a w x d growable needs
+
+1. **Rule bodies (the one real change).** Replace the rule-interface vtable slot 0x1c (one `.rdata` pointer per rule)
+   with a C copy that reads X and Z: fits if `(X-1)+dx < W` and `(Z-1)+dz < D`, fills X rows of Z bytes, and when
+   X != Z refuses an anchor whose X x Z grid is not all free (stock tests the anchor only, and PlaceBuilding then
+   removes any building the new one overlaps). Square members must take exactly the stock path and the same
+   `cRZRandom::RandomUint32Uniform` calls on the rule's `this+0x18`, so square-only cities grow as before.
+   - block fill: 1 C body, 6 slots (`0x1004ccb0`, `0x1004c8dc`, `0x1004c3e8`, `0x1004c428`, `0x1004c3a8`,
+     `0x1004c10c`, each +0x1c), a flag for the IsNearTransport test (5 of the 6).
+   - corners + strip + fill: 1 C body, 2 slots (`0x1004ccf0`, `0x1004c18c` +0x1c). Corner offsets: x by X, z by Z.
+   - com block: 1 C body, 1 slot (`0x1004c14c` +0x1c).
+   - The fixed layouts stay stock: non-square ids never go in families 1, 10, 16, 25, 28, 29, 30. Classes 3500 and
+     3700 reach a generic rule only through families 10 and 16, which a fixed rule shares, so they need a copy family
+     (instance 32+) and an edited `[ZoneDeveloperRules]` row pointing the generic rule at it (data, SYS.PAK).
+2. **Orientation: X < Z only.** Growables are placed at rotation 0 and the footprint does not turn, so the long side
+   always runs along z. A 3x2 twin (X > Z) would, on a load without the package, come back as a 3x3 stand-in one row
+   over its neighbour (11.2, stand-in). X < Z comes back as an X x X stand-in on part of the lot and the rest regrows.
+   Same rule as civic looks (section 10). Allowing both orientations would need the stand-in path patched, which does
+   not help a player who removed the mods.
+3. **|X - Z| = 1 only** (1x2, 2x3, 3x4, 4x5). Growables stand packed against neighbours on all sides, and LOTRECT's draw
+   order is exact only for |X - Z| = 1 (8.3).
+4. **LOTRECT on** (sc3perf `lot_rect`) for drawing and for a save field that records Z. Without it the lot draws cut
+   (section 2) and the save field says X x X. The game still rebuilds X x Z from the exemplar on load.
+5. **Data:** exemplar prop 0x66 = (X, height, Z) with the stats of the size-Z base, 20 frames for the X x Z diamond with
+   LOTRECT anchors (8.4, bldimport writes them for landmarks today), a family line (netpack `growables`), attrib flags
+   `+0xbc` without layout-role bits (0x1..0x800 sort pieces in `0x10011078`, 0x100 marks filler in `0x100274bb`), not
+   in `[ReplaceableBuildings]`.
+6. **Without the mods.** Save opened in stock with the package installed: the occupant is X x Z, drawn cut (section 2).
+   Package removed: an X x X stand-in of the same type (11.2), or nothing when no stock X x X of that type exists.
+   `[static: neither load was run for a growable]`
+
+### 11.4 Size of the change and a smaller first step
+
+- **Full (every generic rule, R, C and I):** 3 C bodies (about 120, 250 and 150 lines, from 785, 1862 and 1266 byte
+  originals), 9 vtable-slot writes in SIMRCI `.rdata`, one switch, a byte check of each slot's old pointer. Risk:
+  medium. The code runs on every develop call of every zone, so a slip stops or skews growth city-wide, and the RNG
+  order must match stock for square members. Gate: same save, switch off and on, no non-square members installed,
+  occupant layers identical after N game days. Home: sc3simrun, which already patches SIMRCI (CHURN, SANDBOX).
+- **First step (code):** rule 0xa22653c0 only, block fill `0x10026b01`, one slot (`0x1004ccb0` +0x1c), 1x2 and 2x3
+  members in families 11 (3100) and 4 (3300), which no other rule uses. Low-density residential, one C body of about
+  120 lines. The data side is what the importer already writes for landmarks, plus growable kinds accepting [w, d]
+  with w < d and |w - d| = 1.
+- **No-code alternative (available today):** the model on the smallest square lot that holds it, the rest of the lot
+  dressed (objprops stream). Works in every rule and in stock, costs density.
