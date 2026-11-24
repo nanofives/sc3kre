@@ -380,6 +380,11 @@
         "offset": {"type": "integer", "minimum": 65536, "description": "New occupant id = base id + offset. 400000 (e523f3fb) and 1500000 (6523f3d5) follow the sets' own frame-table numbering and are free."},
         "weight": {"type": "integer", "minimum": 1, "default": 1, "description": "Multiplier on each copied member's stock weight. 1 for every set = each style a third of the time for buildings both sets re-skin."},
         "families": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Only these BUILDFAM families (default: every family)."},
+        "lot_colour": {
+          "type": "string",
+          "enum": ["lawn", "lawn_soil"],
+          "description": "Task stylepal (2026-11-24): recolour the grown copies' lot ground per building, at build time, toward the host style's art of the same id (netpack_lotcolour.py). lawn_soil (European / Asian entries): host = the North American art, lawn shifted to its lawn colour and garden soil turned into lawn where the host has less of it. lawn (00000000 entry): host = the other sets' art, lawn shifted only; the North American copies then get their own frame tables and pixels. Buildings and civic copies are not recoloured."
+        },
         "civic": {"type": "boolean", "default": false, "description": "Task civicstyle: also copy the set exemplars of the stock civic buildings and parks a civic button builds (police, fire, school, parks, marina and so on), verbatim at id + offset with their frame tables and pixels and NO family line, so nothing grows them. sc3resize CIVSTYLE lists them in the civic list window. With set 00000000: the stock exemplar of every civic building another civic entry re-skins (the North American look for a city whose own set re-skins it)."}
       }
     },

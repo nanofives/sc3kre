@@ -46,6 +46,14 @@ Untick "Civic buildings: game styles" on the Turn mods on/off page (`SC3RESIZE_C
 without the mod again. Placed looks stay. A city with placed looks loads without the mods: each one comes back as
 the game's own building of the same kind.
 
+## Lawns that match the city (1.3.0)
+
+A European or Asian house in a North American city used to bring its own dark, dull lawn and vegetable plots, so a
+street of them read as another neighbourhood. The copies keep their buildings, but their lawn is now recoloured to
+the lawn of the same building in the North American style, and most garden plots become lawn where the North
+American version has none. The North American copies (grown in a European or Asian city) get the darker European
+and Asian lawn the same way. Stock buildings and the game's own styles are not changed.
+
 ## Getting the even mix
 
 Each city remembers its own style. Many of the shipped cities (Berlin, London, Moscow and others) are saved with the

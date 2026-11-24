@@ -41,10 +41,18 @@ the civic list window. The set exemplar keeps the base's type id (prop 0x65) and
 the height differs), checked here for every copy, so the copy is counted, covered and priced as its base
 (CIVIC_REWARD.md 1.1). The "00000000" entry with "civic": true adds the stock exemplar of every civic base another
 civic entry re-skins, so a city whose own set re-skins it can still place the North American look.
+
+Lot colours (task stylepal 2026-11-24, "lot_colour" on an entry, netpack_lotcolour.py): the grown copies' lot ground
+(lawn, garden soil) recoloured per building toward the host style's art of the same id, at build time. "lawn_soil" on
+a European / Asian entry (host = the North American art), "lawn" on the "00000000" entry (host = the other sets' art;
+the North American copies then get their own frame tables and pixels, group NA_PIX_GROUP, so stock art never changes).
+Civic copies are not recoloured.
 """
 import os
 import re
 import struct
+
+import netpack_lotcolour as LC                     # task stylepal: the copies' lot ground follows the host style
 
 BLD_TYPE, BLD_GROUP = 0x207EDC0E, 0x57E
 CS_TYPES = (0x6300, 0x6301)                       # frame tables ("BIN\r", 15-byte frame entries from +0x18)
@@ -171,6 +179,9 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
         if set_id in seen_sets:
             raise StyleError("%s: set listed twice" % where)
         seen_sets.add(set_id)
+        lc = s.get("lot_colour")
+        if lc is not None and lc not in LC.MODES:
+            raise StyleError("%s: lot_colour must be one of %s" % (where, ", ".join(LC.MODES)))
         if set_id == 0:                            # task stylepick: North American copies, built after the sets
             base_spec = (n, s, where)
             continue
@@ -249,7 +260,8 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
         out.append({"set": set_id, "offset": offset, "weight": weight, "where": where, "_pack": pname,
                     "exemplars": exemplars, "tables": [(k[1], k[2], k[0], p) for k, p in sorted(tables.items())],
                     "pix_group": pix_group, "pixels": pix, "lines": lines,
-                    "families": sorted({ln["family"] for ln in lines}), "civic": civ})
+                    "families": sorted({ln["family"] for ln in lines}), "civic": civ,
+                    "_lot": {"mode": lc, "idx": idx, "set_bld": set_bld, "members": sorted(members)}})
     if base_spec:
         n, s, where = base_spec
         offset, weight = s["offset"], s.get("weight", 1)
@@ -259,4 +271,131 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
             raise StyleError("%s: weight must be a positive integer (0 drops the line, SIMGEOM 0x10001250)" % where)
         out.append(_base_entry(stock, fams, stock_buildings, s, where, 0, offset, weight, reskinned, pname,
                                sorted(civic_skinned) if s.get("civic") else ()))
+        out[-1]["_lot"] = {"mode": s.get("lot_colour"), "members": sorted(reskinned)}
+    if any(e["_lot"]["mode"] for e in out):
+        _lot_colour(np, stock, stock_buildings, out)
+    for e in out:
+        e.pop("_lot", None)
     return out
+
+
+class _StockArt:
+    """stock frame tables (CSATTRIB*.IXF) and pixel + anchor records (Res\\Sprites\\*.DAT), first container in name
+    order wins, read once."""
+
+    def __init__(self, stock):
+        self.tables, self.pix, self.groups = {}, {}, set()
+        sp = "Apps/Res/Sprites"
+        for n in stock.listdir(sp):
+            low = n.lower()
+            if not (low.endswith(".dat") or (low.startswith("csattrib") and low.endswith(".ixf"))):
+                continue
+            try:
+                recs = stock.records(sp + "/" + n)
+            except Exception:                      # not a DBPF container
+                continue
+            raw = {}
+            for g, i, t, p in recs:
+                self.groups.add(g)
+                if t in CS_TYPES:
+                    self.tables.setdefault((t, g, i), p)
+                elif t in PIX_TYPES:
+                    raw.setdefault((g, i), {}).setdefault(t, p)
+            for k, d in raw.items():
+                if 0 in d and 1 in d:
+                    self.pix.setdefault(k, (d[0], d[1]))
+
+
+def _set_pix(idx):
+    return {(g, i): (idx[(0, g, i)], idx[(1, g, i)]) for (t, g, i) in idx if t == 0 and (1, g, i) in idx}
+
+
+def _lot_n(np, ex):
+    lot = _u32s(ex, 0x66, np.tkb1_props)
+    if not lot or len(lot) != 3 or lot[0] != lot[2] or lot[0] < 1:
+        return None
+    return lot[0]
+
+
+def _lot_colour(np, stock, stock_buildings, out):
+    """task stylepal: recolour the grown copies' lot ground per building (netpack_lotcolour.py). Fills e["lot_colour"]."""
+    art = _StockArt(stock)
+    for g in (LC.NA_CS_GROUP, LC.NA_PIX_GROUP):
+        if g in art.groups:
+            raise StyleError("lot_colour: group 0x%08X is already used by a stock sprite container" % g)
+    sets = [e for e in out if e["set"] != 0]
+    spix = {e["set"]: _set_pix(e["_lot"]["idx"]) for e in sets}
+
+    def stock_frames(bid):
+        k = np.tkb1_key(stock_buildings[bid][1], 0x67)
+        tab = art.tables.get(tuple(k)) if k else None
+        return k, tab, (LC.zoom3_frames(tab, art.pix) if tab else None)
+
+    def set_frames(e, bid):
+        k = np.tkb1_key(e["_lot"]["set_bld"][bid], 0x67)
+        tab = e["_lot"]["idx"][(k[0], k[1], k[2])]
+        return tab, LC.zoom3_frames(tab, spix[e["set"]])
+
+    for e in out:
+        mode = e["_lot"]["mode"]
+        rep = {"mode": mode, "buildings": 0, "records": 0, "unchanged": 0, "skipped": []}
+        e["lot_colour"] = rep
+        if not mode:
+            continue
+        if e["set"] != 0:                          # European / Asian copies: host = the stock art of the same id
+            owner = {}
+            for bid in e["_lot"]["members"]:
+                n = _lot_n(np, stock_buildings[bid][1])
+                host = stock_frames(bid)[2]
+                tab, mine = set_frames(e, bid)
+                if n is None or host is None or mine is None:
+                    rep["skipped"].append(bid)
+                    continue
+                p = LC.params(LC.stats(LC.lot_pixels(mine, n)), LC.stats(LC.lot_pixels(host, n)), mode)
+                if p is None:
+                    rep["unchanged"] += 1
+                    continue
+                rep["buildings"] += 1
+                for _, g, i in LC.table_refs(tab):
+                    if (g, i) in spix[e["set"]]:
+                        owner.setdefault((g, i), (bid, n, p))      # a record two tables share: the lower id's look
+            pixels = []
+            for g, i, t, pl in e["pixels"]:
+                if t == 0 and (g, i) in owner:
+                    _, n, p = owner[(g, i)]
+                    pl = LC.recolour(pl, spix[e["set"]][(g, i)][1], n, p)
+                    rep["records"] += 1
+                pixels.append((g, i, t, pl))
+            e["pixels"] = pixels
+            continue
+        # North American copies: host = the other sets' art of the same id, pooled. Own tables + pixels.
+        pos = {nid - e["offset"]: j for j, (nid, _) in enumerate(e["exemplars"])}
+        exemplars, tables, pixels, nxt = list(e["exemplars"]), [], [], 0
+        for bid in e["_lot"]["members"]:
+            n = _lot_n(np, stock_buildings[bid][1])
+            k, tab, mine = stock_frames(bid)
+            hosts = [h for h in (set_frames(s, bid)[1] for s in sets if bid in s["_lot"]["set_bld"]) if h]
+            if n is None or mine is None or not hosts:
+                rep["skipped"].append(bid)
+                continue
+            host_lab = LC.np.concatenate([LC.lot_pixels(h, n) for h in hosts])
+            p = LC.params(LC.stats(LC.lot_pixels(mine, n)), LC.stats(host_lab), mode)
+            if p is None:
+                rep["unchanged"] += 1
+                continue
+            keymap = {}
+            for _, g, i in LC.table_refs(tab):
+                if (g, i) in art.pix and (g, i) not in keymap:
+                    keymap[(g, i)] = (LC.NA_PIX_GROUP, nxt)
+                    pl, anc = art.pix[(g, i)]
+                    pixels.append((LC.NA_PIX_GROUP, nxt, 1, anc))
+                    pixels.append((LC.NA_PIX_GROUP, nxt, 0, LC.recolour(pl, anc, n, p)))
+                    nxt += 1
+                    rep["records"] += 1
+            nid = bid + e["offset"]
+            tables.append((LC.NA_CS_GROUP, nid, k[0], LC.retarget(tab, keymap)))
+            j = pos[bid]
+            exemplars[j] = (nid, np.tkb1_set_key(exemplars[j][1], 0x67, (k[0], LC.NA_CS_GROUP, nid)))
+            rep["buildings"] += 1
+        if pixels:
+            e["exemplars"], e["tables"], e["pix_group"], e["pixels"] = exemplars, tables, LC.NA_PIX_GROUP, pixels

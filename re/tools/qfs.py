@@ -100,9 +100,11 @@ def decompress(buf, pos=0, limit=None):
         if off > len(out):
             raise QfsError("back-reference offset %d exceeds %d bytes of output" % (off, len(out)))
         src = len(out) - off
-        for _ in range(ln):
-            out.append(out[src])
-            src += 1
+        if off >= ln:
+            out.extend(out[src:src + ln])
+        else:                                   # overlapping: the last `off` bytes repeat (same bytes as one at a time)
+            tail = bytes(out[src:])
+            out.extend((tail * (ln // off + 1))[:ln])
 
     while True:
         if p >= end:

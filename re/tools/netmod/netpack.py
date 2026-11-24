@@ -1399,7 +1399,8 @@ def merge(stock, packs):
     report["style_sets"] = [{"set": st["set"], "offset": st["offset"], "weight": st["weight"],            # task stylemix
                              "buildings": len(st["exemplars"]), "tables": len(st["tables"]),
                              "pixel_records": len(st["pixels"]), "lines": len(st["lines"]), "families": st["families"],
-                             "civic": st.get("civic", [])}                                       # task civicstyle
+                             "civic": st.get("civic", []),                                       # task civicstyle
+                             "lot_colour": st.get("lot_colour")}                                 # task stylepal
                             for st in styles]
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
@@ -1827,6 +1828,10 @@ def _print_report(report):
                  st["families"]))
         if st.get("civic"):                                                     # task civicstyle
             print("    civic looks (no family line): %s" % ", ".join("%d+%d" % (b, st["offset"]) for b in st["civic"]))
+        lc = st.get("lot_colour")                                               # task stylepal
+        if lc and lc.get("mode"):
+            print("    lot colour %s: %d buildings, %d pixel records recoloured, %d already match, %d skipped %s"
+                  % (lc["mode"], lc["buildings"], lc["records"], lc["unchanged"], len(lc["skipped"]), lc["skipped"][:12]))
     for w in report["warnings"]:
         print("  WARNING " + w)
     for w in report.get("info", []):
