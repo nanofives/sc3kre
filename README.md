@@ -94,6 +94,11 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   one you pick. Your rewards unlock at the population and year you set.
 - Civic buildings in every style: the civic list also offers the game's own European and Asian versions of police and
   fire stations, schools, hospitals, parks and more, with no import needed.
+- Rewards in every style: picking a reward or business deal that the game has in other styles opens a second list
+  with its North American, European and Asian looks: City Hall, County Courthouse, Lighthouse, Stadium, Stock
+  Exchange and GigaMall (European and Asian), Mayor's House, Historic Statue and Performing Arts Center (Asian). The
+  look is the same reward (same price, counts as built, TAB, Move and undo work). Mods page row "Civic + rewards:
+  game styles".
 - Buildings placed from a menu, and road, rail, highway and power line drags, can go over zoned buildings,
   which are demolished first (bulldozing added to the cost, undo puts them back).
 - Zoning over buildings of another zone type, and de-zoning, demolish them (same type left alone).
@@ -220,6 +225,9 @@ in `mods\netmod`, which a new release replaces.
 - Building styles as in SimCity 4: the style picked in City Properties decides the style of the buildings that grow
   from then on, and the buildings already standing keep their look. The "Mix all three styles" box grows the European,
   Asian and North American buildings side by side. Each city saves its choice.
+  A new city takes the style picked in the New City window as its look, as in the original game, so an Asian city
+  gets the Asian rewards. To switch a city you already have, untick "Style: new buildings only", restart, pick the
+  style in City Properties > Buildings, save, then tick the row again.
 - Lawns that match the city: a European or Asian building grown in a North American city takes the lawn of the same
   building's North American version, and most of its garden plots become lawn. North American buildings grown in a
   European or Asian city get the darker lawn of those styles. The game's own buildings and cities are not changed.
