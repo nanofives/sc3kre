@@ -9206,7 +9206,8 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_civvar"),    "Cívicos: varios aspectos", "Civic buildings: more looks" }, NULL, "-SC3RESIZE_CIVVAR" },
     { { SC3KEY("resize.mt_civstyle"),  "Cívicos: estilos del juego", "Civic buildings: game styles" }, NULL, "-SC3RESIZE_CIVSTYLE" },   /* civicstyle 2026-11-21 */
     { { SC3KEY("resize.mt_newreward"), "Premios nuevos",          "New rewards" },            NULL, "-SC3RESIZE_NEWREWARD" },
-    { { SC3KEY("resize.mt_lotgrow"),   "Zonas: edificios no cuadrados", "Non-square zoned buildings" }, NULL, "-SC3SIMRUN_LOTGROW" } };   /* lotgrowb 2026-11-24: sc3simrun LOTGROW */
+    { { SC3KEY("resize.mt_lotgrow"),   "Zonas: edificios no cuadrados", "Non-square zoned buildings" }, NULL, "-SC3SIMRUN_LOTGROW" },   /* lotgrowb 2026-11-24: sc3simrun LOTGROW */
+    { { SC3KEY("resize.mt_rotplace"),  "Girar con TAB al colocar", "TAB rotates when placing" }, NULL, "-SC3RESIZE_ROTPLACE" } };   /* rotrow 2026-11-25: sc3resize ROTPLACE */
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
 static int g_mt_on0[MT_N];   /* state shown when the page was built */
 
@@ -9269,7 +9270,9 @@ static void mt_vis_all(void *win, int on) {
    civicstyle 2026-11-21: its sixth row at 17 ends at 362 (city checkbox 425, under Volver), 6 x 15 at 350, inside the
    features column's 354, so the notes and the city checkbox stay at 358 / 417; 14 since lotgrowb 2026-11-24, with the
    heading gap 20 -> 18: its seventh row at 15 ends at 365 (city checkbox 427, under Volver), 258 + 7 x 14 = 356, so the
-   notes and the city checkbox sit at 360 / 418, the place measured clear of Volver in hwyspeed) */
+   notes and the city checkbox sit at 360 / 418, the place measured clear of Volver in hwyspeed; rotrow 2026-11-25,
+   eighth row: gap 6 -> 4, heading 18 -> 16, 254 + 8 x 14 = 366, notes at 370, and the note / city lines 18/40/58 -> 16/32/48
+   below it, so the city checkbox stays at 418) */
 #define MT_LEFT_DY 14
 static int mt_build(void *fac, void *win, int es, DWORD col) {
     int n = 0, i, ym = 84, yf = 84;
@@ -9282,8 +9285,8 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
         if (r->dll) { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += MT_FEAT_DY; }
         else if (r->env[0] != '+' && r->env[0] != '-') { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += MT_FEAT_DY; }
     }
-    ym += 6;   /* the default-off rows (env '+'): left column, under their own heading */
-    n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_simbld", "Simulación y edificios", "Simulation and buildings"), 18, ym, 220); ym += 18;
+    ym += 4;   /* the default-off rows (env '+'): left column, under their own heading (6 until rotrow 2026-11-25) */
+    n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_simbld", "Simulación y edificios", "Simulation and buildings"), 18, ym, 220); ym += 16;
     for (i = 0; i < MT_N; i++) {   /* '+' rows (default off), then '-' rows (default on, civmod) */
         const MT_ROW *r = &k_mt_rows[i];
         if (r->dll || r->env[0] != '+') continue;
@@ -9299,11 +9302,11 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
     n += ho_add_label(fac, win, MT_NOTE, SC3TR(es, "resize.mt_note", "Los cambios se aplican al reiniciar el juego.",
                                                "Changes apply the next time the game starts."), 18, i, 450);
     n += ho_add_label(fac, win, MT_NOTE2, SC3TR(es, "resize.mt_note2", "Una ciudad grande o con avenidas necesita su mod para cargar.",
-                                                "A big city or one with avenues needs its mod to load."), 18, i + 18, 450);
+                                                "A big city or one with avenues needs its mod to load."), 18, i + 16, 450);
     {   SF_GRID g; void *eco;   /* SALTFIX: only with a city open and the hook in */
         if (g_saltfix && g_sf_dirt && sf_city_grid(sf_city(), &g, &eco)) {
-            n += ho_add_label(fac, win, MT_H_CITY, SC3TR(es, "resize.mt_city", "Ahora, en esta ciudad (al aceptar, sin reiniciar)", "Now, in this city (on OK, no restart)"), 18, i + 40, 440);
-            n += mp_checkbox(fac, win, MT_SALT, SC3TR(es, "resize.mt_saltcalc", "Recalcular agua salada", "Recalculate salt water"), 0, 30, i + 58, 300, col);
+            n += ho_add_label(fac, win, MT_H_CITY, SC3TR(es, "resize.mt_city", "Ahora, en esta ciudad (al aceptar, sin reiniciar)", "Now, in this city (on OK, no restart)"), 18, i + 32, 440);
+            n += mp_checkbox(fac, win, MT_SALT, SC3TR(es, "resize.mt_saltcalc", "Recalcular agua salada", "Recalculate salt water"), 0, 30, i + 48, 300, col);
         } }
     return n;
 }
