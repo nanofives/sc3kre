@@ -257,3 +257,16 @@ thread. If the sim were running it would be queued to the next UpdateCell.
 "Este vertedero: 54% completo" / "99,939 de 183,495 ton. (libre 83,556)" / "Vaciarlo cuesta $4,997", plus a
 "(N sin acceso)" note when some cells are inactive. Numbers use commas and "ton." like the game's own panel above them.
 
+## 5. LFSTALL fix (2026-11-25, verify/lfstall/RESULTS.md)
+
+Player report: one landfill 36% full, garbage on the lots, "to landfill" 0. Cause: `g_dev` (UpdateCell's `this`) was
+taken once per process, so in a second city of the same game every UpdateCell ran stock and no pending went down,
+while the replaced router kept charging pending until pending = room and then refused all garbage. Fix: groups,
+pendings and the developer are per city, keyed by the garbage valve (router `self+0x158` = developer `+0x3c`); a new
+valve drops them and `lf_update` adopts the new developer. Self-heal (`heal=1`, `SC3LANDFILL_HEAL=0` = off): a
+landfill refusing garbage with room more than 100,000 times with no UpdateCell of its cells, or 32 of its own
+UpdateCells in a row with pending and room and nothing put down, releases its pending (valve vt+0x40 by the same
+amount, so waiting = sum of pendings holds). Verbose logs `HEAPS>` and `BOOK>` (valve against the cells, once a minute).
+
+The landfill heap pieces are not user-removable in the stock game: occupant vt+0x78 `SetUserRemove(0)` after each
+placement (SIMRCI `0x10019de1`, `0x1001a447`, `0x1001a186`).

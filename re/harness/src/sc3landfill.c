@@ -33,6 +33,8 @@
  *   SIMMISC 0x1001761c cost = q * rate / 1000). Charged through the budget (city vt+0x15c, vt+0x14 Withdraw); refused
  *   when funds are short. Paused: runs on the caller's thread. Running: queued for the sim thread (next UpdateCell).
  * Saves: only stock fields change, so a save loads the same without this mod.
+ * LFSTALL (2026-11-25): groups, pendings and the developer are per city (keyed by the valve), plus a self-heal for a
+ *   landfill whose pending stops going down while it has room ([landfill] heal=1, SC3LANDFILL_HEAL=0 = off).
  *
  * Exports (sc3resize's query dialog, LANDFILL block): sc3landfill_text, sc3landfill_empty.
  * Off: SC3LANDFILL=0 (nothing patched). Log: sc3landfill.log beside the DLL. Ini written with defaults if missing.
@@ -81,7 +83,7 @@ static void self_path(char *out, int cap, const char *leaf) {
 
 /* ============================================================ config */
 
-static int g_independent = 1, g_empty = 1, g_fee = 50, g_maxdist = 0, g_verbose = 0, g_on;
+static int g_independent = 1, g_empty = 1, g_fee = 50, g_maxdist = 0, g_verbose = 0, g_on, g_heal = 1, g_test_firstdev;
 
 static int env_int(const char *name, int *out) {
     char v[16];
@@ -98,6 +100,7 @@ static void ini_read(void) {
         WritePrivateProfileStringA("landfill", "max_distance", "0", p);
         WritePrivateProfileStringA("landfill", "empty", "1", p);
         WritePrivateProfileStringA("landfill", "fee_per_1000_tons", "50", p);
+        WritePrivateProfileStringA("landfill", "heal", "1", p);
     }
     if (p[0]) {
         g_independent = GetPrivateProfileIntA("landfill", "independent", 1, p) ? 1 : 0;
@@ -105,12 +108,15 @@ static void ini_read(void) {
         g_empty = GetPrivateProfileIntA("landfill", "empty", 1, p) ? 1 : 0;
         g_fee = GetPrivateProfileIntA("landfill", "fee_per_1000_tons", 50, p);
         g_verbose = GetPrivateProfileIntA("landfill", "verbose", 0, p);
+        g_heal = GetPrivateProfileIntA("landfill", "heal", 1, p) ? 1 : 0;
     }
     env_int("SC3LANDFILL_INDEPENDENT", &g_independent);
     env_int("SC3LANDFILL_EMPTY", &g_empty);
     env_int("SC3LANDFILL_FEE", &g_fee);
     env_int("SC3LANDFILL_MAXDIST", &g_maxdist);
     env_int("SC3LANDFILL_VERBOSE", &g_verbose);
+    env_int("SC3LANDFILL_HEAL", &g_heal);
+    env_int("SC3LANDFILL_TEST_FIRSTDEV", &g_test_firstdev);   /* test only: the pre-LFSTALL bug (first developer kept) */
     if (g_fee < 0) g_fee = 0;
     if (g_maxdist < 0) g_maxdist = 0;
 }
@@ -156,7 +162,6 @@ static DWORD vc(void *o, DWORD slot, int n, DWORD a0, DWORD a1, DWORD a2, DWORD 
 }
 
 static BYTE *g_eco, *g_rci;          /* SIMECO.DLL, SIMRCI.DLL bases */
-static BYTE *volatile g_dev;         /* the landfill developer (UpdateCell's this), vtable SIMRCI 0x1004c558 */
 
 /* the loaded city: *(SC3U.exe + 0xfa86c) + 0x48, vtable SIMCITY + 0x13260 (sc3simrun / sc3undo) */
 static BYTE *city_get(void) {
@@ -201,7 +206,10 @@ static int valve_ok(BYTE *v) { return v && !IsBadReadPtr(v, 0x30) && *(DWORD *)v
 /* ============================================================ landfill groups (sim thread) */
 
 #define MAXG 1024
-typedef struct { int x0, z0, x1, z1, n, off, nact; LONG room, fill, pending; } Grp;
+/* blocked = router requests refused for this landfill while it had room (pending >= room), since the last UpdateCell
+   of one of its cells;
+   stall = its own UpdateCell calls with pending and room and nothing put down, in a row (LFSTALL self-heal) */
+typedef struct { int x0, z0, x1, z1, n, off, nact; LONG room, fill, pending, blocked, stall; } Grp;
 static Grp g_grp[MAXG + 1];          /* 1..g_ng */
 static int g_ng, g_lab_nx, g_lab_nz, g_labelled;
 static WORD *g_lab;                  /* nx * nz group ids, 0 = not a landfill cell */
@@ -209,6 +217,30 @@ static DWORD *g_cells;               /* packed x | z << 16, grouped by off/n */
 static int g_cells_cap;
 static DWORD g_last_count = 0xffffffff;
 static DWORD g_relabels;
+
+/* LFSTALL (2026-11-25, verify/lfstall/RESULTS.md). The groups, their pendings and the developer belong to ONE city.
+   Before this, g_dev was taken once per process: after a second city load (or New City after playing one) the new
+   city's developer failed `dev == g_dev`, so every UpdateCell ran stock and no pending ever went down, while the
+   replaced router kept charging pendings until pending = room, then refused all garbage with the landfill part empty.
+   Now the city is keyed by its garbage valve (router self+0x158 = developer +0x3c, one object per city): a new valve
+   drops every group and pending, and lf_update adopts the new developer. SC3LANDFILL_HEAL=0 turns off the self-heal. */
+static BYTE *g_valve_city;
+static volatile LONG g_heals, g_city_resets;
+#define HEAL_BLOCKED 100000          /* router refusals with room while none of its cells had an UpdateCell (Moscow: about 20 s at top speed) */
+#define HEAL_STALL 32                /* own UpdateCells in a row with pending + room and nothing put down */
+static BYTE *volatile g_dev;         /* the landfill developer (UpdateCell's this), vtable SIMRCI 0x1004c558 */
+static void city_check(BYTE *valve, BYTE *keep_dev) {
+    if (valve == g_valve_city) return;
+    if (g_dev && g_dev != keep_dev && !g_test_firstdev) g_dev = NULL;   /* the old city's developer: do_empty must not use it */
+    if (g_valve_city) logf("CITY> new city (valve 0x%08lX, was 0x%08lX): %d landfill(s) and their pendings dropped",
+                           (DWORD)valve, (DWORD)g_valve_city, g_ng);
+    InterlockedIncrement(&g_city_resets);
+    g_valve_city = valve;
+    memset(g_grp, 0, sizeof(g_grp));
+    g_ng = 0;
+    g_labelled = 0;
+    g_last_count = 0xffffffff;
+}
 
 static int lab_at(int x, int z) {
     if (!g_lab || x < 0 || z < 0 || x >= g_lab_nx || z >= g_lab_nz) return 0;
@@ -316,7 +348,10 @@ static void labels_check(void *pl) {
 
 static LONG grp_free(int i) { LONG f = g_grp[i].room - g_grp[i].pending; return f > 0 ? f : 0; }
 
-/* keep sum(pending) == valve waiting: surplus to `prefer` (or the freest), shortfall off the largest pendings */
+/* keep sum(pending) == valve waiting: surplus to `prefer` (or the freest), shortfall off the largest pendings.
+   prefer < 0 (the router, LFSTALL): shortfall only. Pending only rises together with the valve's waiting (router
+   vt+0x40), so waiting below the sum means garbage left the valve without passing lf_update (stock deposits in a city
+   whose developer the wrapper does not see, or the tick pulling it out): that pending is phantom and would block. */
 static void reconcile(BYTE *valve, int prefer) {
     LONG P = *(LONG *)(valve + 0x0c), sum = 0, d;
     int i, best;
@@ -324,6 +359,7 @@ static void reconcile(BYTE *valve, int prefer) {
     d = P - sum;
     if (!d || !g_ng) return;
     if (d > 0) {
+        if (prefer < 0) return;
         best = prefer;
         if (best < 1 || best > g_ng) {
             best = 1;
@@ -341,6 +377,23 @@ static void reconcile(BYTE *valve, int prefer) {
         if (g_grp[best].pending >= d) { g_grp[best].pending -= d; d = 0; }
         else { d -= g_grp[best].pending; g_grp[best].pending = 0; }
     }
+}
+
+/* LFSTALL self-heal: a landfill whose pending is not going down while it has room gives that garbage up (the valve's
+   waiting drops by the same amount, through its own adder vt+0x40, so waiting = sum of pendings still holds) and takes
+   garbage again. The released garbage is gone, as if exported for free; the log says how much. */
+static void heal(int g, BYTE *valve, const char *why) {
+    LONG p;
+    if (g < 1 || g > g_ng) return;
+    p = g_grp[g].pending;
+    if (p > *(LONG *)(valve + 0x0c)) p = *(LONG *)(valve + 0x0c);
+    if (p > 0) vc(valve, 0x40, 1, (DWORD)(-p), 0, 0, 0);
+    logf("HEAL> landfill #%d (%d cells, room %ld): pending %ld was not going down (%s, blocked %ld, stall %ld): released %ld",
+         g, g_grp[g].n, g_grp[g].room, g_grp[g].pending, why, g_grp[g].blocked, g_grp[g].stall, p);
+    g_grp[g].pending = 0;
+    g_grp[g].blocked = 0;
+    g_grp[g].stall = 0;
+    InterlockedIncrement(&g_heals);
 }
 
 /* ============================================================ the router (SIMECO FUN_100094a2, replaced) */
@@ -365,6 +418,7 @@ static LONG grp_take(LONG want, int bx, int bz) {
         double bd = 0;
         for (i = 1; i <= g_ng; i++) {
             double d;
+            if (!k && g_grp[i].room > 0 && grp_free(i) <= 0) g_grp[i].blocked++;   /* LFSTALL: refused with room */
             if (tried[i] || grp_free(i) <= 0) continue;
             if (bx >= 0) {
                 int X = bx + 1, Z = bz + 1, dx = 0, dz = 0;
@@ -408,12 +462,19 @@ static DWORD __fastcall lf_router(BYTE *self, void *edx, int amt, DWORD *incin, 
     }
     if (rem <= 0) return (DWORD)ret;
     valve = *(BYTE **)(self + 0x158);                    /* 3. the garbage valve: per landfill */
+    if (valve_ok(valve)) {
+        int i;
+        city_check(valve, NULL);                          /* LFSTALL: groups belong to this city's valve */
+        labels_check((void *)(self + 0x1c));              /* the cISC3PollutionLayer subobject (QI 0x80a814ac) */
+        reconcile(valve, -1);                             /* LFSTALL: drop phantom pending (shortfall only) */
+        if (g_heal)   /* LFSTALL: a landfill refusing garbage with room while no UpdateCell of it ran */
+            for (i = 1; i <= g_ng; i++) if (g_grp[i].blocked > HEAL_BLOCKED) heal(i, valve, "no UpdateCell of it ran");
+    }
     {   LONG av = (LONG)vt0(valve, 0x30), got;
         if (av > 0) {
             LONG want = rem < av ? rem : av;
             InterlockedIncrement(&g_routed);
             if (valve_ok(valve)) {
-                labels_check((void *)(self + 0x1c));          /* the cISC3PollutionLayer subobject (QI 0x80a814ac) */
                 if (ra == g_ret_cell) {
                     InterlockedIncrement(&g_routed_cell);
                     got = grp_take(want, *(int *)(self + 0x48c), *(int *)(self + 0x490));
@@ -455,17 +516,43 @@ static int do_empty(int x, int z, int es, char *msg, int cap);
 #define MAXHIDE 8192
 static DWORD *g_hide[MAXHIDE];
 
+/* HEAPS> diagnostic (verbose): the developer's heap list as the sim thread sees it, grouped by origin cell */
+static volatile LONG g_diag;
+static void heap_dump(BYTE *dev, void *pl) {
+    Layers L;
+    BYTE *head;
+    DWORD *n;
+    static DWORD ux[256], uz[256], uc[256];
+    int nu = 0, total = 0, i, dead = 0, lab0 = 0;
+    if (!layers_get(&L)) return;
+    head = *(BYTE **)(dev + 0x5c);
+    for (n = *(DWORD **)head; n && (BYTE *)n != head && total < 2000000; n = (DWORD *)n[0]) {
+        total++;
+        for (i = 0; i < nu; i++) if (ux[i] == n[2] && uz[i] == n[3]) { uc[i]++; break; }
+        if (i == nu && nu < 256) { ux[nu] = n[2]; uz[nu] = n[3]; uc[nu] = 1; nu++; }
+        if (zone_at(L.zl, (int)n[2], (int)n[3]) != 17) dead++;
+        if (!lab_at((int)n[2], (int)n[3])) lab0++;
+    }
+    logf("HEAPS> %d heap entries, %d origins, %d on a non-landfill cell, %d with no label; valve waiting %ld room %ld",
+         total, nu, dead, lab0, *(LONG *)(*(BYTE **)(dev + 0x3c) + 0x0c), *(LONG *)(*(BYTE **)(dev + 0x3c) + 0x10));
+    for (i = 0; i < nu && i < 24; i++)
+        logf("HEAPS>   (%lu, %lu) x%lu zone %d label %d active %d fill %lu", ux[i], uz[i], uc[i],
+             zone_at(L.zl, (int)ux[i], (int)uz[i]), lab_at((int)ux[i], (int)uz[i]), active_at(pl, (int)ux[i], (int)uz[i]),
+             fill_at(pl, (int)ux[i], (int)uz[i]));
+}
+
 static DWORD __fastcall lf_update(BYTE *dev, void *edx, DWORD *cell) {
     BYTE *valve, *head;
     void *pl;
     DWORD r, *n;
-    int g, nh = 0, i;
+    int g, nh = 0, i, vis = 0;
     LONG P, Pg, after, D;
     (void)edx;
-    if (!g_dev) {
+    if (dev != g_dev && !(g_test_firstdev && g_dev)) {   /* LFSTALL: each city has its own developer (was: the first only) */
         if (*(DWORD *)dev != (DWORD)g_rci + 0x4c558) { logf("### UpdateCell this 0x%08lX vtable 0x%08lX not the developer's", (DWORD)dev, *(DWORD *)dev); return uc_orig(dev, cell); }
+        logf("DEV> landfill developer 0x%08lX (valve 0x%08lX, pollution 0x%08lX)%s", (DWORD)dev, *(DWORD *)(dev + 0x3c),
+             *(DWORD *)(dev + 0x4c), g_dev ? ", a new city's (the previous one was dropped)" : "");
         g_dev = dev;
-        logf("DEV> landfill developer 0x%08lX (valve 0x%08lX, pollution 0x%08lX)", (DWORD)dev, *(DWORD *)(dev + 0x3c), *(DWORD *)(dev + 0x4c));
     }
     if (g_req == 1 && dev == g_dev) {            /* an empty request from the UI thread, game running */
         do_empty(g_req_x, g_req_z, g_req_es, g_req_msg, sizeof(g_req_msg));
@@ -473,10 +560,31 @@ static DWORD __fastcall lf_update(BYTE *dev, void *edx, DWORD *cell) {
     }
     valve = *(BYTE **)(dev + 0x3c);
     pl = *(void **)(dev + 0x4c);
-    if (!g_independent || dev != g_dev || !valve_ok(valve)) return uc_orig(dev, cell);
+    if (g_test_firstdev && dev != g_dev) return uc_orig(dev, cell);   /* test only: as before LFSTALL */
+    if (g_diag == 1 && dev == g_dev && valve_ok(valve)) { InterlockedExchange(&g_diag, 2); heap_dump(dev, pl); }
+    if (!g_independent || !valve_ok(valve)) return uc_orig(dev, cell);
+    city_check(valve, dev);
     labels_check(pl);
     g = lab_at((int)cell[0], (int)cell[1]);
+    if (g) g_grp[g].blocked = 0;                 /* LFSTALL: the wrapper runs for this landfill */
     reconcile(valve, g);
+    if (g_diag == 2) {   /* BOOK> (verbose, once a minute): the stock valve against the cells, right after reconcile */
+        LONG room = 0, sp = 0;
+        int k, j;
+        InterlockedExchange(&g_diag, 0);
+        for (k = 1; k <= g_ng; k++) {
+            sp += g_grp[k].pending;
+            for (j = 0; j < g_grp[k].n; j++) {
+                DWORD c = g_cells[g_grp[k].off + j], f;
+                if (!active_at(pl, (int)(c & 0xffff), (int)(c >> 16))) continue;
+                f = fill_at(pl, (int)(c & 0xffff), (int)(c >> 16));
+                room += (LONG)(f < 0x7fff ? 0x7fff - f : 0);
+            }
+        }
+        logf("BOOK> valve room %ld, sum of active cell room %ld (%s); valve waiting %ld, sum of pendings %ld (%s)",
+             *(LONG *)(valve + 0x10), room, *(LONG *)(valve + 0x10) == room ? "equal" : "DIFFER",
+             *(LONG *)(valve + 0x0c), sp, *(LONG *)(valve + 0x0c) == sp ? "equal" : "DIFFER");
+    }
     head = *(BYTE **)(dev + 0x5c);
     for (n = *(DWORD **)head; n && (BYTE *)n != head && nh < MAXHIDE; ) {   /* other landfills' heaps out of the list */
         DWORD *next = (DWORD *)n[0];
@@ -487,6 +595,7 @@ static DWORD __fastcall lf_update(BYTE *dev, void *edx, DWORD *cell) {
         }
         n = next;
     }
+    for (n = *(DWORD **)head; n && (BYTE *)n != head && vis < 1000000; n = (DWORD *)n[0]) vis++;
     P = *(LONG *)(valve + 0x0c);
     Pg = g ? g_grp[g].pending : 0;
     if (Pg > P) Pg = P;
@@ -507,6 +616,22 @@ static DWORD __fastcall lf_update(BYTE *dev, void *edx, DWORD *cell) {
     }
     if (*(DWORD *)((BYTE *)pl + 0x468) != g_last_count) labels_check(pl);
     else if (g) grp_room(&g_grp[g], pl);
+    if (g && g <= g_ng) {   /* LFSTALL: pending and room, the stock code had a heap or could start one, nothing put down */
+        if (D > 0) g_grp[g].stall = 0;
+        else if (Pg > 0 && g_grp[g].room > 0 && (vis || active_at(pl, (int)cell[0], (int)cell[1])) &&
+                 ++g_grp[g].stall >= HEAL_STALL && g_heal)
+            heal(g, valve, "its UpdateCells put nothing down");
+    }
+    if (g_verbose && g && g <= g_ng && Pg > 0 && after > 0 && g_grp[g].room > 0) {
+        static DWORD last;
+        DWORD now = GetTickCount();
+        if (now - last > 5000) {
+            last = now;
+            logf("LEFTOVER> cell (%lu, %lu) zone %d active %d landfill #%d: pending %ld -> %ld with room %ld; visible heaps %d, hidden %d",
+                 cell[0], cell[1], zone_at(*(void **)(dev + 0x48), (int)cell[0], (int)cell[1]), active_at(pl, (int)cell[0], (int)cell[1]),
+                 g, Pg, after, g_grp[g].room, vis, nh);
+        }
+    }
     if (g_verbose && D > 0) logf("DEPOSIT> cell (%lu, %lu) landfill #%d: put down %ld, its pending %ld, room %ld; hidden heaps %d",
                                  cell[0], cell[1], g, D, g_grp[g].pending, g_grp[g].room, nh);
     return r;
@@ -741,16 +866,18 @@ static DWORD WINAPI init_thread(LPVOID p) {
     ok_u = jmp_patch(u, (void *)lf_update);
     if (g_independent) ok_r = jmp_patch(r, (void *)lf_router);
     g_on = ok_u;
-    logf("### READY: independent=%d (router %s, max_distance %d), empty=%d (fee %d per 1000 t), UpdateCell hook %s",
-         g_independent, ok_r ? "replaced" : "stock", g_maxdist, g_empty, g_fee, ok_u ? "on" : "FAILED");
+    logf("### READY: independent=%d (router %s, max_distance %d), empty=%d (fee %d per 1000 t), heal=%d, UpdateCell hook %s",
+         g_independent, ok_r ? "replaced" : "stock", g_maxdist, g_empty, g_fee, g_heal, ok_u ? "on" : "FAILED");
     for (i = 0;; i++) {          /* a line a minute while the game runs: how routing went */
         Sleep(60000);
+        if (g_verbose) InterlockedExchange(&g_diag, 1);
         if (g_independent && g_ng) {
             int k;
-            logf("STATS> routed %ld (per cell %ld), short of local room %ld; %d landfill(s):", g_routed, g_routed_cell, g_short, g_ng);
+            logf("STATS> routed %ld (per cell %ld), short of local room %ld, heals %ld, city resets %ld; %d landfill(s):",
+                 g_routed, g_routed_cell, g_short, g_heals, g_city_resets, g_ng);
             for (k = 1; k <= g_ng && k <= 12; k++)
-                logf("STATS>   #%d cells %d active %d fill %ld room %ld pending %ld", k, g_grp[k].n, g_grp[k].nact,
-                     g_grp[k].fill, g_grp[k].room, g_grp[k].pending);
+                logf("STATS>   #%d cells %d active %d fill %ld room %ld pending %ld blocked %ld stall %ld", k, g_grp[k].n,
+                     g_grp[k].nact, g_grp[k].fill, g_grp[k].room, g_grp[k].pending, g_grp[k].blocked, g_grp[k].stall);
         }
     }
 }
