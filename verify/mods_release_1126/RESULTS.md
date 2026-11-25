@@ -105,3 +105,10 @@ label.
   (13 files), GitHub `sc3mods-2026-11-26` with the zip and `gh_notes.md`, "superseded" line on the 2026-11-25 notes,
   repo README lines from `readme_lines.md`.
 - dev/rel1126 pruned at the end of this round (nothing in it needed).
+
+## Published 2026-11-25
+
+Owner: "Yes, publish". stage/release swapped (old: stage/release_1125_old), LAN deploy incremental (13 of 3,681 files,
+40.0 MB, nginx check OK). GitHub `sc3mods-2026-11-26`, target 82ceeda7, asset downloaded back, SHA-256
+2490A907DA45E6B7E7AD49F76D7BFC2928712BCE7C57445EDF82738A466514A4 matches. The 2026-11-25 notes start with a
+"superseded" line. Repo README updated (rewards in every style, new cities take the picked style).
