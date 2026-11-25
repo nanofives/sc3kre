@@ -113,3 +113,11 @@ files only.
   section (power and water on big maps, non-square zoned buildings row, lawn colours).
 - dev/rel1124 (smoke tree, branch child/rel1124 with no commits) can be pruned. Its Cities holds test saves only
   (pw1024 copy, sp_churned*, autosaves); the stock city files there are untouched hard links.
+
+## Published 2026-11-24
+
+Owner: "Yes, publish". stage/release swapped (old: stage/release_1121_old), LAN deploy incremental (15 of 3,681 files,
+48.3 MB, nginx check OK). GitHub `sc3mods-2026-11-24`, target f31ea5da, asset downloaded back, SHA-256
+BB53D9D8FE1DC60462D30A2B12A266F47EE56480BF60976FC5E5DD0DA191C8DA matches. The 2026-11-21 notes start with a
+"superseded" line. Repo README updated (power and water across big maps, lawns that match the city; the non-square
+zoned buildings row came with lotgrowb).
