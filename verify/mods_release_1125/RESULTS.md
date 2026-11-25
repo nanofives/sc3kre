@@ -82,3 +82,10 @@ no em-dashes, semicolons, emoji, ellipsis or intensifiers, numbers only from the
   (9 files), GitHub `sc3mods-2026-11-25` with the zip and `gh_notes.md`, "superseded" line on the 2026-11-24 notes,
   repo README lines from `readme_lines.md`.
 - dev/rel1125 (smoke tree, branch child/rel1125 with no commits) can be pruned.
+
+## Published 2026-11-25
+
+Owner: "Yes, publish". stage/release swapped (old: stage/release_1124_old), LAN deploy incremental (9 of 3,681 files,
+1.1 MB, nginx check OK). GitHub `sc3mods-2026-11-25`, target 70ecbf7f, asset downloaded back, SHA-256
+62295817A4C89DFC07778898ED86022EC0F0A23B66A9CE6EAF3679875BD6CC59 matches. The 2026-11-24 notes start with a
+"superseded" line. Repo README updated (TAB rotation under Building tools, landfill second-city line).
