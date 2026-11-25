@@ -117,6 +117,9 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 ### Bigger cities (sc3bigcity)
 - A "Huge" size in the new city dialog, with a slider from 512 to 1024 tiles in steps of 128. 1024 cities load,
   reload and run (with sc3perf).
+- Power and water reach across the whole map. The stock game stopped spreading them about 600 tiles from a power
+  plant and 500 from a water source, which a 256 map never reaches. Above 256 tiles the limit grows with the map
+  (`SC3BIGCITY_GRIDCAP=0` turns it off).
 
 ### Camera (sc3overscroll)
 - The camera can go past the map edge and slides along it. Pushing the mouse past the window edge while building
@@ -212,6 +215,9 @@ in `mods\netmod`, which a new release replaces.
 - Building styles as in SimCity 4: the style picked in City Properties decides the style of the buildings that grow
   from then on, and the buildings already standing keep their look. The "Mix all three styles" box grows the European,
   Asian and North American buildings side by side. Each city saves its choice.
+- Lawns that match the city: a European or Asian building grown in a North American city takes the lawn of the same
+  building's North American version, and most of its garden plots become lawn. North American buildings grown in a
+  European or Asian city get the darker lawn of those styles. The game's own buildings and cities are not changed.
 - Other mods that change the same game files as the road mod (such as a farm mod editing the building lists or
   SYS.PAK) are merged into the road mod's copies when the game starts. What cannot be merged is named on screen.
 - Building Architect slots: 16 zoned buildings, each a copy of a game building, that you can put your own Building
