@@ -18,8 +18,15 @@
  *
  * With STYLEPICK on:
  *   - The SKIN (the set archives loaded, what base ids draw as) changes only on a city load (the saved set, stock) or
- *     a New City (always 0). City Properties never re-skins: SetCityScheme is called with the current skin, so the
+ *     a New City. City Properties never re-skins: SetCityScheme is called with the current skin, so the
  *     stock code loads nothing and re-Inits nothing; landscape and flora still apply.
+ *   - SPNEWSKIN (task stcompat 2026-11-25, Simtropolis: "Historic Statue, Lighthouse, Mayor's House, County Courthouse,
+ *     City Hall stay Western although I play the Asian set"): a New City takes the picked set as its skin, as stock
+ *     does. Until then it always got skin 0, so every building the set re-skins and nothing else offers (rewards: the
+ *     Asian set holds exemplars 208, 219, 243, 8013, 8019, BuildingSets/6523f3d5/MBE_0015.dat) drew North American
+ *     for the life of the city. Nothing stands on a new map, so the skin re-Inits nothing; the style filter works the
+ *     same on either skin (North American copies +2600000 exist for European/Asian skins, style_mix 1.1.0).
+ *     SC3NETMOD_SPNEWSKIN=0: the old rule (New City = skin 0).
  *   - The STYLE the player picks (set P, plus the "Mix" box M of the dialog, sc3resize SPMIX) decides which family
  *     members grow. After each parse the family vector is filtered (sp_filter) by id: base ids, European copies
  *     (+400000), Asian copies (+1500000) and North American copies (+2600000, style_mix 1.1.0 "00000000"). Members
@@ -42,6 +49,7 @@
 #define SP_MAGIC  0x53505031u          /* "1PPS" */
 
 static int  g_sp_on = 0;               /* SC4-like mode (SC3NETMOD_STYLEPICK, default on) */
+static int  g_sp_newskin = 1;          /* SPNEWSKIN: a New City takes the picked set as its skin (SC3NETMOD_SPNEWSKIN=0: 0) */
 static int  g_sp_filter = 0;           /* the family filter is in */
 static volatile LONG g_sp_set = 0;     /* P: the style the player picked (building set id, 0 = North American) */
 static volatile LONG g_sp_mix = 1;     /* M: grow all three styles */
@@ -162,7 +170,7 @@ static char __fastcall sp_scs(BYTE *self, void *edx, DWORD land, DWORD flora, DW
             g_sp_set = (LONG)set;
             if (pend >= 0) g_sp_mix = pend != 0;
             if (prog & 0xff) { who = "City Properties"; pass = skin; }   /* in game: keep the skin, no re-skin */
-            else { who = "New City"; pass = 0; }                      /* a new city: skin 0, the style grows */
+            else { who = "New City"; pass = g_sp_newskin ? set : 0; } /* SPNEWSKIN: the picked set (stock); old rule 0 */
         }
         logf("stylepick: SetCityScheme from %s (ret 0x%08lX): asked set %08lX, skin %08lX -> %08lX, style %s%s",
              who, ra, set, skin, pass, sp_name((DWORD)g_sp_set), g_sp_mix ? " + mix" : "");
@@ -257,6 +265,7 @@ static DWORD WINAPI stylepick_thread(LPVOID param) {
     DWORD a = 0, b = 0, c = 0, d = 0, e = 0;
     (void)param;
     g_sp_on = !env_off("SC3NETMOD_STYLEPICK");
+    g_sp_newskin = !env_off("SC3NETMOD_SPNEWSKIN");
     while (!(geom = (BYTE *)GetModuleHandleA("SIMGEOM.DLL")) || !(g_sp_init = (BYTE *)GetModuleHandleA("SIMINIT.DLL")) ||
            !(city = (BYTE *)GetModuleHandleA("SIMCITY.DLL")) || !(g_sp_ui = (BYTE *)GetModuleHandleA("SIMUI.DLL"))) Sleep(1);
     {   IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(g_sp_ui + ((IMAGE_DOS_HEADER *)g_sp_ui)->e_lfanew);
@@ -289,6 +298,8 @@ static DWORD WINAPI stylepick_thread(LPVOID param) {
     logf("stylepick: ON (SC4-like: the city's building style picks what grows, City Properties does not re-skin; "
          "SC3NETMOD_STYLEPICK=0 = stock). Hooks: SIMGEOM+0x1170 family parse, SIMINIT+0x8f9c load, SIMCITY+0x4458 save, "
          "scheme vt+0x18 / vt+0x64");
+    logf("stylepick: SPNEWSKIN %s", g_sp_newskin ? "on (a New City takes the picked set as its skin)"
+                                                 : "off (SC3NETMOD_SPNEWSKIN=0: a New City gets skin 0)");
     for (;;) {                                                          /* stats, like the other blocks */
         LONG n0 = g_sp_nfilt;
         Sleep(30000);

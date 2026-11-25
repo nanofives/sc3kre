@@ -366,7 +366,16 @@ Static reading, then the game run in `verify/stylepick/RESULTS.md`.
   stylepick record loads in the stock game (`-Stock`, measured).
 - **What STYLEPICK does** (sc3netmod `sc3netmod_stylepick.c`): City Properties calls SetCityScheme with the current
   building set, so nothing re-skins, and the picked style plus a "Mix" flag filter each family after it is parsed.
-  A New City keeps building set 0. A loaded city keeps its saved set. Style and flag go to
+  A New City keeps building set 0 (until 2026-11-25; since SPNEWSKIN it takes the picked set, see below). A loaded city
+  keeps its saved set. Style and flag go to
   `{0x0525A6B9, 0x4525A6E2, 0x5354594C}`. style_mix 1.1.0 adds North American copies (ids + 2600000, stock
   exemplars, stock frame tables in `CSAttrib*.IXF` that no set archive holds: 141 of 141 checked) so a city drawn in a
   set can grow North American art.
+- **SPNEWSKIN (task stcompat 2026-11-25).** Skin 0 on every New City meant that a city started with the Asian (or
+  European) style kept the North American look for every building the set re-skins and nothing else offers: rewards
+  (City Hall 208, Historic Statue 219, Mayor's House 243, Performing Arts 8011, County Courthouse 8013, Stock Exchange
+  8017, Lighthouse 8019, Stadium 8020, ...), 20 exemplars of the Asian set and 12 of the European set that are neither a
+  family member nor a civic look-list base (offline read of `BuildingSets/*/*.DAT` against `BUILDFAM.IXF`). A New City
+  now passes the picked set (the stock call); nothing stands yet, so nothing is re-Init. `SC3NETMOD_SPNEWSKIN=0` = the
+  old rule. Measured: `SetCityScheme from New City ... asked set 6523F3D5, skin 00000000 -> 6523F3D5`, the five rewards
+  drawn Asian (`verify/stcompat/RESULTS.md`).
