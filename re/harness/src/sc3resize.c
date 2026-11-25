@@ -10425,13 +10425,16 @@ static void gx_install(HMODULE sui) {
  * removed / inserted events, so remove-then-insert keeps both. SC3RESIZE_RELOCATE=0: no button. SC3RESIZE_PLOPOVER=0:
  * zoned buildings refuse the spot again. Both 0: nothing installed. */
 #define RL_BW  80
+static int   g_rp = 1;                        /* ROTPLACE (sc3resize_rotplace.c): TAB turns a plopped building */
+static DWORD g_rl_rot0;                       /* the moved building's own rotation (GetRotationFlag at the click) */
+static void  rp_commit(DWORD *vec, BYTE *tool, int mine);
 static DWORD   g_rl_orig[8];                   /* layer slots +0x24..+0x30, +0x38..+0x44 */
 static void   *g_rl_occ;                       /* the occupant being moved, AddRef'd by us */
 static BYTE   *g_rl_city;                      /* its city: never Release across a city change */
 static void   *g_rl_tool;                      /* what the factory handed back for our tool */
 static DWORD   g_rl_key[3], g_rl_type;
 static LONG    g_rl_cell[4];
-static struct { int on, reloc, n; DWORD tid; void *kill[64]; LONG rect[64][4]; LONG clr, zon; } g_rl;   /* clr / zon: the
+static struct { int on, reloc, n; DWORD tid; BYTE *tool; void *kill[64]; LONG rect[64][4]; LONG clr, zon; } g_rl;   /* clr / zon: the
    stock per-occupant clearing price and our zoned-building bulldozing, added up by the site check */
 static DWORD g_rl_ret_e4, g_rl_ret_fb, g_rl_ret_70b, g_rl_7760_imm, g_rl_7760_ret;
 
@@ -10564,7 +10567,7 @@ static int rl_remove(void *occ, const LONG *r, const char *what) {
 }
 
 /* SIMGEOM 0x10007760 entry: the stock commit is about to insert the building */
-static void __stdcall rl_commit_pre(void) {
+static void __stdcall rl_commit_pre(DWORD *vec) {   /* vec = the commit's 2nd argument, the new occupants */
     int i, n;
     void *kill[64];
     LONG rect[64][4];
@@ -10575,10 +10578,12 @@ static void __stdcall rl_commit_pre(void) {
     g_rl.n = 0;
     if (g_rl.reloc && g_rl_occ) rl_remove(g_rl_occ, g_rl_cell, "moved building (original)");
     for (i = 0; i < n; i++) rl_remove(kill[i], rect[i], "zoned building under the footprint");
+    rp_commit(vec, g_rl.tool, g_rl.reloc);   /* ROTPLACE: before the stock insert */
 }
 static __declspec(naked) void rl_commit_stub(void) {
     __asm {
         pushad
+        push dword ptr [esp + 40]             /* 2nd argument (pushad 32 + return 4 + 1st 4) */
         call rl_commit_pre
         popad
         mov  eax, dword ptr [g_rl_7760_imm]   /* the stolen 'mov eax, imm32' (EH frame) */
@@ -10633,7 +10638,7 @@ static DWORD rl_layer(int idx, void *self, DWORD *v) {
     LONG clr = 0, zon = 0, f0 = 0;
     RLCost k;
     static int logged;
-    tool = (g_relocate || g_plopover) && rl_tool(v[1], &mine);
+    tool = (g_relocate || g_plopover || g_rp) && rl_tool(v[1], &mine);
     if (!tool || (g_rl.on && g_rl.tid == GetCurrentThreadId()))
         return rz_thiscall_ret(self, (void *)g_rl_orig[idx], v, place ? 5 : 4);
     if (mine && !rl_occ_at_is((DWORD)g_rl_cell[0], (DWORD)g_rl_cell[1], g_rl_occ)) {
@@ -10641,7 +10646,7 @@ static DWORD rl_layer(int idx, void *self, DWORD *v) {
         if (v[3]) *(DWORD *)v[3] = 0;
         return 0;
     }
-    g_rl.on = 1; g_rl.reloc = mine; g_rl.n = 0; g_rl.clr = g_rl.zon = 0; g_rl.tid = GetCurrentThreadId();
+    g_rl.on = 1; g_rl.reloc = mine; g_rl.tool = (BYTE *)v[1] - 0x108; g_rl.n = 0; g_rl.clr = g_rl.zon = 0; g_rl.tid = GetCurrentThreadId();
     if (mine && place) f0 = (LONG)ho_v(*(void **)((BYTE *)self + 0x30), 0x10, 0, 0, 0, 0, 0, 0);   /* funds, low dword */
     __try {
         if (mine && !place) {   /* the stock CanPlace hard-codes free = 0: ask as the free tool will place */
@@ -10721,10 +10726,13 @@ static DWORD rl_click(void *self, DWORD win, BYTE *qo) {
     ho_v(occ, 0xd0, 1, (DWORD)r, 0, 0, 0, 0);
     memcpy(g_rl_key, k, 12); memcpy(g_rl_cell, r, sizeof(r));
     g_rl_type = ho_v(occ, 0x88, 0, 0, 0, 0, 0, 0);
+    g_rl_rot0 = 0;   /* ROTPLACE: the move keeps it (GetRotationFlag vt+0xb4, cISC3Occupant) */
+    __try { ho_v(occ, 0xb4, 1, (DWORD)&g_rl_rot0, 0, 0, 0, 0); } __except (EXCEPTION_EXECUTE_HANDLER) { g_rl_rot0 = 0; }
+    g_rl_rot0 &= 3;
     ho_v(occ, 0x04, 0, 0, 0, 0, 0, 0);
     g_rl_occ = occ; g_rl_city = city; g_rl_tool = NULL;
-    logf("RELOCATE> MOVE start: type %lu key 0x%08lX 0x%08lX 0x%08lX cells [%ld %ld %ld %ld]",
-         g_rl_type, g_rl_key[0], g_rl_key[1], g_rl_key[2], r[0], r[1], r[2], r[3]);
+    logf("RELOCATE> MOVE start: type %lu key 0x%08lX 0x%08lX 0x%08lX cells [%ld %ld %ld %ld] rotation %lu",
+         g_rl_type, g_rl_key[0], g_rl_key[1], g_rl_key[2], r[0], r[1], r[2], r[3], g_rl_rot0);
     /* close: message 3, p3 1, the close-box id, the path Escape takes (FUN_10063d0a(win, 1)) [SIMUI 0x1006338f] */
     a[0] = win; a[1] = 3; a[2] = 1; a[3] = 0x42b7c353; a[4] = 0;
     rz_thiscall_ret(self, g_orig_338f, a, 5);
@@ -10865,7 +10873,7 @@ static void rl_install(void) {
     BYTE *s, *c;
     DWORD *vt, old;
     int i, st = 0;
-    if (g_rl_envoff) { logf("RELOCATE> off (SC3RESIZE_RELOCATE=0 and SC3RESIZE_PLOPOVER=0)"); return; }
+    if (g_rl_envoff) { logf("RELOCATE> off (SC3RESIZE_RELOCATE=0, SC3RESIZE_PLOPOVER=0 and ROTPLACE off)"); return; }
     while (st++ < 300 && !(g = GetModuleHandleA("SIMGEOM.DLL"))) Sleep(100);
     if (!g) { logf("RELOCATE> SIMGEOM.DLL not loaded: off"); return; }
     s = (BYTE *)g + 0x76b4; c = (BYTE *)g + 0x7760;
@@ -10893,6 +10901,7 @@ static void rl_install(void) {
     }
     logf("RELOCATE> on: Mover button %s, auto-demolish of zoned buildings under a placed building %s "
          "(layer slots + site check SIMGEOM+0x76b4 + commit SIMGEOM+0x7760)", g_relocate ? "on" : "off", g_plopover ? "on" : "off");
+    logf("ROTPLACE> %s (TAB while placing a square building; set before insert at the commit SIMGEOM+0x7760)", g_rp ? "on" : "off");
 }
 
 /* ================= ROADOVER (task roadover 2026-10-28, re/analysis/ROADOVER.md)
@@ -11266,7 +11275,10 @@ static void zd_install(void) {
 }
 static DWORD WINAPI zd_thread(LPVOID p) { (void)p; zd_install(); return 0; }
 
+static int rp_label(BYTE *view, char *out, int cap);   /* ROTPLACE, below: the rotation line of the cost label */
 #include "sc3resize_placehints.c"  /* PLACEHINTS: airport/seaport zone + plop land value previews (SC3RESIZE_PLACEHINTS=0) */
+static int rz_text_focus(void);
+#include "sc3resize_rotplace.c"    /* ROTPLACE: TAB turns a square plopped building while placing (SC3RESIZE_ROTPLACE=0) */
 
 /* FRAMEDUMP (diag, task hudclick 2026-10-15). SC3RESIZE_FRAMEDUMP=<abs prefix>: when the file <prefix>req exists, the
  * next client-sized Blt onto the primary writes its source rect (the frame exactly as presented, after any HUDSCALE
@@ -15981,6 +15993,8 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     else if (m == WM_SIZE && wp == SIZE_RESTORED && GetForegroundWindow() == h) rz_musicfocus(1);
     if (pkr_wndproc(h, m, wp, lp)) return 0;   /* PICKER */
     if (m == WM_KEYDOWN || m == WM_KEYUP || m == WM_KILLFOCUS) ph_shiftmsg(m, wp);   /* PLACEHINTS: Shift shows the text */
+    if ((m == WM_KEYDOWN || m == WM_KEYUP || m == WM_CHAR || m == WM_MOUSEMOVE || m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN) &&
+        rp_key(m, wp, lp)) return 0;   /* ROTPLACE: TAB (mouse messages only end a stale rotation, never swallowed) */
     if (m == WM_RZ_RESTORE) { rs_test(wp, lp); return 0; }   /* RESTORE (test only) */
     if (m == WM_RZ_DIAGARROW && g_diag_arrows) { g_diag_arrow = (LONG)wp; return 0; }   /* DIAGARROWS (test only) */
     if (m == WM_RZ_DIAGARROW + 1 && g_diag_arrows) {   /* DIAGARROWS (test only): in-game A/B of the VDSCROLL block */
@@ -19018,15 +19032,17 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               g_civvar = GetPrivateProfileIntA("buildings", "civicvariants", 1, bp) ? 1 : 0;     /* CIVVAR (civmod) */
               g_civdlg = GetPrivateProfileIntA("buildings", "civiclist", 1, bp) ? 1 : 0;        /* CIVDLG (civdlg) */
               g_civstyle = GetPrivateProfileIntA("buildings", "civicstyles", 1, bp) ? 1 : 0;    /* CIVSTYLE (civicstyle) */
-              g_newreward = GetPrivateProfileIntA("buildings", "newrewards", 1, bp) ? 1 : 0; }   /* NEWREWARD (civmod) */
+              g_newreward = GetPrivateProfileIntA("buildings", "newrewards", 1, bp) ? 1 : 0;    /* NEWREWARD (civmod) */
+              g_rp = GetPrivateProfileIntA("buildings", "rotate", 1, bp) ? 1 : 0; }            /* ROTPLACE (rotplace) */
           if (GetEnvironmentVariableA("SC3RESIZE_CIVVAR", v, sizeof(v))) g_civvar = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CIVDLG", v, sizeof(v))) g_civdlg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CIVSTYLE", v, sizeof(v))) g_civstyle = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NEWREWARD", v, sizeof(v))) g_newreward = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_ROTPLACE", v, sizeof(v))) g_rp = atoi(v);
           g_rl_envoff = GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v)) && !atoi(v) &&
-                        GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v)) && !atoi(v);
+                        GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v)) && !atoi(v) && !g_rp;
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE_PRICEPCT", v, sizeof(v))) g_rl_price_pct = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE_CLEARCOST", v, sizeof(v))) g_rl_clearcost = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */

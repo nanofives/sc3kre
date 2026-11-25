@@ -60,7 +60,7 @@ while calling):
 The cell map keeps drawing the old sprite state. Not read: how the cell map holds the sprite, or whether a sprite
 manager remove then insert (as the Mover does) refreshes it. The game did not crash.
 
-## 5. Rotate-on-place: what it would take (sketch, nothing built)
+## 5. Rotate-on-place: what it would take (the 2026-11-25 sketch; built in section 6)
 
 **Set the rotation before the occupant is inserted.** The state is read at sprite attach, and `vt+0x10c` / `vt+0x108`
 rebuild the sprite chain, so the setter must run on the new occupant before the manager's insert (not after, section 4).
@@ -93,3 +93,54 @@ rebuild the sprite chain, so the setter must run on the new occupant before the 
 `verify/rotprobe/mk_city.py` then `mk_city2.py` (offline rotations into a test city), `shoot3.py` (camera and frame
 dumps via `cam.py`, game running and unpaused), `peek.py` (sprite state of live occupants), `hook3.py` (draw hook),
 `live_rot.py` / `live_reins.py` (section 4). Each needs `SC3_PID`; never attach while the game is paused.
+
+## 6. Rotate on place: built (sc3resize ROTPLACE, child `rotplace`, 2026-11-25)
+
+Owner request: while placing a plopped building, TAB turns it 0 -> 1 -> 2 -> 3 -> 0 and it is placed turned.
+Code: `re/harness/src/sc3resize_rotplace.c` (#included after PLACEHINTS), hooks shared with RELOCATE in `sc3resize.c`.
+Evidence: `verify/rotplace/RESULTS.md`.
+
+**Where the plop tool's rotation-0 occupant is made** [CONFIRMED @ SIMGEOM, disassembly 0x10006d26..0x10006d7f]:
+`sc3_geom_place_footprint_region` `0x10006ba6` (reached from the 8 building-layer Place slots, RELOCATE.md section 1),
+after the site check and funds test:
+1. `0x10006d45` layer `vt+0x20(key, riid 0xe0faadc7, &out)` = `sc3_buildinglayer_create_building_reskey` `0x10003731`:
+   the new occupant, pushed into a local vector (`0x100089ec`). Nothing writes bits 30-31, so it is rotation 0.
+2. `0x10006d6a` QueryInterface(`0xc14f8955`) of it = the `cISC3Occupant` interface (8 bytes after the vector's
+   pointer, measured: vector `0x16D62E20`, manager occupant `0x16D62E28`), then `vt+0xec` SetLocation(bounds).
+3. `sc3_geom_commit_occupants_region` `0x10007760(bounds, &vector, ...)`: inserts each one (layer `vt+0x58`) after
+   the flora / power-line clearing.
+
+So the hook is the commit's entry, which RELOCATE already detours (`rl_commit_stub`): it now passes the vector to
+`rl_commit_pre`, and `rp_commit` runs QI `0xc14f8955` + `cISC3Occupant::SetRotationFlag` `vt+0x10c` (building
+occupants: `sc3_occupant_set_orientation_index` `0x1001d23e`) before the stock insert. The RELOCATE layer-slot wrappers
+(already the test for "a call made by a building tool": key pointer - 0x108 has a tool vtable) now also record the
+tool, so scripts and other callers of the layer stay stock. Read back with `GetRotationFlag` `vt+0xb4`: the set value
+every time. Calling `vt+0xd0` / `vt+0x10c` on the vector's own pointer (the 0xe0faadc7 interface) faults: use the QI.
+
+**Key and state.** `rz_wndproc` -> `rp_key`: WM_KEYDOWN VK_TAB, no Ctrl / Alt, no text field focused (`rz_text_focus`),
+the city view's current tool (`SIMGEOM 0x1001be16()` -> view `+0x228`) has one of the four building tool vtables
+(`0x10029504`, `0x100295e4`, `0x1002968c`, `0x10029734`) and a square footprint (`tool+0x116 == tool+0x117`, size - 1).
+Then rotation + 1 (Shift+TAB - 1), the key and its WM_CHAR / key-up are swallowed, and the cost label is posted again
+(`ph_repost`). Anything else passes TAB on. The game binds nothing to TAB: no VK 9 row in any `Apps\Res\Hotkeys\*.IXF`
+(all 7 languages read 2026-11-25). The rotation belongs to the tool object while it is the current tool: a new tool
+starts at 0, and Esc, another tool or the end of a one-shot tool (`tool+0x115`) drops it (`rp_poll` on mouse messages,
+keys and labels, plus a reset after a one-shot placement). That rule was needed: two arms of the Mayor's House in a row
+got the same tool address, so pointer + key alone carried the old rotation into the new tool (measured).
+The 4-piece rewards (Theme Park, Military Base, Generic University) use another tool class (`FUN_1000a2a9`, vtable
+`0x100297a4`) and the unwrapped multi-cell slot `+0x34`: TAB passes, no line. Non-square lots (importer 2x3 etc.) pass
+TAB and the commit refuses to turn an occupant whose cell rect is not square (footprint getters ignore rotation).
+
+**Label.** PLACEHINTS' label wrapper (SIMSPR view `+0x50`) adds "Giro N grados (TAB)" / "Rotation N degrees (TAB)"
+(key `resize.rotplace_label`, 7 tables) as its own line of the TIPLINES tooltip (a "|" group when 3 lines are taken).
+Side effect: a $0 building (Mayor's House) now shows a label ("$0" + the line) where stock shows none.
+
+**Mover.** The "Mover" click reads the original's `GetRotationFlag` into `g_rl_rot0`; the move tool starts there
+(label and placement), TAB changes it as for any tool. Measured: rotation 2 moved, placed with rotation 2.
+
+**Switch.** `sc3resize.ini [buildings] rotate=0` or `SC3RESIZE_ROTPLACE=0`: no key, no line, no SetRotationFlag
+(log `ROTPLACE> off`). The RELOCATE hooks install while any of RELOCATE / PLOPOVER / ROTPLACE is on.
+No mods-page row yet.
+
+Open: Shift+TAB and a physical TAB press (posted keys cannot carry Shift); importer buildings with lot props (props
+are placed in world space, risk 2 above); a rotated building under sc3undo; slope levelling with a turned building
+(no difference expected: the footprint does not turn).

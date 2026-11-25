@@ -695,6 +695,8 @@ resize.picker_nothing_here=Picker: nothing to pick here
 resize.picker_one_per_city=Picker: only one per city
 # sc3resize.c
 resize.push_camera_when_building=Push camera when building
+# sc3resize_rotplace.c
+resize.rotplace_label=Rotation %d degrees (TAB)
 # sc3resize.c
 resize.save_original_city=Save to the original city
 # sc3resize.c

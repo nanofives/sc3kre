@@ -802,3 +802,7 @@ resize.cs_ras=Asie
 resize.cs_reu=Europe
 # en: North America
 resize.cs_rna=Amérique du Nord
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Rotation %d degrees (TAB)
+resize.rotplace_label=Rotation %d degrés (TAB)
