@@ -31,7 +31,7 @@ To get the old behaviour back (picking a style redraws every building), untick "
 Turn mods on/off page and restart. Same switch outside the game: `SC3NETMOD_STYLEPICK=0`. With "Building style mix"
 unticked no copies grow at all, whatever the style.
 
-## Civic buildings in every style (sc3resize "Civic buildings: game styles")
+## Civic buildings and rewards in every style (sc3resize "Civic + rewards: game styles")
 
 The European and Asian versions of the civic buildings and parks are added too, but nothing grows them: you pick
 them. Press a civic button that has them and the list window opens with one row per style, for example
@@ -42,9 +42,17 @@ Which buttons have them: Police, Fire, School, Museum, Baseball and Marina have 
 Hospital, College, Library, Small Park, Big Park, Playground, Pond and Fountain have an Asian one. Zoo, Bus Stop,
 Train Station and Subway have none.
 
-Untick "Civic buildings: game styles" on the Turn mods on/off page (`SC3RESIZE_CIVSTYLE=0`) and the buttons work as
-without the mod again. Placed looks stay. A city with placed looks loads without the mods: each one comes back as
-the game's own building of the same kind.
+Rewards work the same way (1.4.0). Pick a reward in Rewards and Opportunities and, if the game has other styles of
+it, a second window asks which look to build, for example "Norteamérica: Casa del Alcalde" or "Asia: Casa del
+Alcalde". The first row is the game's own reward in your city's style. Esc builds nothing. The look is still the same
+reward: it counts as built, costs the same, and turns with TAB, moves and undoes like the original. Rewards with other
+styles: City Hall, County Courthouse, Lighthouse, Stadium, Stock Exchange and GigaMall (European and Asian), Mayor's
+House, Historic Statue and Performing Arts Center (Asian). The other rewards have none and open no second window.
+
+Untick "Civic + rewards: game styles" on the Turn mods on/off page (`SC3RESIZE_CIVSTYLE=0`) and the buttons and the
+Rewards list work as without the mod again (`SC3RESIZE_REWARDLOOK=0` turns off only the rewards part). Placed looks
+stay. A city with placed looks loads without the mods: each one comes back as the game's own building of the same
+kind.
 
 ## Lawns that match the city (1.3.0)
 

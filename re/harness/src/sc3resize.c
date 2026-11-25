@@ -9204,7 +9204,7 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" },
     { { SC3KEY("resize.mt_nopause"),   "Sin pausa en ventanas",   "No pause in pop-ups" },    NULL, "+SC3SIMRUN_NOPAUSE" },   /* nopause 2026-11-21: sc3simrun NOPAUSE */
     { { SC3KEY("resize.mt_civvar"),    "Cívicos: varios aspectos", "Civic buildings: more looks" }, NULL, "-SC3RESIZE_CIVVAR" },
-    { { SC3KEY("resize.mt_civstyle"),  "Cívicos: estilos del juego", "Civic buildings: game styles" }, NULL, "-SC3RESIZE_CIVSTYLE" },   /* civicstyle 2026-11-21 */
+    { { SC3KEY("resize.mt_civstyle"),  "Cívicos y premios: estilos", "Civic + rewards: game styles" }, NULL, "-SC3RESIZE_CIVSTYLE" },   /* civicstyle 2026-11-21, rewardlook 2026-11-25: also the reward looks */
     { { SC3KEY("resize.mt_newreward"), "Premios nuevos",          "New rewards" },            NULL, "-SC3RESIZE_NEWREWARD" },
     { { SC3KEY("resize.mt_lotgrow"),   "Zonas: edificios no cuadrados", "Non-square zoned buildings" }, NULL, "-SC3SIMRUN_LOTGROW" },   /* lotgrowb 2026-11-24: sc3simrun LOTGROW */
     { { SC3KEY("resize.mt_rotplace"),  "Girar con TAB al colocar", "TAB rotates when placing" }, NULL, "-SC3RESIZE_ROTPLACE" } };   /* rotrow 2026-11-25: sc3resize ROTPLACE */
@@ -10399,7 +10399,7 @@ static void gx_install(HMODULE sui) {
 #include "sc3resize_stationwarn.c"   /* STATIONWARN: poorly connected stations flagged ("?" rows, Cuadros line, red marker) (SC3RESIZE_STATIONWARN=0) */
 #include "sc3resize_vdbars.c"   /* VDBARS: Cuadros tabs + bar charts (education, health, water, transport) (SC3RESIZE_VDBARS=0, SC3RESIZE_TRIPMODES=0) */
 #include "sc3resize_rcibars.c"  /* RCIBARS: Aeropuerto / Puerto capacity-in-use bars on the RCI (SC3RESIZE_RCIBARS=0) */
-#include "sc3resize_civic.c"    /* CIVVAR + NEWREWARD: civic looks per button press, new rewards (SC3RESIZE_CIVVAR=0, SC3RESIZE_NEWREWARD=0) */
+#include "sc3resize_civic.c"    /* CIVVAR + NEWREWARD + CIVSTYLE + REWARDLOOK: civic and reward looks, new rewards (SC3RESIZE_CIVVAR=0, SC3RESIZE_NEWREWARD=0, SC3RESIZE_REWARDLOOK=0) */
 
 /* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
  * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
@@ -19035,11 +19035,13 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               g_civvar = GetPrivateProfileIntA("buildings", "civicvariants", 1, bp) ? 1 : 0;     /* CIVVAR (civmod) */
               g_civdlg = GetPrivateProfileIntA("buildings", "civiclist", 1, bp) ? 1 : 0;        /* CIVDLG (civdlg) */
               g_civstyle = GetPrivateProfileIntA("buildings", "civicstyles", 1, bp) ? 1 : 0;    /* CIVSTYLE (civicstyle) */
+              g_rewardlook = GetPrivateProfileIntA("buildings", "rewardlooks", 1, bp) ? 1 : 0;  /* REWARDLOOK (rewardlook) */
               g_newreward = GetPrivateProfileIntA("buildings", "newrewards", 1, bp) ? 1 : 0;    /* NEWREWARD (civmod) */
               g_rp = GetPrivateProfileIntA("buildings", "rotate", 1, bp) ? 1 : 0; }            /* ROTPLACE (rotplace) */
           if (GetEnvironmentVariableA("SC3RESIZE_CIVVAR", v, sizeof(v))) g_civvar = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CIVDLG", v, sizeof(v))) g_civdlg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CIVSTYLE", v, sizeof(v))) g_civstyle = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_REWARDLOOK", v, sizeof(v))) g_rewardlook = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NEWREWARD", v, sizeof(v))) g_newreward = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);

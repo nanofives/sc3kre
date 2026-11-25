@@ -23,20 +23,14 @@ def manifest(euro=1, asian=1):
     return {
         "netpack": 1,
         "name": "style_mix",
-        "version": "1.2.0",
+        "version": "1.4.0",
         "author": "sc3kre",
-        "description": "All three building styles grow side by side at random: every European (set e523f3fb) and "
-                       "Asian (set 6523f3d5) building that re-skins a zoned building is added as a NEW building "
-                       "(id + 400000 / id + 1500000) next to the North American one, so nothing stock is replaced. "
-                       "With sc3netmod STYLEPICK (default) the city's building style (Options > City Properties) picks "
-                       "which style new buildings use, and the Mix box grows all three; the North American copies "
-                       "(id + 2600000) let a city saved with a European or Asian style grow North American buildings. "
-                       "The European and Asian civic buildings and parks are added too (never grown): sc3resize lists "
-                       "them in the civic list window as North American / European / Asian looks.",
+        "description": "All three building styles grow side by side at random: every European (set e523f3fb) and Asian (set 6523f3d5) building that re-skins a zoned building is added as a NEW building (id + 400000 / id + 1500000) next to the North American one, so nothing stock is replaced. With sc3netmod STYLEPICK (default) the city's building style (Options > City Properties) picks which style new buildings use, and the Mix box grows all three; the North American copies (id + 2600000) let a city saved with a European or Asian style grow North American buildings. Lot colours (1.3.0): the grown copies' lawns and garden plots are recoloured toward the host style of the same building, so a European copy in a North American city keeps its buildings but loses the dark allotment look; the North American copies get their own art, toned to the European / Asian lawns. The European and Asian civic buildings and parks are added too (never grown): sc3resize lists them in the civic list window as North American / European / Asian looks. Reward looks (1.4.0): the European and Asian versions of the rewards the game's sets re-skin (Mayor's House, City Hall, County Courthouse, Historic Statue, Lighthouse, Performing Arts Center, Stadium, Stock Exchange, GigaMall) are added the same way: sc3resize offers them after a pick in the Rewards list.",
         "style_sets": [
-            {"set": EURO, "offset": 400000, "weight": euro, "civic": True},
-            {"set": ASIAN, "offset": 1500000, "weight": asian, "civic": True},
-            {"set": BASE, "offset": 2600000, "weight": 1, "civic": True},   # task stylepick: North American copies
+            {"set": EURO, "lot_colour": "lawn_soil", "offset": 400000, "weight": euro, "civic": True, "rewards": True},
+            {"set": ASIAN, "lot_colour": "lawn_soil", "offset": 1500000, "weight": asian, "civic": True, "rewards": True},
+            # task stylepick: North American copies
+            {"set": BASE, "lot_colour": "lawn", "offset": 2600000, "weight": 1, "civic": True, "rewards": True},
         ],
     }
 
@@ -52,7 +46,7 @@ def main(argv=None):
     os.makedirs(a.out, exist_ok=True)
     p = os.path.join(a.out, "manifest.json")
     with open(p, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(manifest(a.euro, a.asian), f, indent=2)
+        json.dump(manifest(a.euro, a.asian), f, indent=2, ensure_ascii=False)
         f.write("\n")
     print("wrote " + p)
 

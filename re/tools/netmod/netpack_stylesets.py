@@ -42,6 +42,14 @@ the height differs), checked here for every copy, so the copy is counted, covere
 (CIVIC_REWARD.md 1.1). The "00000000" entry with "civic": true adds the stock exemplar of every civic base another
 civic entry re-skins, so a city whose own set re-skins it can still place the North American look.
 
+Reward looks (task rewardlook 2026-11-25, "rewards": true on an entry): the same for the reward and business-deal
+buildings whose exemplar a set re-skins (REWARD_BASES: the exemplar the City Planner catalog offers, read of the two set
+archives against Advisor-CityPlanner.ini [REWARD_BUILDINGS] / [BUSINESS_DEAL_BUILDINGS], verify/rewardlook/RESULTS.md).
+Copied verbatim at id + offset, no family line, type id and footprint checked like the civic copies, so the City
+Planner, which keys "placed" by type id (SIMADV 0x1000b32a), counts a copy as the reward itself. sc3resize REWARDLOOK
+offers them after a pick in the Rewards list. The "00000000" entry with "rewards": true adds the stock exemplar of every
+reward another "rewards" entry re-skins.
+
 Lot colours (task stylepal 2026-11-24, "lot_colour" on an entry, netpack_lotcolour.py): the grown copies' lot ground
 (lawn, garden soil) recoloured per building toward the host style's art of the same id, at build time. "lawn_soil" on
 a European / Asian entry (host = the North American art), "lawn" on the "00000000" entry (host = the other sets' art;
@@ -66,6 +74,14 @@ KEY_RE = re.compile(rb"Key:\s*(\d+),(\d+),(\d+),(\d+)")
 # the 17 plain ones (SIMGEOM 0x1000a896 -> 0x1000b1a3) and the Marina (0x1000afc0, shore tool). CIVIC_REWARD.md 1.
 CIVIC_BASES = (0xd2, 0x1f41, 0xd3, 0xd1, 0x1f94, 0xd6, 0xf5, 0xd4, 0xd, 0xd5, 0xda, 0xd7, 0x234b, 0x234c, 0x234e,
                0x1f96, 0xed, 0xf8)
+
+# task rewardlook: instances of the stock reward / business deal exemplars a building set re-skins (every reward and deal
+# type of Advisor-CityPlanner.ini, its exemplars in Apps/Res/Occupant, checked against both set archives 2026-11-25):
+# Mayor's House 243 (Asian), City Hall 208 (E, A), County Courthouse 8013 (E, A), Historic Statue 219 (A),
+# Lighthouse 8019 (E, A), Performing Arts Center 8011 (A), Stadium 8020 (E, A; the other type-14600 exemplar 16333 has
+# no set art), Stock Exchange 8017 (E, A), GigaMall 8085 (a business deal, E, A). The other 15 reward / deal types
+# (the four-piece Military Base, University and Theme Park among them) have no set exemplar.
+REWARD_BASES = (243, 208, 8013, 219, 8019, 8011, 8020, 8017, 8085)
 
 
 class StyleError(Exception):
@@ -130,7 +146,7 @@ def _civic_check(np, where, bid, ex, base_ex):
         raise StyleError("%s: civic %d: lot %r differs from the base's %r" % (where, bid, l1, l0))
 
 
-def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, reskinned, pname, civic=()):
+def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, reskinned, pname, civic=(), rewards=()):
     """task stylepick (2026-11-21): set "00000000" = North American copies. For every family member that another set
     of the same manifest re-skins, the BASE exemplar (stock Occupant/*.IXF, verbatim) re-keyed at id + offset. Its
     prop 0x67 names the stock frame table, which no set archive shadows (sets only shadow the TKB1 exemplar at the base
@@ -138,7 +154,7 @@ def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, 
     is European or Asian. No frame tables or pixels are added. sc3netmod STYLEPICK serves these lines only when a city
     with a set skin asks for North American art; with STYLEPICK off it drops them, so the stock mix ratio is kept."""
     exemplars, lines, civ = [], [], []
-    for bid in sorted(civic):                      # task civicstyle: North American civic looks, no family line
+    for bid in sorted(civic) + sorted(rewards):    # task civicstyle / rewardlook: North American looks, no family line
         nid = bid + offset
         if nid in stock_buildings:
             raise StyleError("%s: id %d (%d + offset) already has a stock building exemplar" % (where, nid, bid))
@@ -158,7 +174,7 @@ def _base_entry(stock, fams, stock_buildings, s, where, set_id, offset, weight, 
         raise StyleError("%s: no other set of this manifest re-skins a family member" % where)
     return {"set": set_id, "offset": offset, "weight": weight, "where": where, "_pack": pname,
             "exemplars": exemplars, "tables": [], "pix_group": None, "pixels": [], "lines": lines,
-            "families": sorted({ln["family"] for ln in lines}), "civic": civ}
+            "families": sorted({ln["family"] for ln in lines}), "civic": sorted(civic), "rewards": sorted(rewards)}
 
 
 def compile_entries(np, stock, man, buildfam, stock_buildings):
@@ -169,6 +185,7 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
     seen_sets = set()
     reskinned = {}                                 # task stylepick: base id -> [(family, weight)] any set re-skins
     civic_skinned = set()                          # task civicstyle: civic bases a "civic" entry re-skins
+    reward_skinned = set()                         # task rewardlook: reward bases a "rewards" entry re-skins
     base_spec = None
     for n, s in enumerate(man.get("style_sets", [])):
         where = "%s style_set %d (%s)" % (pname, n + 1, s.get("set"))
@@ -221,6 +238,15 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
                     _civic_check(np, where, bid, set_bld[bid], stock_buildings[bid][1])
                     civ.append(bid)
             civic_skinned.update(civ)
+        rew = []                                   # task rewardlook: reward set exemplars, the same way
+        if s.get("rewards"):
+            for bid in REWARD_BASES:
+                if bid in set_bld and bid not in members:
+                    if bid not in stock_buildings:
+                        raise StyleError("%s: reward base %d has no stock exemplar" % (where, bid))
+                    _civic_check(np, where, bid, set_bld[bid], stock_buildings[bid][1])
+                    rew.append(bid)
+            reward_skinned.update(rew)
         for bid, fl in members.items():            # task stylepick: union over the sets, for the base copies
             have = reskinned.setdefault(bid, [])
             for fw in fl:
@@ -228,7 +254,7 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
                     have.append(fw)
         exemplars, tables, pix_keys, lines = [], {}, [], []
         pix_seen = set()
-        for bid in sorted(members) + civ:
+        for bid in sorted(members) + civ + rew:
             nid = bid + offset
             if nid in stock_buildings:
                 raise StyleError("%s: id %d (%d + offset) already has a stock building exemplar" % (where, nid, bid))
@@ -260,7 +286,7 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
         out.append({"set": set_id, "offset": offset, "weight": weight, "where": where, "_pack": pname,
                     "exemplars": exemplars, "tables": [(k[1], k[2], k[0], p) for k, p in sorted(tables.items())],
                     "pix_group": pix_group, "pixels": pix, "lines": lines,
-                    "families": sorted({ln["family"] for ln in lines}), "civic": civ,
+                    "families": sorted({ln["family"] for ln in lines}), "civic": civ, "rewards": rew,
                     "_lot": {"mode": lc, "idx": idx, "set_bld": set_bld, "members": sorted(members)}})
     if base_spec:
         n, s, where = base_spec
@@ -270,7 +296,8 @@ def compile_entries(np, stock, man, buildfam, stock_buildings):
         if not isinstance(weight, int) or weight < 1:
             raise StyleError("%s: weight must be a positive integer (0 drops the line, SIMGEOM 0x10001250)" % where)
         out.append(_base_entry(stock, fams, stock_buildings, s, where, 0, offset, weight, reskinned, pname,
-                               sorted(civic_skinned) if s.get("civic") else ()))
+                               sorted(civic_skinned) if s.get("civic") else (),
+                               sorted(reward_skinned) if s.get("rewards") else ()))
         out[-1]["_lot"] = {"mode": s.get("lot_colour"), "members": sorted(reskinned)}
     if any(e["_lot"]["mode"] for e in out):
         _lot_colour(np, stock, stock_buildings, out)

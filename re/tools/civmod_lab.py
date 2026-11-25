@@ -25,6 +25,12 @@ hook on a private WM_APP message (the place_direct.py pattern), with exceptions:
   py -3.12 re/tools/civmod_lab.py move X Y                  posted mouse move
   py -3.12 re/tools/civmod_lab.py key VK                    posted key
   py -3.12 re/tools/civmod_lab.py unpause                   sc3wait.run_after_load
+  py -3.12 re/tools/civmod_lab.py unlock [TYPE ...]         (rewardlook) set "unlocked" (+0x4c) on the City Planner's
+                                                            reward items (map advisor+0xb0, item vtable SIMADV
+                                                            0x10030614) that are not placed, so Rewards and
+                                                            Opportunities (hotkey 0x3b) lists them; no TYPE = every
+                                                            reward row (deals untouched). The advisor is found by its
+                                                            vtable SIMADV 0x1003056c (ctor 0x10006656) in rw- memory.
 """
 import argparse
 import json
@@ -121,6 +127,35 @@ function run(job) {
     }
     return {job: job, hits: hits, cells: nx + 'x' + nz};
   }
+  if (job.kind === 'unlock') {
+    var adv = Process.getModuleByName('SIMADV.DLL').base, vt = adv.add(0x3056c), ivt = adv.add(0x30614);
+    var pat = [0, 8, 16, 24].map(function (s) { return ('0' + ((vt.toUInt32() >>> s) & 0xff).toString(16)).slice(-2); }).join(' ');
+    var cands = [];
+    Process.enumerateRanges('rw-').forEach(function (r) {
+      if (r.size > 0x10000000) return;
+      try { Memory.scanSync(r.base, r.size, pat).forEach(function (m) { if (m.address.and(3).toInt32() === 0) cands.push(m.address); }); } catch (e) {}
+    });
+    var out = {job: job, candidates: cands.length, items: []};
+    cands.forEach(function (a) {
+      var h, root;
+      try { h = a.add(0xb0).readPointer(); root = h.add(4).readPointer(); } catch (e) { return; }
+      var stack = [root], seen = {}, n = 0;
+      while (stack.length && n < 200) {
+        var nd = stack.pop();
+        if (nd.isNull() || nd.equals(h) || seen[nd]) continue;
+        seen[nd] = 1; n++;
+        var it, ty;
+        try { ty = nd.add(0x10).readU32(); it = nd.add(0x14).readPointer(); stack.push(nd.add(8).readPointer()); stack.push(nd.add(0xc).readPointer()); } catch (e) { continue; }
+        try { if (!it.readPointer().equals(ivt)) continue; } catch (e) { continue; }
+        var deal = it.add(0x4f).readU8(), placed = it.add(0x4d).readU8(), was = it.add(0x4c).readU8();
+        var want = job.types && job.types.length ? job.types.indexOf(ty) >= 0 : !deal;
+        if (want && !placed) it.add(0x4c).writeU8(1);
+        out.items.push({adv: '' + a, type: ty, deal: deal, placed: placed, unlocked_before: was, unlocked: it.add(0x4c).readU8(),
+                        key: key3(it.add(0x54))});
+      }
+    });
+    return out;
+  }
   throw new Error('unknown job ' + job.kind);
 }
 Interceptor.attach(Process.getModuleByName('USER32.dll').getExportByName('DispatchMessageA'), {
@@ -169,7 +204,7 @@ def frida_job(job, timeout=20.0, linger=0.0):
 
 def main(argv):
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["hotkey", "command", "empty", "tool", "find", "dump", "click", "move", "key", "unpause"])
+    ap.add_argument("cmd", choices=["hotkey", "command", "empty", "tool", "find", "dump", "click", "move", "key", "unpause", "unlock"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--fd", default=os.environ.get("VDSCROLL_FD", "."))
     ap.add_argument("--right", action="store_true")
@@ -203,6 +238,8 @@ def main(argv):
         sc3io.move(sc3io.game_hwnd(), int(a.args[0]), int(a.args[1]))
     elif a.cmd == "key":
         sc3io.key(sc3io.game_hwnd(), int(a.args[0], 0))
+    elif a.cmd == "unlock":
+        print(json.dumps(frida_job({"kind": "unlock", "types": [int(v, 0) for v in a.args]}, timeout=120)))
     elif a.cmd == "unpause":
         import sc3wait
         sc3wait.run_after_load(sc3io.game_pid())

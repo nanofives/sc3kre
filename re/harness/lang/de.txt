@@ -792,8 +792,8 @@ resize.cs_eu=Europäisch
 resize.cs_na=Nordamerikanisch
 # en: %s: %s
 resize.cs_row=%s: %s
-# en: Civic buildings: game styles
-resize.mt_civstyle=Stadtbauten: Spielstile
+# en: Civic + rewards: game styles
+resize.mt_civstyle=Bauten + Belohnungen: Stile
 
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: Asia
@@ -810,3 +810,9 @@ resize.rotplace_label=Drehung %d Grad (TAB)
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: TAB rotates when placing
 resize.mt_rotplace=Mit TAB beim Platzieren drehen
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: %s style, the game's own art. The same reward, with the same effect.
+resize.rl_desc_look=Stil %s, mit der Grafik des Spiels. Dieselbe Belohnung mit derselben Wirkung.
+# en: The game's own reward, in this city's style (%s).
+resize.rl_desc_stock=Die Originalbelohnung des Spiels im Stil dieser Stadt (%s).

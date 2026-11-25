@@ -598,7 +598,7 @@ resize.mt_churn=Building renewal
 # sc3resize.c
 resize.mt_city=Now, in this city (on OK, no restart)
 # sc3resize.c
-resize.mt_civstyle=Civic buildings: game styles
+resize.mt_civstyle=Civic + rewards: game styles
 # sc3resize.c
 resize.mt_civvar=Civic buildings: more looks
 # sc3resize.c
@@ -697,6 +697,10 @@ resize.picker_nothing_here=Picker: nothing to pick here
 resize.picker_one_per_city=Picker: only one per city
 # sc3resize.c
 resize.push_camera_when_building=Push camera when building
+# sc3resize_civic.c
+resize.rl_desc_look=%s style, the game's own art. The same reward, with the same effect.
+# sc3resize_civic.c
+resize.rl_desc_stock=The game's own reward, in this city's style (%s).
 # sc3resize_rotplace.c
 resize.rotplace_label=Rotation %d degrees (TAB)
 # sc3resize.c
