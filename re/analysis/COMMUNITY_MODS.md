@@ -81,3 +81,13 @@ player's own files**, which also lets the Spanish texts keep their language. Thi
 
 Not done: shipping (the mods release and the GitHub README need the new parts and the three install tools), owner hand
 tests by ear and eye, cityzoom x2/x3 with the Apache at a bigger window.
+
+## Natural World on a city whose water table sits above the land (task stcompat 2026-11-25)
+
+Simtropolis report: the whole land drawn red/magenta speckle on dark blue, water plain. Cause of the look: cells whose
+water-surface table (SIMDIRT renderer `DAT_10025bac+0x20`) is above the ground (`+0x18`) are coloured by the water
+function `0x10013fab` (PALWATER row = depth) and rastered with the land noise; Natural World's PALWATER rows from about
+30 down have red 16 or less (4 at the deepest), the noise subtracts up to about 16 per channel, and the byte wraps to 255.
+Stock PALWATER keeps red at 20 or more down to row 128 and did not wrap in the same test: the cells are plain dark blue. Reproduced by raising the table 40 over ground on a 21x21 box, save + reload:
+same colours as the player's picture (`verify/stcompat/RESULTS.md`). What raised the table in the player's city is open (needs
+their save). For the author: keeping every PALWATER / PALEDGE channel at 16 or more would stop the wrap.
