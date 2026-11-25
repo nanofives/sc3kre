@@ -87,6 +87,12 @@ static const DWORD k_cs_base[CV_MAXB] = { 0xd2, 0x1f41, 0xd3, 0xd1, 0x1f94, 0xd6
 typedef struct { DWORD grp, inst; int style; int v; } CV_LOOK;   /* style 0 none, 1 NA, 2 E, 3 A; v = bldimport index + 1 */
 typedef struct { DWORD base; int known, hE, hA, hN; DWORD lgrp, linst; int cyc; } CS_STATE;
 static CS_STATE g_cs[CV_MAXB];
+/* REWARDLOOK (child rewardlook, 2026-11-25): the reward / business deal exemplars a building set re-skins, the
+   instances netpack_stylesets.REWARD_BASES copies (style_mix 1.4.0 "rewards": true). Same look list as a civic base. */
+#define RWL_NB 9
+static const DWORD k_rwl_base[RWL_NB] = { 243, 208, 8013, 219, 8019, 8011, 8020, 8017, 8085 };
+static CS_STATE g_rwl[RWL_NB];
+static int g_rewardlook = 1;
 #define RW_TYPE_LO  38000        /* bldimport reward type ids = their ids (bldimport.py ID_FIRST..ID_LAST) */
 #define RW_TYPE_HI  38999
 #define RW_MAX      64
@@ -222,6 +228,7 @@ static int cs_has(void *cache, DWORD inst) {
 static CS_STATE *cs_state(DWORD base) {
     int i;
     for (i = 0; i < CV_MAXB; i++) if (k_cs_base[i] == base) { g_cs[i].base = base; return &g_cs[i]; }
+    if (g_rewardlook) for (i = 0; i < RWL_NB; i++) if (k_rwl_base[i] == base) { g_rwl[i].base = base; return &g_rwl[i]; }
     return NULL;
 }
 
@@ -481,8 +488,9 @@ static void cd_tick(void) {
 }
 
 /* the list window for one base and its looks L[0..n-1] (L[0] = original): index picked, -1 = closed / Esc / failed.
-   Game thread, inside GetCommand. */
-static int cd_dialog(DWORD base, const CV_LOOK *L, int n) {
+   Game thread, inside GetCommand. reward = 1 (REWARDLOOK): inside the Rewards list's own command, which already holds
+   the sim pause (or NOPAUSE skipped it on purpose), so no pause of our own; reward wording in the description. */
+static int cd_dialog(DWORD base, const CV_LOOK *L, int n, int reward) {
     BYTE *S = (BYTE *)GetModuleHandleA("SIMUI.DLL"), *obj;
     void *city = NULL, *gz, *cat = NULL, *win = NULL, *wm, *cache, *layer, *bud = NULL, *mw;
     DWORD key[3], *k;
@@ -495,7 +503,7 @@ static int cd_dialog(DWORD base, const CV_LOOK *L, int n) {
     __try {
         city = (void *)((CD_F0)(S + 0x8e7da))();
         if (!city) { logf("CIVDLG> no city: window not opened"); return -1; }
-        ho_v(city, 0x21c, 0, 0, 0, 0, 0, 0); paused = 1;                       /* SimHiddenPause, as 0x10011919 */
+        if (!reward) { ho_v(city, 0x21c, 0, 0, 0, 0, 0, 0); paused = 1; }     /* SimHiddenPause, as 0x10011919 */
         gz = (void *)((CD_F0)(S + 0x8489d))();
         if (!gz || !(ho_v(gz, 0xc, 3, 0xe3091435, 0xa308d9ad, (DWORD)&cat, 0, 0) & 0xff) || !cat) {
             logf("CIVDLG> catalog class 0xe3091435 not created"); goto out; }
@@ -541,7 +549,13 @@ static int cd_dialog(DWORD base, const CV_LOOK *L, int n) {
             }
             wsprintfA(t, SC3TR(es, "resize.cd_lookn", "Aspecto %d de %d", "Look %d of %d"), i + 1, n);
             cd_setstr(item, 0x22f291ae, t);
-            if (L[i].style) {
+            if (L[i].style && reward) {                                         /* REWARDLOOK */
+                wsprintfA(t, i ? SC3TR(es, "resize.rl_desc_look", "Estilo %s, con el arte del propio juego. Es la misma recompensa, con el mismo efecto.",
+                                       "%s style, the game's own art. The same reward, with the same effect.")
+                               : SC3TR(es, "resize.rl_desc_stock", "La recompensa original del juego, en el estilo de esta ciudad (%s).",
+                                       "The game's own reward, in this city's style (%s)."), cs_word(L[i].style));
+                cd_setstr(item, 0x2ebe76b, t);
+            } else if (L[i].style) {
                 wsprintfA(t, i ? SC3TR(es, "resize.cs_desc_look", "Estilo %s, con el arte del propio juego. Da el mismo servicio y cuesta lo mismo que el original.",
                                        "%s style, the game's own art. Same service and same price as the original.")
                                : SC3TR(es, "resize.cs_desc_stock", "El edificio original del juego, en el estilo de esta ciudad (%s).",
@@ -592,7 +606,7 @@ static int cd_dialog(DWORD base, const CV_LOOK *L, int n) {
     rel:
         ho_v(cat, 8, 0, 0, 0, 0, 0, 0);
     out:
-        ho_v(city, 0x220, 0, 0, 0, 0, 0, 0);                                     /* SimHiddenUnpause */
+        if (paused) ho_v(city, 0x220, 0, 0, 0, 0, 0, 0);                         /* SimHiddenUnpause */
         paused = 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         g_cd_sel_obj = NULL;
@@ -616,7 +630,7 @@ static BYTE __fastcall cd_getcmd(void *self, void *edx, DWORD cls, DWORD riid, v
             n = cv_looks(base, L);
             if (n < 2) break;                             /* no looks: stock */
             g_cd_busy = 1;
-            pick = cd_dialog(base, L, n);
+            pick = cd_dialog(base, L, n, 0);
             g_cd_busy = 0;
             if (pick < 0) { if (out) *out = NULL; return 0; }
             g_cd_force = 1; g_cd_forcebase = base; g_cd_fgrp = L[pick].grp; g_cd_finst = L[pick].inst;
@@ -637,6 +651,107 @@ static void cd_install(BYTE *geom) {
     if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) { logf("CIVDLG> SIMGEOM+0x2920c not writable: off"); g_civdlg = 0; return; }
     InterlockedExchange((LONG volatile *)slot, (LONG)(DWORD)cd_getcmd);   /* no restore (task onramp) */
     logf("CIVDLG> on: a civic button with looks opens the list window (stock catalog dialog, SIMGEOM+0x2920c)");
+}
+
+/* ================= REWARDLOOK (child rewardlook, 2026-11-25; evidence verify/rewardlook/RESULTS.md,
+ * re/analysis/CIVIC_REWARD.md section 9). Simtropolis: "an easy texture swap screen" so rewards such as Historic Statue,
+ * Lighthouse, Mayor's House, County Courthouse and City Hall can be built in the North American, European or Asian look
+ * whatever the city's building set. The sets' reward exemplars are copied by style_mix 1.4.0 ("rewards": true,
+ * netpack_stylesets.REWARD_BASES) at base + 400000 / + 1500000, the stock one at + 2600000, exactly as the civic looks,
+ * same type id and footprint. The City Planner keys "placed" by the occupant's type id (SIMADV 0x1000b32a) and its save
+ * record by the item's own key (0x100073b3), so a copy counts as the reward itself and "already built" works.
+ *
+ * Where [CONFIRMED @ SIMUI 0x10011919, disassembly]: the Rewards list is the stock catalog dialog run by its game
+ * command (Execute -> 0x10011919). After DoModalWin and WasOK it calls GetSelected(&attrib) at 0x10011a56 (iface vtable
+ * 0x100ab4f4 slot +0x1c = 0x1006959c, return address 0x10011a59), then the building layer +0x50(attrib, one-shot 1, 0)
+ * at 0x10011a8f, so the stock building tool for that exemplar, then Release(attrib), and only then DestroyWindow. The
+ * vtable slot now points at rwl_getsel: the stock GetSelected, then, for a call from 0x10011a59 in the Rewards mode
+ * (object+0x24 = 0x62e92553, or the business deal mode 0xe2e92527) whose exemplar is one of k_rwl_base with a copy in
+ * the attrib cache: the Rewards window is hidden (HideWindow vt+0xfc, still destroyed by the stock code), the civic
+ * list window opens with the same look list (cv_looks: the original first, in the city's style, then the other
+ * styles, then any bldimport looks listed for that base), and the pick's attrib (cache vt+0x18) replaces the stock one.
+ * Esc / close -> the attrib is released and *out = NULL, which 0x10011a5c tests: no tool, as Esc in the Rewards list.
+ * The tool, site check, price, one-shot rule, ROTPLACE (TAB), RELOCATE (Move) and the cost label run unchanged.
+ * Switch: sc3resize.ini [buildings] rewardlooks=0 / SC3RESIZE_REWARDLOOK=0, and it needs CIVSTYLE on (the mods page row
+ * "Civicos y premios: estilos" = SC3RESIZE_CIVSTYLE turns both off). Off = the vtable slot is not touched. */
+#define RWL_MODE_REWARDS 0x62e92553
+#define RWL_MODE_DEALS   0xe2e92527
+static DWORD g_rwl_getsel;      /* SIMUI+0x6959c, the stock GetSelected */
+static DWORD g_rwl_ret;         /* SIMUI+0x11a59, the return address of 0x10011919's GetSelected call */
+static int   g_rwl_busy;
+
+/* *out = the stock pick (AddRef'd). Game thread, inside the Rewards list's Execute, after its modal loop. */
+static void rwl_pick(BYTE *cat, void **out) {
+    CV_LOOK L[CV_MAXL];
+    BYTE *S = (BYTE *)GetModuleHandleA("SIMUI.DLL");
+    DWORD *k, base, key[3];
+    void *att = *out, *win, *cache, *na = NULL;
+    CS_STATE *st;
+    int i, n, res;
+    k = (DWORD *)ho_v(att, 0x14, 0, 0, 0, 0, 0, 0);                            /* Key */
+    if (!k || IsBadReadPtr(k, 12) || k[0] != 0x207EDC0E || k[1] != 0x57E) return;
+    base = k[2];
+    for (i = 0; i < RWL_NB; i++) if (k_rwl_base[i] == base) break;
+    if (i == RWL_NB) { logf("REWARDLOOK> reward key 0x%08lX 0x%08lX: no set look (stock tool)", k[1], k[2]); return; }
+    n = cv_looks(base, L);
+    if (n < 2) { logf("REWARDLOOK> reward 0x%lX: no look copies in the attrib cache (style_mix 1.4.0 not installed?): stock tool", base); return; }
+    win = (void *)ho_v(cat, 0x14, 0, 0, 0, 0, 0, 0);                           /* the Rewards window, destroyed after us */
+    if (win && !IsBadReadPtr(win, 4)) ho_v(win, 0xfc, 0, 0, 0, 0, 0, 0);        /* HideWindow */
+    g_rwl_busy = 1;
+    res = cd_dialog(base, L, n, 1);
+    g_rwl_busy = 0;
+    if (res < 0) {
+        ho_v(att, 8, 0, 0, 0, 0, 0, 0); *out = NULL;
+        logf("REWARDLOOK> reward 0x%lX: look window closed without a pick: no tool", base);
+        return;
+    }
+    if ((st = cs_state(base))) { st->lgrp = L[res].grp; st->linst = L[res].inst; }   /* selected next time */
+    if (res == 0) { logf("REWARDLOOK> reward 0x%lX: the original (stock attrib)", base); return; }
+    key[0] = 0x207EDC0E; key[1] = L[res].grp; key[2] = L[res].inst;
+    cache = S ? (void *)((CD_F0)(S + 0x8e985))() : NULL;
+    if (!cache || !(ho_v(cache, 0x18, 2, (DWORD)key, (DWORD)&na, 0, 0, 0) & 0xff) || !na) {
+        logf("REWARDLOOK> reward 0x%lX: key 0x%08lX 0x%08lX not in the attrib cache: the original", base, key[1], key[2]);
+        return;
+    }
+    ho_v(att, 8, 0, 0, 0, 0, 0, 0);
+    *out = na;
+    {   const char *nm = cv_lname(base, &L[res]);
+        logf("REWARDLOOK> reward 0x%lX: look %d of %d, %s, key 0x%08lX 0x%08lX 0x%08lX -> building layer +0x50", base,
+             res + 1, n, nm ? nm : "?", key[0], key[1], key[2]); }
+}
+
+/* SIMUI catalog iface vtable 0x100ab4f4 slot +0x1c (thiscall: void **out) */
+static BYTE __fastcall rwl_getsel(BYTE *cat, void *edx, void **out) {
+    DWORD a[1], r, ra = (DWORD)_ReturnAddress(), mode;
+    (void)edx;
+    a[0] = (DWORD)out;
+    r = rz_thiscall_ret(cat, (void *)g_rwl_getsel, a, 1);
+    if (ra == g_rwl_ret && !g_rwl_busy && !g_cd_busy && out) {
+        __try {
+            mode = *(DWORD *)(cat + 0xc);                                         /* object (cat - 0x18) + 0x24 */
+            if (*out && (mode == RWL_MODE_REWARDS || mode == RWL_MODE_DEALS)) rwl_pick(cat, out);
+        } __except (EXCEPTION_EXECUTE_HANDLER) { g_rwl_busy = 0; logf("REWARDLOOK> fault 0x%08lX after the Rewards pick", GetExceptionCode()); }
+    }
+    return (BYTE)r;
+}
+
+static void rwl_install(void) {
+    BYTE *S = NULL;
+    DWORD *slot, old;
+    int st = 0;
+    if (!g_rewardlook) { logf("REWARDLOOK> off (sc3resize.ini [buildings] rewardlooks=0 or SC3RESIZE_REWARDLOOK=0): Rewards list stock"); return; }
+    if (!g_civstyle) { logf("REWARDLOOK> off: CIVSTYLE is off (the style looks come from it): Rewards list stock"); g_rewardlook = 0; return; }
+    while (st++ < 300 && !(S = (BYTE *)GetModuleHandleA("SIMUI.DLL"))) Sleep(100);
+    if (!S) { logf("REWARDLOOK> SIMUI.DLL not loaded: off"); g_rewardlook = 0; return; }
+    slot = (DWORD *)(S + 0xab510);
+    if (*slot != (DWORD)S + 0x6959c || *(DWORD *)(S + 0xab4f4 + 0x14) != (DWORD)S + 0x67513 ||
+        memcmp(S + 0x11a53, "\x8b\x01\x52\xff\x50\x1c", 6)) {
+        logf("REWARDLOOK> SIMUI catalog vtable / 0x10011a53 differ from shipped: off"); g_rewardlook = 0; return; }
+    g_rwl_getsel = (DWORD)S + 0x6959c;
+    g_rwl_ret = (DWORD)S + 0x11a59;
+    if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) { logf("REWARDLOOK> SIMUI+0xab510 not writable: off"); g_rewardlook = 0; return; }
+    InterlockedExchange((LONG volatile *)slot, (LONG)(DWORD)rwl_getsel);   /* no restore (task onramp) */
+    logf("REWARDLOOK> on: a Rewards pick with set looks opens the look list (SIMUI catalog GetSelected +0xab510, %d reward exemplars)", RWL_NB);
 }
 
 static void cv_install(void) {
@@ -685,6 +800,7 @@ static void cv_install(void) {
          g_civstyle ? "on (style_mix copies +400000 / +1500000 / +2600000 found in the attrib cache at the first press)" : "off",
          g_cv_ctor_m ? ", Marina +0xafc0" : "");
     cd_install((BYTE *)g);   /* CIVDLG: the list window instead of the cycle */
+    rwl_install();           /* REWARDLOOK: the same window after a pick in the Rewards list */
 }
 
 /* ------------------------------------------------------------------------------------------- NEWREWARD */

@@ -596,3 +596,64 @@ given (rewards have their own type, so nothing else matches; landmarks: the same
   crime map (178 cyan px, 0 new); save footprint 2x3; reload = the same occupant, sprite flag 0x400 on all 6 cells;
   stock game (-Stock) loads it as a 2x3 occupant drawn as 2x2 + bare ground; plugin removed: empty 2x3 lot, no
   stand-in station.
+
+## 9. Built: reward looks from the game's own styles (rewardlook, round 2026-11-25)
+
+Simtropolis: "an easy texture swap screen" for Historic Statue, Lighthouse, Mayor's House, County Courthouse and City
+Hall. Code: `rwl_*` in `re/harness/src/sc3resize_civic.c` (REWARDLOOK), data: netpack `style_mix` 1.4.0
+(`"rewards": true`, `netpack_stylesets.REWARD_BASES`). Measurements: `verify/rewardlook/RESULTS.md`.
+
+### 9.1 Which rewards have set art (offline, data read of every reward and deal row)
+
+| reward (type) | exemplar | European e523f3fb | Asian 6523f3d5 |
+|---|---|---|---|
+| Mayor's House 10110 | 243 | no | yes |
+| City Hall 10120 | 208 | yes | yes |
+| County Courthouse 13005 | 8013 | yes | yes |
+| Historic Statue 14150 | 219 | no | yes |
+| Lighthouse 14550 | 8019 | yes | yes |
+| Performing Arts Center 14170 | 8011 | no | yes |
+| Stadium 14600 | 8020 (16333, the other type-14600 exemplar, has none) | yes | yes |
+| Stock Exchange 1002 | 8017 | yes | yes |
+| GigaMall (deal) 19002 | 8085 | yes | yes |
+
+The other 15 reward and deal types have no set exemplar, the three 4-piece rewards among them. Type id and footprint
+of every set exemplar equal the base's. The catalog item's exemplar is the first cache entry of its type (2.1); for
+Stadium that is 8020 in this build (item key read back in game).
+
+### 9.2 Where the pick is caught [CONFIRMED @ SIMUI 0x10011919, disassembly + game]
+
+The Rewards list is the catalog dialog (6.1) run by its command's Execute `0x10011919`. After DoModalWin and WasOK:
+
+```
+0x10011a53  mov eax,[ecx]; push edx; call [eax+0x1c]   GetSelected(&attrib), iface vtable 0x100ab4f4 slot +0x1c = 0x1006959c
+0x10011a59  cmp [ebp-8], ebx; je 0x10011a9a            no attrib: no tool
+0x10011a5e  mode 0x22e92581 / 0x62e92553 -> one-shot 1
+0x10011a8f  call [edx+0x50]                            building layer +0x50(attrib, one-shot, 0)
+0x10011a97  call [eax+8]                               Release(attrib)
+0x10011aa9  wm vt+0x28 DestroyWindow                   the window is destroyed only here
+```
+
+So the slot is patched (`.rdata` `0x100ab510`), not code: `rwl_getsel` runs the stock GetSelected, and acts only when
+its return address is `0x10011a59` and the object's mode (iface + 0xc = object + 0x24) is Rewards `0x62e92553` or
+deals `0xe2e92527`. For an exemplar of 9.1 with copies in the attrib cache it hides the Rewards window (cIGZWin
+HideWindow vt+0xfc), runs the civic look window (`cd_dialog`, 6.1) with `cv_looks` (7.3, a reward base is looked up
+like a civic base), and swaps `*out` for the pick's attrib (cache vt+0x18, AddRef'd; the stock one Released). Esc
+gives `*out = NULL` and the stock `je` at `0x10011a5c` arms nothing. The nested window runs without a pause of its own:
+the Rewards command already holds one (or NOPAUSE skipped it by return address). CIVDLG's own dialog also calls
+GetSelected through this slot; the return-address test passes it through.
+
+### 9.3 Why the rest needs nothing
+
+- "Already built": `0x1000b32a` marks the item placed by the occupant's TYPE id; a copy keeps the type (measured: all
+  seven placed looks set `placed 1`, Undo of a look set it back to 0).
+- Save: the City Planner record keys the item's own (stock) key (2.3), not the occupant's; the occupant saves the
+  look key. Without the overlay the load stand-in (8.2, square of side X of the saved type) returns the stock reward:
+  all 9 rewards are square (1, 2, 3, 4, 5), measured for 7 in two cities.
+- Price: budget vt+0x54(type) (Stadium look refused at §75,000 with §19,669 in the city, same as the original).
+- ROTPLACE, RELOCATE ("Mover": `rl_movable` by type) and sc3undo work on the stock building tool and see only a key.
+
+### 9.4 Lab trap
+
+The Frida DefOnHotKey job for 0x3b never returned while its Rewards list ran, and stopping the helper while attached
+took the game down (no VEH line). Use the real button (civic flyout, "Premios y oportunidades").

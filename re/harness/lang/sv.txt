@@ -792,8 +792,8 @@ resize.cs_eu=Europeisk
 resize.cs_na=Nordamerikansk
 # en: %s: %s
 resize.cs_row=%s: %s
-# en: Civic buildings: game styles
-resize.mt_civstyle=Offentliga byggnader: spelstilar
+# en: Civic + rewards: game styles
+resize.mt_civstyle=Offentligt + belöningar: stilar
 
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: Asia
@@ -810,3 +810,9 @@ resize.rotplace_label=Rotation %d grader (TAB)
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: TAB rotates when placing
 resize.mt_rotplace=Rotera med TAB vid placering
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: %s style, the game's own art. The same reward, with the same effect.
+resize.rl_desc_look=Stil %s, med spelets egen grafik. Samma belöning, med samma effekt.
+# en: The game's own reward, in this city's style (%s).
+resize.rl_desc_stock=Spelets originalbelöning, i den här stadens stil (%s).
