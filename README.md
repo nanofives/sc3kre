@@ -86,6 +86,9 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 ### Building tools (sc3resize)
 - "Move" button in the query window of rewards, business deals and landmarks, the ones you imported included: pick
   the building up and place it somewhere else (half its price plus bulldozing and levelling).
+- Turn a building while you place it: TAB turns a plopped building on a square lot (the Mayor's House, City Hall and
+  others) a quarter turn, Shift+TAB turns it back, and the cost label shows the angle (mods page row "TAB rotates when
+  placing"). The four-piece rewards stay as they are, and the lighting does not turn. "Move" keeps a building's turn.
 - Civic looks and new rewards from the [building importer](https://nanofives.github.io/sc3kre/buildings/): a civic
   button with looks opens a list of the original building and your looks, with picture and price, and builds the
   one you pick. Your rewards unlock at the population and year you set.
@@ -182,6 +185,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 ### Landfills (sc3landfill)
 - Each zone sends its garbage to the nearest landfill with room, and every landfill keeps its own pile. The query
   window shows how full one is, with an "Empty" button that empties it for a fee.
+- A landfill keeps taking garbage after you load another city or start a new one in the same game. Before
+  sc3mods-2026-11-25 it could stop with room left, and garbage piled up on the lots until the game was restarted.
 
 ### Restore buildings (sc3restore)
 - Buildings that age (power plants, water treatment, incinerators, recycling) get a "Restore" button in their query
