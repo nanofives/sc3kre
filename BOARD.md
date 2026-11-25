@@ -15,12 +15,13 @@ and to the tracker: 5,895 exe C0 -> C1, 300 rows added, 7,858 DLL C0 -> C1 by id
 are `<addr>_<name>.c`, old exports in `*_pre_cv`), and 42 wrong session names were fixed by an audit. Detail and trust limits:
 `re/analysis/CV_SYMBOLS.md`. Check there, or `re/tools/vtname.py`, before naming an exe function or a `vt+0x..` slot by hand.
 
-## Current state, 2026-11-23 (read this first)
+## Current state, 2026-11-24 (read this first)
 
-**Latest published release: `sc3mods-2026-11-21`** (GitHub + LAN, target `08c0357`, 3,680 files,
-`verify/mods_release_1121/RESULTS.md`). stage/release = 2026-11-21 (old copy `stage/release_1120_old`). Releases since
-10-27d each have a record in `verify/mods_release_<mmdd>/RESULTS.md` (11-01 to 11-21, 27 of them). Orchestrator
-handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round briefs: `re/sessions/ROUND_2026-11-*.md`.
+**Latest published release: `sc3mods-2026-11-24`** (GitHub + LAN, target `f31ea5da`, 3,681 files,
+`verify/mods_release_1124/RESULTS.md`): sc3bigcity GRIDCAP (power / water across 1024 maps), sc3simrun LOTGROW
+(non-square zoned buildings), style_mix 1.3.0 (lawns that match the city). stage/release = 2026-11-24 (old copy
+`stage/release_1121_old`). Releases since 10-27d each have a record in `verify/mods_release_<mmdd>/RESULTS.md`.
+Orchestrator handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21,24}_orchestrator.md`. Round briefs: `re/sessions/ROUND_2026-11-*.md`.
 
 **What landed in November** (detail in each `verify/<stream>/RESULTS.md` and `re/sessions/STATUS_<stream>.md`):
 
@@ -31,6 +32,7 @@ handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round bri
 | buildings | style mix switch, building importer page (`docs/buildings/importer`) + guide, .bld render kit, civic looks + new rewards + civic list window, non-square lots up to 5x5 (LOTRECT), SC4-like style pick (STYLEPICK, "new buildings only" + Mix), civic looks per style (style_mix 1.2.0) |
 | SimCity 4 | buildings from SC4 downloads and from the player's SC4 install: civic, parks, rewards, landmarks (keep SC4 lot), opt-in shops / offices / industry / farms, SC4 props and lot textures (on by default), ground fix, tree black patches fixed (sc4trees). Formats: `re/analysis/SC4_FORMATS.md` |
 | compatibility | community mods (Apache Flyover, Civic Deals, Natural World), GOG / Steam 2.0.949, overlay merge (OVMERGE: player edits of the 34 overlay-shadowed stock files) |
+| 2026-11-23/24 (importer, live on Pages) | baked_sharp default, SC4 civic looks on their own lot, edge-on faces + fire station hand fix + S3D vertex formats (firedist), lamp slabs and shards (sc4art), dark tones on props (darktone), Building Architect props on OBJ lots (objprops), non-square growables in the importer (lotgrowb) |
 | tooling | building suite modes (SUITE_CHANGED / normal / SUITE_DEEP), sc3dev workspaces, retail CodeView symbols |
 
 **Owner calls answered 2026-11-23:**
@@ -47,9 +49,11 @@ handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round bri
 - stylepick: one GZGraphicD+0x18C7A crash (NULL surface Blt) in 7 New City windows after a Preferences visit, not
   reproduced since (4 tries, plus 11 windows in the 11-21 smoke test). `[UNCERTAIN]`.
 - Owner hand test: a Marina civic look placed on a shore (`STATUS_civicstyle.md`).
-- firedist (2026-11-23): Large Fire Station smear = SC4 view mesh (bay wall at the eave, faces seen edge-on), not the
-  civlot turn (`verify/firedist/RESULTS.md`). Owner: build the per-face rule (edge-on faces from the head-on view) and
-  investigate Large Medical Center cars at mid-wall + Soccer Field without markings. In progress.
+- 2026-11-24 smoke test: one extra first-chance fault on the 1024 load (`KERNEL32+0x2D2D0` called from
+  `sc3resize+0x49C77`), game ran on. Function not identified `[UNCERTAIN]` (`verify/mods_release_1124/RESULTS.md`).
+- Known limits accepted by the owner: SC4 Alamo wall rubble (camera limit), Soccer Field pitch lines cleared with the lawn.
+- lotgrowb not measured: the save opened in the stock game, redevelopment over a non-square building
+  (`verify/lotgrowb/RESULTS.md`).
 - New crash, seen once (forumshots 2026-11-23): Sacramento, churn anarchy 5000, speed 4, 105 s after a City Properties
   style pick, `0xC0000005` at STRTSIM.DLL+0x94DB (read of 0, main thread). Stack in `re/sessions/STATUS_forumshots.md`. Not reproduced.
 - civlot (merged 2026-11-23): SC4 civic looks on their own lot. Not checked: whether a non-square landmark wider than
@@ -58,8 +62,9 @@ handoffs: `re/sessions/HANDOFF_2026-11-{15,18,20,21}_orchestrator.md`. Round bri
 - SC4: commercial / industrial packs barely tested, 94 animated prop rows (type 0x29A5D1EC) unread, 21 SC4 parks /
   rewards without their own model, Large High School skipped, owner's real folder pick of the SC4 install untested.
 - Civic list window shows a fixed line, not the importer's description of the look.
-- Simtropolis: reply to the 2026-11-21 player (pop-ups, farm mod, styles) not posted; ask which farm mod and which
-  files it edits (`STATUS_overlaymerge.md`). Drafts in `.happy-share/cmwgg6bdp01jhmz1b3kp9os44/`.
+- Simtropolis: the post for 2026-11-24 is drafted, not posted (owner posts):
+  `.happy-share/cmwgg6bdp01jhmz1b3kp9os44/simtropolis_post_1123.html` + `_links.html`, generator
+  `verify/showcase/site/make_st_post_1123.py`. The 1024 power / water player reply: `verify/pw1024/RESULTS.md`.
 - The older owner hand-test list in the 2026-10-23 section below still stands where its item was never run.
 
 ## (historical) State 2026-10-23
