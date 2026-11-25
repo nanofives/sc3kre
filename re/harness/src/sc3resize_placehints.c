@@ -216,9 +216,11 @@ static DWORD __fastcall ph_label(BYTE *view, void *edx, DWORD show, LONG cost, D
     __try {
         BYTE *s = view + 0x134;
         char look[128];   /* CIVVAR (civmod): the civic look the building tool will place, always shown */
+        char rot[96];     /* ROTPLACE (rotplace): the rotation TAB picked, always shown, a line of its own */
         int hint = g_ph_hint[0] && ph_shift();
         if (!((show & 0xff) && cv_label(view, look, sizeof(look)))) look[0] = 0;
-        if (g_ph && (show & 0xff) && (hint || look[0])) {
+        if (!((show & 0xff) && rp_label(view, rot, sizeof(rot)))) rot[0] = 0;
+        if (g_ph && (show & 0xff) && (hint || look[0] || rot[0])) {
             void *f = ((PH_FN0)(g_ph_spr + 0x4ff6a))();
             char buf[600];
             const char *d;
@@ -240,6 +242,12 @@ static DWORD __fastcall ph_label(BYTE *view, void *edx, DWORD show, LONG cost, D
                     lstrcpynA(buf + lstrlenA(buf), g_ph_hint, (int)(sizeof(buf) - lstrlenA(buf)));
                 }
                 if (g_ph_lines && g_ph_tip_orig) ph_wrap(buf);   /* TIPLINES: 2 or 3 lines at the "|" groups */
+                if (rot[0]) {   /* ROTPLACE: its own line while the tooltip has room for one (3 lines at most), else a group */
+                    int nl = 0, q;
+                    for (q = 0; buf[q]; q++) if (buf[q] == '\n') nl++;
+                    if (buf[0]) lstrcatA(buf, g_ph_lines && g_ph_tip_orig && nl < 2 ? "\n" : "  |  ");
+                    lstrcpynA(buf + lstrlenA(buf), rot, (int)(sizeof(buf) - lstrlenA(buf)));
+                }
                 ho_v(s, 0x10, 1, (DWORD)buf, 0, 0, 0, 0);
                 *(LONG *)(view + 0x130) = cost;
                 g_ph_lbl_dirty = 1;

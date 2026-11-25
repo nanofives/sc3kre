@@ -360,6 +360,7 @@ resize.picker_no_game_tool=Cuentagotas: el juego no da herramienta para esto
 resize.picker_nothing_here=Cuentagotas: no hay nada para copiar aqui
 resize.picker_one_per_city=Cuentagotas: solo uno por ciudad
 resize.push_camera_when_building=Empujar cámara al construir
+resize.rotplace_label=Giro %d grados (TAB)
 resize.save_original_city=Guardar en la ciudad original
 resize.scale_auto="Auto   "
 resize.scale_normal="Normal   "
