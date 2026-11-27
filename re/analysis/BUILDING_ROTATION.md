@@ -144,3 +144,95 @@ No mods-page row yet.
 Open: Shift+TAB and a physical TAB press (posted keys cannot carry Shift); importer buildings with lot props (props
 are placed in world space, risk 2 above); a rotated building under sc3undo; slope levelling with a turned building
 (no difference expected: the footprint does not turn).
+
+## 7. Rotated animated buildings: the image layers did not turn (child `animrot`, 2026-11-27)
+
+Player report (Simtropolis, release sc3mods-2026-11-25/26): a Spaceport or Science Center turned with TAB shows
+rectangles of another view's art, and of empty sky, on top of the turned building, in every rotation. Evidence and
+pictures: `verify/animrot/RESULTS.md`. Fix: sc3perf ANIMROT (`re/harness/src/sc3perf_animrot.c`).
+
+**It is a stock SIMSPR bug** [measured]: the same save loaded with no mods at all (`sc3dev run -Stock`, only the
+windowed shim) draws the three rotated Science Centers and Spaceports with the same patches, rotation 0 clean. Stock
+cities never show it because no animated-class building in them has a rotation: powered stock Europolis has 776
+animated-class sprites, all with state 0 (live probe). ROTPLACE made the case reachable.
+
+**The class** [CONFIRMED, SIMSPR static + live]. Buildings with extra image layers get `cSC3CitySpriteInstAnim`
+(Linux names, `[LINUX-HINT]`; Windows vtable `0x10062a5c`, second vtable `0x10062a44` at `+0xc`, QI id `0x7101`).
+Live: all 8 test buildings (Spaceport key `57E:1F52`, Science Center `57E:1F6A`, both 5x5) have that vtable, state
+`+4 >> 30` = their rotation. Medical Research (3x3) and Performing Arts (2x2) use the plain class `0x10068ca8`.
+- Base frame: shared getter vt+0x68 `0x1005aeab` = `((state + rot) & 3) + zoom * 4`, so the base turns (section 2).
+- Layers, no anim machine (`+0x10 == 0`: unpowered, out of view or below zoom 2, see below): the attribute's RegRect vectors,
+  frames `attrib + 0xc + zoom * 0x30 + rot * 0xc`, x offsets `+0x48`, y offsets `+0x84`, indexed with the RAW `rot`.
+- Layers with a machine: `machine + 0x3c0 / 0x5a0 / 0x690 + zoom * 0x30 + rot * 0xc` (frames, x, y), raw `rot`;
+  `+0x798` = draw the base too.
+
+So the layers come from slot `view` at slot `view`'s offsets while the base comes from slot `view + state`. Every
+method of the class that takes (zoom, rot) does the same (Windows slot, body, stack args):
+
+| slot | body | method [LINUX-HINT] | per-rotation data read with the raw rot |
+|---|---|---|---|
+| 0x0c | 0x100141c7 | GetW(zoom, rot) | machine frame [zoom][rot][0] |
+| 0x10 | 0x100143f0 | GetH(zoom, rot) | same |
+| 0x14 | 0x10014444 | GetAllSpans(zoom, rot, rect) | machine frames + y offsets |
+| 0x18 | 0x1001421b | GetAreaFromPt(zoom, rot, rect, x, y) | RegRect or machine frames + offsets (bounds union) |
+| 0x30 | 0x10014546 | IsPixelOpaque(x, y, zoom, rot) | same, hit test |
+| 0x34 | 0x10014695 | Prepare(zoom, rot, bool) | RegRect frames; mask bit `rot + zoom*4` in `+0x14`, machine bit in `+0x18` |
+| 0x38 | 0x100148da | Unprepare(zoom, rot) | mirror of Prepare |
+| 0x3c | 0x10014c28 | Draw(buf, rect, zoom, rot, clip) | RegRect or machine frames + offsets |
+| 0x40 | 0x10014a10 | Draw(buf, x, y, zoom, rot, clip) | same |
+| 0x44 | 0x10014df9 | Tick(dt) | machine script for `[+0x780 zoom][+0x784 rot]`, seeded at `0x10014e36..0x10014e79` from the cell map (SL::CSCM `0x1005a952`, GetZoom vt+0x34, GetRotate vt+0x44 = raw view) when `+0x780` is out of 0..4, then ViewChange `0x100155bf` |
+
+Each body is reached only through this vtable: one `.rdata` reference each, no direct call in SIMSPR (byte scan).
+
+**When the game runs a machine** [CONFIRMED static + measured, round 2]. `cSC3OccupantManagerAnim` (SIMGEOM) owns the
+animated set. Its DoMessage `0x1000d950` gets every view message (`0xa36cf3d1`): below zoom 2 it stops all animations
+(vt+0x58(1)); otherwise it calls `sc3_geom_reconcile_visible_set` `0x1000f630` with flag 1 when zoom or rotation
+changed, flag 0 otherwise, and skips it while its `+5` byte is 0 (the view still moving: after a jump the set can stay
+empty until the next view message, stock). The reconcile iterates the occupants in view (cap 201) through the test
+`0x10010220`: AnimType (vt+0x60) != 0, and for an occupant whose `0xe0faadc7` interface reports vt+0x5c > 0 the
+**PowerLayer** (city vt+0x150) value at its cell must be non-zero: unpowered buildings never animate. Up to
+`DAT_100309c4` (31) are started with `cISC3Occupant::AnimStart` (vt+0x64; Spaceport / Science Center occupants live in
+SIMMISC, AnimStart `0x1003553d`) and the ones leaving get AnimStop (vt+0x68 `0x100355af`); flag 1 first stops every
+current one (`0x1000f6d5`). AnimStart -> sprite QI `0x7101` -> StartAnimation `0x1001531f` (second vtable +0xc,
+args x, y, z, SizeInCellsX) -> attribute vt+0x94 `0x10003f2b` builds a new machine (`+0x780/+0x784 = -1`, own copies of
+the per-slot scripts and child entries). The tickable's DoAnimationTick `0x1000fc30` (exe animation tick manager,
+about 118 ticks/s) calls occupant vt+0x100 -> sprite Tick, which seeds the machine on its first tick. So **a camera
+turn or zoom change rebuilds every live machine** (StopAnimation frees it, StartAnimation makes a new one, Tick re-seeds
+from the view): measured 12 StopAnimation + 14 StartAnimation during one turn and two zooms, new machine pointers, slots
+= new view + rotation. ViewChange `0x100155bf` is reached only from that first-tick seed.
+
+Measured in the test city with power (coal plants + power lines placed by the game's own calls): the 4 Spaceports and
+4 Science Centers get machines (drawbase 1, no child sprites). Coal plants get machines with **4 child sprites per slot**
+(the smoke, drawbase-0 animated sprites of their own, "unaligned" sprites in the sprite manager). Their child entries
+hold the same 4 world offsets in every slot (x 390/825, z 177/974 in 1/256 cell from the lot corner, y 3682), i.e. the
+chimneys of the unturned plant.
+
+**Fix** (sc3perf ANIMROT, switch `animrot=0` in perf.ini or `SC3PERF_ANIMROT=0`). The ten slots above and this
+vtable's getter slot 0x68 are replaced (the other 13 vtables keep `0x1005aeab`). For state `s != 0` and rot 0..3 a
+wrapper calls the original with `rot' = (rot + s) & 3`, so every table index, both prepared masks, the bounds and the
+hit test use slot `rot'`; the sprite is marked in a TLS slot while the original runs, and the getter returns
+`(rot & 3) + zoom * 4` for the marked sprite, which equals the shipped `((s + raw) & 3) + zoom * 4`. The argument is
+turned also when the sprite is already marked, because callers outside the class bodies pass the raw view even inside a
+Tick (measured: `0x1000e4ce` from the sprite manager's ChangeUnalignedSpriteInst). The one call that already carries the
+turned slot, Tick's own GetAllSpans(`+0x780`, `+0x784`) at `0x10014f56`, is recognised by its return address and passed
+on. Tick: same mark; when the machine's `+0x780` is out of 0..4 the wrapper does the shipped seeding with `rot'`
+(`+0x780 = GetZoom`, `+0x784 = (GetRotate + s) & 3`, ViewChange with them). Child sprites: (a) ViewChange's only call
+to SetAnimMachine `0x10014083` (`0x10015758`, before the child's SetLocation and insertion) goes through a stub that
+copies the marked parent's state to the child, so the manager prepares the child for slot `rr` (the slot its machine
+`+0x784` gets) and its draw, hit test and tick agree with it; (b) StartAnimation is wrapped and turns each child entry's
+x / z offset of the new machine by `s` quarter turns about the lot centre (`SizeInCellsX * 128`; one turn:
+`x' = span - z, z' = x`), once per machine, before any ViewChange. State 0 calls the shipped bodies with the same
+arguments and no TLS access.
+
+Why sc3perf, not sc3resize: it is a SIMSPR draw fix like LOTRECT / SPR_IMGREF / NULLIMG, patched from the same
+SIMSPR watcher, and it is a stock bug (saves can hold rotated animated buildings without ROTPLACE). A player who runs
+sc3resize without sc3perf keeps the defect. No other mod touches these slots or bodies (grep of the harness sources).
+
+Two crashes found and fixed on the way (both NULL reads at `SIMSPR+0x14478` in GetAllSpans, an unprepared slot's empty
+frame vector, only with a TAB-rotated coal plant): the first build set the children's state after ViewChange had
+inserted them (prepared for `view`, ticked at `rr`); the second passed calls on a marked sprite through unchanged and
+so gave the raw view from `0x1000e4ce` to a child prepared for `rr`.
+
+Open: a mods-page row was not added: the page is height-bound (the comments at `mt_build` record that 8 more pixels put
+the city checkbox under the Volver button). Other buildings with children (other power plants, airports, ports) share
+the code path; only the coal plant was measured.
