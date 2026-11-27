@@ -27,3 +27,9 @@ a "NEW IN 2026-11-27" section, 13 lines added, 1 changed, bytes kept as Latin-1)
 order: 200 entries, `testzip` clean, against the 2026-11-26 zip exactly 3 differ (the 2 DLLs, README.txt).
 `stage/sc3mods_2026-11-27.zip`, 111,342,695 bytes, SHA-256
 D05ABA973B7D501AFDDDA1A1C88FC6D4A39E12D8379E5CBAB357186F50BF0BC8.
+
+## Published 2026-11-27
+Owner choice "You delete, I guard" (guard + stale check, released). stage/release swapped (old: stage/release_1126_old),
+LAN deploy incremental (2 of 3,681 files, 0.8 MB, nginx check OK). GitHub `sc3mods-2026-11-27`, target 408abd07, asset
+downloaded back, SHA-256 D05ABA973B7D501AFDDDA1A1C88FC6D4A39E12D8379E5CBAB357186F50BF0BC8 matches. The 2026-11-26
+notes start with a "superseded" line. Repo README unchanged (it does not name the current release).
