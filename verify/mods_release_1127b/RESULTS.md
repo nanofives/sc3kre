@@ -35,3 +35,9 @@ a "NEW IN 2026-11-27b" section, 14 lines added, 1 changed). `work/mkzip.py` in t
 `testzip` clean, against the 2026-11-27 zip exactly 2 differ (Apps/sc3perf.dll, README.txt).
 `stage/sc3mods_2026-11-27b.zip`, 111,345,707 bytes, SHA-256
 C3D0F050A9D3B5D8BAA2D9D119169ACB606E7FDC05BFF3313A23598508B7F069.
+
+## Published 2026-11-27
+Owner choice "Publish now". stage/release swapped (old: stage/release_1127_old), LAN deploy incremental (1 of 3,681
+files, 0.2 MB, nginx check OK). GitHub `sc3mods-2026-11-27b`, target a7832bee, asset downloaded back, SHA-256
+C3D0F050A9D3B5D8BAA2D9D119169ACB606E7FDC05BFF3313A23598508B7F069 matches. The 2026-11-27 notes start with a
+"superseded" line. Repo README unchanged (it does not name the current release). dev/rel1127b removed.
