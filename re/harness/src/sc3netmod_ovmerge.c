@@ -838,6 +838,47 @@ static void om_unmerged(const char *rel) {
     }
 }
 
+/* OVSTALE (task crash1127, 2026-11-27): an overlay file that shadows a game file but is not in overlay_base.txt did
+ * not come from the overlay build that wrote that list (the release and netpack.py install both rebuild it with every
+ * shadowing file). It is left over from an older release: the LAN updater deletes only with -Prune, unzipping never
+ * deletes. Owner MARIANO-PC 11-27: the avenue_markings reskin Apps\Res\Sprites\CSATTRIB.IXF, removed in 11-09, still
+ * pointed stock piece 11204's 40 frames at 4E3D0033_netpack.DAT instances that later builds no longer hold, so any
+ * city with 11204 died at its first sprite insert (SIMSPR+0x15B9, image ref +8 = 0). Such a file is dropped from the
+ * served set and named in the log. SC3NETMOD_OVSTALE=0 serves it anyway. */
+static int g_ovstale_n;
+static char g_ovstale_names[256];
+static void ovstale_drop(void) {
+    char path[MAX_PATH];
+    int i, k, w = 0;
+    DWORD a;
+    if (env_off("SC3NETMOD_OVSTALE")) { logf("ovstale: off (SC3NETMOD_OVSTALE=0) - every overlay file is served"); return; }
+    for (i = 0; i < g_novfiles; i++) {
+        const char *rel = g_ovfiles[i];
+        int listed = 0;
+        for (k = 0; k < g_nbf; k++) if (g_bf[k].rel && !lstrcmpiA(g_bf[k].rel, rel)) { listed = 1; break; }
+        if (!listed) {
+            _snprintf(path, sizeof(path), "%s%s", g_root, rel); path[sizeof(path) - 1] = 0;
+            a = GetFileAttributesA(path);
+            if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY)) {
+                const char *b = strrchr(rel, '\\');
+                b = b ? b + 1 : rel;
+                logf("### ovstale: %s%s shadows the game's %s but overlay_base.txt does not list it: left over from an "
+                     "older release, NOT served (delete it, or run update.bat -Prune)", g_ovdir, rel, rel);
+                if (strlen(g_ovstale_names) + strlen(b) + 3 < sizeof(g_ovstale_names)) {
+                    if (g_ovstale_names[0]) lstrcatA(g_ovstale_names, ", ");
+                    lstrcatA(g_ovstale_names, b);
+                }
+                g_ovstale_n++;
+                free(g_ovfiles[i]);
+                continue;
+            }
+        }
+        g_ovfiles[w++] = g_ovfiles[i];
+    }
+    g_novfiles = w;
+    logf("ovstale: %d stale overlay file(s) dropped%s%s", g_ovstale_n, g_ovstale_n ? ": " : "", g_ovstale_names);
+}
+
 /* after ov_walk, before nomix_init (DllMain: kernel32 + CRT only) */
 static void ovmerge_init(void) {
     char base[MAX_PATH], tmp[MAX_PATH], path[MAX_PATH], hex[65];
@@ -853,6 +894,7 @@ static void ovmerge_init(void) {
         return;
     }
     if (!om_base_load(base)) { logf("### ovmerge: cannot read %s - not checked", base); return; }
+    ovstale_drop();                                          /* before anything indexes g_ovfiles (g_ovalt is all NULL) */
     g_bc_skey = fnv_add(FNV0, bc, sizeof(bc) - 1);
     n = GetTempPathA(sizeof(tmp), tmp);
     if (n && n < sizeof(tmp) - 40) om_sweep(tmp); else tmp[0] = 0;

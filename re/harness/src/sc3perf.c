@@ -2424,6 +2424,84 @@ static void patch_imgref(DWORD spr) {
          "UnprepareImage now frees the sprite image and its decoded pixels");
 }
 
+/* ---------------------------------------------------------------- NULLIMG (task crash1127, 2026-11-27)
+   Owner MARIANO-PC: Europolis 1024 died on load at SIMSPR+0x15B9 (READ 0x8), the first sprite insert after the city view
+   Init (occbridge_fill_all_tiles -> spritecellmap_insert 0x10007b4d -> FUN_10006efc -> sprite vt+0x34 0x10015970 ->
+   FUN_1005ad98 -> FUN_10001592 -> FUN_100015a8). FUN_100015a8 (fastcall, ecx = the sprite's per-zoom image ref,
+   *(spr+0x18) + zoom*0xC) reads the frame's image record [ecx+8] and calls PrepareImage (ImageMgr slot 0x38,
+   0x10012b98) with record+4 / record+8. The record is NULL when the frame table names art no loaded DAT holds; there
+   it was a stale overlay CSATTRIB.IXF (sc3netmod OVSTALE now drops such files), but any bad art package does the same.
+   UnprepareImage (slot 0x3C) has the same twin: FUN_100015c4 -> FUN_100015da faults at SIMSPR+0x15E9 (measured: with
+   only the Prepare guard the stale-file load ran 20 s, 512+ guarded frames, then died there). Every other user of
+   that ref table (0x10001166 / 1257 / 12b0 / 12e5 / 138b / 1494 / 14e7 / 163a / 1847, and 0x100011c7) already tests
+   [ref+8] for NULL, so these two are the only unguarded readers.
+   Fix: the one call to each (rel32 at 0x100015a1 and 0x100015d3, from FUN_10001592 / FUN_100015c4, their only callers)
+   goes through a stub: a NULL ref or record returns 0 (PrepareImage's "not prepared", which the caller 0x10015983
+   already tests) and is counted; otherwise the original runs. The sprite draws without that frame instead of killing
+   the game. nullimg=0 (SC3PERF_NULLIMG=0) keeps the shipped calls. */
+static int g_nullimg = 1;
+static DWORD g_nullimg_prep, g_nullimg_unprep;
+static volatile LONG g_nullimg_n;
+static void __stdcall nullimg_note(DWORD ref, DWORD unprep) {
+    LONG n = InterlockedIncrement(&g_nullimg_n);
+    if (n <= 5 || (n & (n - 1)) == 0)
+        logf("NULLIMG> #%ld: %s of a sprite frame with no image record (ref 0x%08lX) skipped - drawn empty instead of the "
+             "SIMSPR+0x%s crash", n, unprep ? "unprepare" : "prepare", ref, unprep ? "15E9" : "15B9");
+}
+static __declspec(naked) void nullimg_prep_stub(void) {
+    __asm {
+        test ecx, ecx
+        jz skip
+        cmp dword ptr [ecx + 8], 0
+        je skip
+        jmp dword ptr [g_nullimg_prep]
+    skip:
+        push 0
+        push ecx
+        call nullimg_note
+        xor eax, eax
+        ret
+    }
+}
+static __declspec(naked) void nullimg_unprep_stub(void) {
+    __asm {
+        test ecx, ecx
+        jz skip
+        cmp dword ptr [ecx + 8], 0
+        je skip
+        jmp dword ptr [g_nullimg_unprep]
+    skip:
+        push 1
+        push ecx
+        call nullimg_note
+        xor eax, eax
+        ret
+    }
+}
+static int nullimg_site(DWORD spr, DWORD call_rva, DWORD body_rva, const void *stub) {
+    static const BYTE call_ok[] = {0xe8, 0x03, 0x00, 0x00, 0x00, 0xc2, 0x04, 0x00};   /* call +3 (the body); ret 4 */
+    static const BYTE body_ok[] = {0x56, 0x8b, 0xf1, 0xe8};                            /* push esi; mov esi,ecx; call */
+    BYTE *c = (BYTE *)spr + call_rva;
+    DWORD old;
+    if (memcmp(c, call_ok, sizeof(call_ok)) || memcmp((BYTE *)spr + body_rva, body_ok, sizeof(body_ok))) {
+        logf("NULLIMG> SIMSPR 0x%08lX differs from shipped - not patched", 0x10000000 + call_rva);
+        return 0;
+    }
+    if (!VirtualProtect(c, 5, PAGE_EXECUTE_READWRITE, &old)) { logf("NULLIMG> VirtualProtect failed (%lu)", GetLastError()); return 0; }
+    vs_rel32(c + 1, (const BYTE *)stub);
+    FlushInstructionCache(GetCurrentProcess(), c, 5);
+    return 1;
+}
+static void patch_nullimg(DWORD spr) {
+    int n = 0;
+    g_nullimg_prep = spr + 0x15a8;
+    g_nullimg_unprep = spr + 0x15da;
+    n += nullimg_site(spr, 0x15a0, 0x15a8, nullimg_prep_stub);
+    n += nullimg_site(spr, 0x15d2, 0x15da, nullimg_unprep_stub);
+    logf("NULLIMG> %d of 2 SIMSPR sites guarded (prepare 0x100015a0, unprepare 0x100015d2): a sprite frame without an "
+         "image record is skipped and counted, not a crash", n);
+}
+
 /* Same bug in SIMSERV (exit crash at SIMSERV+0xCAD3, 1 in 4 closes with traffic_mt on AND off): class vtable
    0x1001f2c8 counts on +0x38 with AddRef `inc [ecx+0x38]` (0x1000c3df) and Release 0x1000cab6 `if (n) n--; if n == 0:
    vt+0x44(1)` - the destroy call landed on an already destroyed object (null vtable). */
@@ -2729,6 +2807,8 @@ static DWORD WINAPI spr_watcher(LPVOID p) {
     if (g_sprref) patch_sprrefcount(spr);
     if (g_imgref) patch_imgref(spr);   /* SPR_IMGREF block: rotation / zoom sprite leak */
     else logf("SPR_IMGREF> off (spr_imgref=0): shipped PrepareImage, sprite images leak on rotation / zoom");
+    if (g_nullimg) patch_nullimg(spr);   /* NULLIMG block: frame without image record */
+    else logf("NULLIMG> off (nullimg=0): a sprite frame without an image record crashes at SIMSPR+0x15B9");
     if (g_lotrect) patch_lotrect(spr);   /* LOTRECT block: non-square building sprites */
     else logf("LOTRECT> off (lot_rect=0): shipped square sprite registration, X x Z buildings draw as X x X");
     return 0;
@@ -3814,6 +3894,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_fastceil = cfg("fast_ceil", 1);
         g_sprref = cfg("spr_refcount", 1);
         g_imgref = cfg("spr_imgref", 1);    /* SPR_IMGREF, SC3PERF_SPR_IMGREF=0 */
+        g_nullimg = cfg("nullimg", 1);      /* NULLIMG, SC3PERF_NULLIMG=0 */
         g_lotrect = cfg("lot_rect", 1);     /* LOTRECT, SC3PERF_LOT_RECT=0 */
         g_layerref = cfg("layer_refcount", 1);
         g_rczero = cfg("rc_zero", 1);           /* RCZERO, SC3PERF_RC_ZERO=0 */
